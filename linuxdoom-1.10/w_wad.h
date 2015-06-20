@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -35,10 +35,10 @@
 typedef struct
 {
     // Should be "IWAD" or "PWAD".
-    char		identification[4];		
+    char		identification[4];
     int			numlumps;
     int			infotableofs;
-    
+
 } wadinfo_t;
 
 
@@ -47,7 +47,7 @@ typedef struct
     int			filepos;
     int			size;
     char		name[8];
-    
+
 } filelump_t;
 
 //
@@ -56,7 +56,7 @@ typedef struct
 typedef struct
 {
     char	name[8];
-    int		handle;
+    FILE*	handle;
     int		position;
     int		size;
 } lumpinfo_t;
