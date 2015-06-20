@@ -30,8 +30,13 @@
 		</Build>
 		<Compiler>
 			<Add option="-Wall" />
+			<Add directory="..\SDL2-2.0.3\include" />
 		</Compiler>
-		<Unit filename="linuxdoom-1.10\TODO" />
+		<Linker>
+			<Add library="..\SDL2-2.0.3\lib\x86\SDL2main.lib" />
+			<Add library="..\SDL2-2.0.3\lib\x86\SDL2.lib" />
+			<Add directory="..\SDL2-2.0.3\lib\x86" />
+		</Linker>
 		<Unit filename="linuxdoom-1.10\am_map.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -94,10 +99,12 @@
 		</Unit>
 		<Unit filename="linuxdoom-1.10\i_net.c">
 			<Option compilerVar="CC" />
+			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
 		<Unit filename="linuxdoom-1.10\i_net.h" />
 		<Unit filename="linuxdoom-1.10\i_sound.c">
 			<Option compilerVar="CC" />
+			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
 		<Unit filename="linuxdoom-1.10\i_sound.h" />
 		<Unit filename="linuxdoom-1.10\i_system.c">
@@ -106,6 +113,7 @@
 		<Unit filename="linuxdoom-1.10\i_system.h" />
 		<Unit filename="linuxdoom-1.10\i_video.c">
 			<Option compilerVar="CC" />
+			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
 		<Unit filename="linuxdoom-1.10\i_video.h" />
 		<Unit filename="linuxdoom-1.10\info.c">
