@@ -1,4 +1,5 @@
 *.depend
+*.layout
 *.o
 *.exe
 *.dll
@@ -6,3 +7,4 @@
 *.sav
 *.dsg
 *.CFG
+screenshots/*

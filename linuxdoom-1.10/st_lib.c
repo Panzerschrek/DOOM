@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -44,7 +44,7 @@ rcsid[] = "$Id: st_lib.c,v 1.4 1997/02/03 16:47:56 b1 Exp $";
 
 
 // in AM_map.c
-extern boolean		automapactive; 
+extern boolean		automapactive;
 
 
 
@@ -72,8 +72,8 @@ STlib_initNum
   boolean*		on,
   int			width )
 {
-    n->x	= x;
-    n->y	= y;
+    n->x	= x + (SCREENWIDTH - 320) / 2;
+    n->y	= y + SCREENHEIGHT - 200;
     n->oldnum	= 0;
     n->width	= width;
     n->num	= num;
@@ -82,7 +82,7 @@ STlib_initNum
 }
 
 
-// 
+//
 // A fairly efficient way to draw a number
 //  based on differences from the old number.
 // Note: worth the trouble?
@@ -95,11 +95,11 @@ STlib_drawNum
 
     int		numdigits = n->width;
     int		num = *n->num;
-    
+
     int		w = SHORT(n->p[0]->width);
     int		h = SHORT(n->p[0]->height);
     int		x = n->x;
-    
+
     int		neg;
 
     n->oldnum = *n->num;
@@ -112,7 +112,7 @@ STlib_drawNum
 	    num = -9;
 	else if (numdigits == 3 && num < -99)
 	    num = -99;
-	
+
 	num = -num;
     }
 
@@ -183,7 +183,7 @@ STlib_updatePercent
 {
     if (refresh && *per->n.on)
 	V_DrawPatch(per->n.x, per->n.y, FG, per->p);
-    
+
     STlib_updateNum(&per->n, refresh);
 }
 
@@ -198,8 +198,8 @@ STlib_initMultIcon
   int*			inum,
   boolean*		on )
 {
-    i->x	= x;
-    i->y	= y;
+    i->x	= x + (SCREENWIDTH - 320) / 2;
+    i->y	= y + SCREENHEIGHT - 200;
     i->oldinum 	= -1;
     i->inum	= inum;
     i->on	= on;
@@ -250,8 +250,8 @@ STlib_initBinIcon
   boolean*		val,
   boolean*		on )
 {
-    b->x	= x;
-    b->y	= y;
+    b->x	= x + (SCREENWIDTH - 320) / 2;
+    b->y	= y + SCREENHEIGHT - 200;
     b->oldval	= 0;
     b->val	= val;
     b->on	= on;
