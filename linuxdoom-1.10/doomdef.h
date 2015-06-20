@@ -113,6 +113,10 @@ typedef enum
 //(int)(SCREEN_MUL*BASE_WIDTH*INV_ASPECT_RATIO) //200
 
 
+// screen resolution of base game
+#define ID_SCREENWIDTH 320
+#define ID_SCREENHEIGHT 200
+
 
 
 // The maximum number of players, multiplayer/networking.

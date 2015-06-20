@@ -72,8 +72,8 @@ STlib_initNum
   boolean*		on,
   int			width )
 {
-    n->x	= x + (SCREENWIDTH - 320) / 2;
-    n->y	= y + SCREENHEIGHT - 200;
+    n->x	= x + (SCREENWIDTH - ID_SCREENWIDTH) / 2;
+    n->y	= y + SCREENHEIGHT - ID_SCREENHEIGHT;
     n->oldnum	= 0;
     n->width	= width;
     n->num	= num;
@@ -198,8 +198,8 @@ STlib_initMultIcon
   int*			inum,
   boolean*		on )
 {
-    i->x	= x + (SCREENWIDTH - 320) / 2;
-    i->y	= y + SCREENHEIGHT - 200;
+    i->x	= x + (SCREENWIDTH - ID_SCREENWIDTH) / 2;
+    i->y	= y + SCREENHEIGHT - ID_SCREENHEIGHT;
     i->oldinum 	= -1;
     i->inum	= inum;
     i->on	= on;
@@ -250,8 +250,8 @@ STlib_initBinIcon
   boolean*		val,
   boolean*		on )
 {
-    b->x	= x + (SCREENWIDTH - 320) / 2;
-    b->y	= y + SCREENHEIGHT - 200;
+    b->x	= x + (SCREENWIDTH - ID_SCREENWIDTH) / 2;
+    b->y	= y + SCREENHEIGHT - ID_SCREENHEIGHT;
     b->oldval	= 0;
     b->val	= val;
     b->on	= on;

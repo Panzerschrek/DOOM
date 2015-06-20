@@ -501,7 +501,7 @@ void ST_refreshBackground(void)
 
     if (st_statusbaron)
     {
-	V_DrawPatch(ST_X + (SCREENWIDTH - 320) / 2, 0, BG, sbar);
+	V_DrawPatch(ST_X + (SCREENWIDTH - ID_SCREENWIDTH) / 2, 0, BG, sbar);
 
 	if (netgame)
 	    V_DrawPatch(ST_FX, 0, BG, faceback);
