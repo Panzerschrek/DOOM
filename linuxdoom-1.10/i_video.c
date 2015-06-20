@@ -26,6 +26,8 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 
 #include <stdlib.h>
 #include <SDL.h>
+#include <SDL_video.h>
+#include <SDL_surface.h>
 
 #include "doomstat.h"
 #include "i_system.h"
@@ -39,6 +41,8 @@ struct
 {
     SDL_Window *window;
     SDL_Event last_event;
+    SDL_Surface* window_surface;
+    byte* screen_data;
 } sdl;
 
 
@@ -122,7 +126,7 @@ int sdllatekey(int key)
 	default:
 	    if (key >= SDLK_a && key <= SDLK_z )
 	    {
-		return key - SDLK_LEFTBRACKET + 'A';
+		return key - SDLK_a + 'a';
 	    }
 	return 0;
     }
@@ -292,6 +296,18 @@ void I_UpdateNoBlit (void)
 //
 void I_FinishUpdate (void)
 {
+
+    int i;
+    byte* p;
+
+    p = sdl.window_surface->pixels;
+    for( i = 0; i < SCREENWIDTH * SCREENHEIGHT; i++, p+= 4 )
+    {
+    	p[0]= p[1]= p[2]= screens[0][i];
+    }
+    SDL_UpdateWindowSurface( sdl.window );
+
+   // memcpy( sdl.window_surface->pixels, screens[0], sdl.window_surface->w * sdl.window_surface->h );
 /*
     static int	lasttic;
     int		tics;
@@ -635,6 +651,12 @@ void I_InitGraphics(void)
 	SCREENWIDTH, SCREENHEIGHT, SDL_WINDOW_SHOWN );
     if (!sdl.window)
 	I_Error("Could not create window");
+
+    sdl.window_surface = SDL_GetWindowSurface( sdl.window );
+
+    sdl.screen_data = malloc( SCREENWIDTH * SCREENHEIGHT );
+
+    screens[0] = sdl.screen_data;
 
   /*  char*		displayname;
     char*		d;
