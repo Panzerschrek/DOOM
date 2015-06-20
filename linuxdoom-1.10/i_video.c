@@ -43,6 +43,7 @@ struct
     SDL_Event last_event;
     SDL_Surface* window_surface;
     byte* screen_data;
+    byte palette[1024];
 } sdl;
 
 
@@ -125,9 +126,10 @@ int sdllatekey(int key)
 
 	default:
 	    if (key >= SDLK_a && key <= SDLK_z )
-	    {
 		return key - SDLK_a + 'a';
-	    }
+	    if ( key >= SDLK_0 && key <= SDLK_9 )
+		return key - SDLK_0 + '0';
+
 	return 0;
     }
 }
@@ -298,12 +300,12 @@ void I_FinishUpdate (void)
 {
 
     int i;
-    byte* p;
+    int* p;
 
     p = sdl.window_surface->pixels;
-    for( i = 0; i < SCREENWIDTH * SCREENHEIGHT; i++, p+= 4 )
+    for( i = 0; i < SCREENWIDTH * SCREENHEIGHT; i++ )
     {
-    	p[0]= p[1]= p[2]= screens[0][i];
+	p[i]= ((int*)sdl.palette)[ screens[0][i] ];
     }
     SDL_UpdateWindowSurface( sdl.window );
 
@@ -532,6 +534,14 @@ void I_ReadScreen (byte* scr)
 //
 void I_SetPalette (byte* palette)
 {
+    int i;
+    for( i = 0; i < 256; i++ )
+    {
+	sdl.palette[i*4  ] = palette[i*3+2];
+	sdl.palette[i*4+1] = palette[i*3+1];
+	sdl.palette[i*4+2] = palette[i*3  ];
+	sdl.palette[i*4+3] = 255;
+    }
     //UploadNewPalette(X_cmap, palette);
 }
 
