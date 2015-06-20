@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -25,29 +25,7 @@ static const char
 rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 
 #include <stdlib.h>
-#include <unistd.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include <X11/keysym.h>
-
-#include <X11/extensions/XShm.h>
-// Had to dig up XShm.c for this one.
-// It is in the libXext, but not in the XFree86 headers.
-#ifdef LINUX
-int XShmGetEventBase( Display* dpy ); // problems with g++?
-#endif
-
-#include <stdarg.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-
-#include <netinet/in.h>
-#include <errnos.h>
-#include <signal.h>
+#include <SDL.h>
 
 #include "doomstat.h"
 #include "i_system.h"
@@ -57,113 +35,16 @@ int XShmGetEventBase( Display* dpy ); // problems with g++?
 
 #include "doomdef.h"
 
-#define POINTER_WARP_COUNTDOWN	1
-
-Display*	X_display=0;
-Window		X_mainWindow;
-Colormap	X_cmap;
-Visual*		X_visual;
-GC		X_gc;
-XEvent		X_event;
-int		X_screen;
-XVisualInfo	X_visualinfo;
-XImage*		image;
-int		X_width;
-int		X_height;
-
-// MIT SHared Memory extension.
-boolean		doShm;
-
-XShmSegmentInfo	X_shminfo;
-int		X_shmeventtype;
-
-// Fake mouse handling.
-// This cannot work properly w/o DGA.
-// Needs an invisible mouse cursor at least.
-boolean		grabMouse;
-int		doPointerWarp = POINTER_WARP_COUNTDOWN;
-
-// Blocky mode,
-// replace each 320x200 pixel with multiply*multiply pixels.
-// According to Dave Taylor, it still is a bonehead thing
-// to use ....
-static int	multiply=1;
-
-
-//
-//  Translates the key currently in X_event
-//
-
-int xlatekey(void)
+struct
 {
+    SDL_Window *window;
+    SDL_Event last_event;
+} sdl;
 
-    int rc;
-
-    switch(rc = XKeycodeToKeysym(X_display, X_event.xkey.keycode, 0))
-    {
-      case XK_Left:	rc = KEY_LEFTARROW;	break;
-      case XK_Right:	rc = KEY_RIGHTARROW;	break;
-      case XK_Down:	rc = KEY_DOWNARROW;	break;
-      case XK_Up:	rc = KEY_UPARROW;	break;
-      case XK_Escape:	rc = KEY_ESCAPE;	break;
-      case XK_Return:	rc = KEY_ENTER;		break;
-      case XK_Tab:	rc = KEY_TAB;		break;
-      case XK_F1:	rc = KEY_F1;		break;
-      case XK_F2:	rc = KEY_F2;		break;
-      case XK_F3:	rc = KEY_F3;		break;
-      case XK_F4:	rc = KEY_F4;		break;
-      case XK_F5:	rc = KEY_F5;		break;
-      case XK_F6:	rc = KEY_F6;		break;
-      case XK_F7:	rc = KEY_F7;		break;
-      case XK_F8:	rc = KEY_F8;		break;
-      case XK_F9:	rc = KEY_F9;		break;
-      case XK_F10:	rc = KEY_F10;		break;
-      case XK_F11:	rc = KEY_F11;		break;
-      case XK_F12:	rc = KEY_F12;		break;
-	
-      case XK_BackSpace:
-      case XK_Delete:	rc = KEY_BACKSPACE;	break;
-
-      case XK_Pause:	rc = KEY_PAUSE;		break;
-
-      case XK_KP_Equal:
-      case XK_equal:	rc = KEY_EQUALS;	break;
-
-      case XK_KP_Subtract:
-      case XK_minus:	rc = KEY_MINUS;		break;
-
-      case XK_Shift_L:
-      case XK_Shift_R:
-	rc = KEY_RSHIFT;
-	break;
-	
-      case XK_Control_L:
-      case XK_Control_R:
-	rc = KEY_RCTRL;
-	break;
-	
-      case XK_Alt_L:
-      case XK_Meta_L:
-      case XK_Alt_R:
-      case XK_Meta_R:
-	rc = KEY_RALT;
-	break;
-	
-      default:
-	if (rc >= XK_space && rc <= XK_asciitilde)
-	    rc = rc - XK_space + ' ';
-	if (rc >= 'A' && rc <= 'Z')
-	    rc = rc - 'A' + 'a';
-	break;
-    }
-
-    return rc;
-
-}
 
 void I_ShutdownGraphics(void)
 {
-  // Detach from X server
+ /* // Detach from X server
   if (!XShmDetach(X_display, &X_shminfo))
 	    I_Error("XShmDetach() failed in I_ShutdownGraphics()");
 
@@ -172,7 +53,8 @@ void I_ShutdownGraphics(void)
   shmctl(X_shminfo.shmid, IPC_RMID, 0);
 
   // Paranoia.
-  image->data = NULL;
+  image->data = NULL;*/
+  SDL_DestroyWindow(sdl.window);
 }
 
 
@@ -191,13 +73,92 @@ static int	lastmousey = 0;
 boolean		mousemoved = false;
 boolean		shmFinished;
 
+
+int sdllatekey(int key)
+{
+    switch(key)
+    {
+	case SDLK_LEFT:		return KEY_LEFTARROW;
+	case SDLK_RIGHT:	return KEY_RIGHTARROW;
+	case SDLK_UP:		return KEY_UPARROW;
+	case SDLK_DOWN:		return KEY_DOWNARROW;
+
+	case SDLK_ESCAPE:	return KEY_ESCAPE;
+	case SDLK_RETURN:	return KEY_ENTER;
+	case SDLK_TAB:		return KEY_TAB;
+
+	case SDLK_F1:		return KEY_F1;
+	case SDLK_F2:		return KEY_F2;
+	case SDLK_F3:		return KEY_F3;
+	case SDLK_F4:		return KEY_F4;
+	case SDLK_F5:		return KEY_F5;
+	case SDLK_F6:		return KEY_F6;
+	case SDLK_F7:		return KEY_F7;
+	case SDLK_F8:		return KEY_F8;
+	case SDLK_F9:		return KEY_F9;
+	case SDLK_F10:		return KEY_F10;
+	case SDLK_F11:		return KEY_F11;
+	case SDLK_F12:		return KEY_F12;
+
+	case SDLK_BACKSPACE:
+	case SDLK_DELETE:	return KEY_BACKSPACE;
+
+	case SDLK_PAUSE:	return KEY_PAUSE;
+	case SDLK_EQUALS:	return KEY_EQUALS;
+
+	case SDLK_MINUS:	return KEY_MINUS;
+
+	case SDLK_LSHIFT:
+	case SDLK_RSHIFT:	return KEY_RSHIFT;
+
+	case SDLK_LCTRL:
+	case SDLK_RCTRL:	return KEY_RCTRL;
+
+	case SDLK_LALT:
+	case SDLK_RALT:		return KEY_RALT;
+
+	case SDLK_SPACE:	return ' ';
+
+	default:
+	    if (key >= SDLK_a && key <= SDLK_z )
+	    {
+		return key - SDLK_LEFTBRACKET + 'A';
+	    }
+	return 0;
+    }
+}
+
 void I_GetEvent(void)
 {
-
     event_t event;
+    switch (sdl.last_event.type)
+    {
+    case SDL_KEYDOWN:
+	event.type = ev_keydown;
+	event.data1 = sdllatekey(sdl.last_event.key.keysym.sym);
+	D_PostEvent(&event);
+	break;
+
+    case SDL_KEYUP:
+	event.type = ev_keyup;
+	event.data1 = sdllatekey(sdl.last_event.key.keysym.sym);
+	D_PostEvent(&event);
+	break;
+
+    // TODO - other events, then keyboard
+    case SDL_MOUSEBUTTONDOWN:
+	break;
+    case SDL_MOUSEBUTTONUP:
+	break;
+    case SDL_MOUSEMOTION:
+	break;
+
+    default:
+	break;
+    }
 
     // put event-grabbing stuff in here
-    XNextEvent(X_display, &X_event);
+   /* XNextEvent(X_display, &X_event);
     switch (X_event.type)
     {
       case KeyPress:
@@ -266,18 +227,18 @@ void I_GetEvent(void)
 	    }
 	}
 	break;
-	
+
       case Expose:
       case ConfigureNotify:
 	break;
-	
+
       default:
 	if (doShm && X_event.type == X_shmeventtype) shmFinished = true;
 	break;
     }
-
+*/
 }
-
+#if 0
 Cursor
 createnullcursor
 ( Display*	display,
@@ -302,37 +263,17 @@ createnullcursor
     XFreeGC(display,gc);
     return cursor;
 }
+#endif
 
 //
 // I_StartTic
 //
 void I_StartTic (void)
 {
-
-    if (!X_display)
-	return;
-
-    while (XPending(X_display))
-	I_GetEvent();
-
-    // Warp the pointer back to the middle of the window
-    //  or it will wander off - that is, the game will
-    //  loose input focus within X11.
-    if (grabMouse)
+    while( SDL_PollEvent(&sdl.last_event) )
     {
-	if (!--doPointerWarp)
-	{
-	    XWarpPointer( X_display,
-			  None,
-			  X_mainWindow,
-			  0, 0,
-			  0, 0,
-			  X_width/2, X_height/2);
-
-	    doPointerWarp = POINTER_WARP_COUNTDOWN;
-	}
+	I_GetEvent();
     }
-
     mousemoved = false;
 
 }
@@ -351,7 +292,7 @@ void I_UpdateNoBlit (void)
 //
 void I_FinishUpdate (void)
 {
-
+/*
     static int	lasttic;
     int		tics;
     int		i;
@@ -370,7 +311,7 @@ void I_FinishUpdate (void)
 	    screens[0][ (SCREENHEIGHT-1)*SCREENWIDTH + i] = 0xff;
 	for ( ; i<20*2 ; i+=2)
 	    screens[0][ (SCREENHEIGHT-1)*SCREENWIDTH + i] = 0x0;
-    
+
     }
 
     // scales the screen size before blitting it
@@ -517,7 +458,7 @@ void I_FinishUpdate (void)
 	XSync(X_display, False);
 
     }
-
+*/
 }
 
 
@@ -529,13 +470,7 @@ void I_ReadScreen (byte* scr)
     memcpy (scr, screens[0], SCREENWIDTH*SCREENHEIGHT);
 }
 
-
-//
-// Palette stuff.
-//
-static XColor	colors[256];
-
-void UploadNewPalette(Colormap cmap, byte *palette)
+/*void UploadNewPalette(Colormap cmap, byte *palette)
 {
 
     register int	i;
@@ -574,14 +509,14 @@ void UploadNewPalette(Colormap cmap, byte *palette)
 	    XStoreColors(X_display, cmap, colors, 256);
 
 	}
-}
+}*/
 
 //
 // I_SetPalette
 //
 void I_SetPalette (byte* palette)
 {
-    UploadNewPalette(X_cmap, palette);
+    //UploadNewPalette(X_cmap, palette);
 }
 
 
@@ -595,14 +530,14 @@ void I_SetPalette (byte* palette)
 void grabsharedmemory(int size)
 {
 
-  int			key = ('d'<<24) | ('o'<<16) | ('o'<<8) | 'm';
+ /* int			key = ('d'<<24) | ('o'<<16) | ('o'<<8) | 'm';
   struct shmid_ds	shminfo;
   int			minsize = 320*200;
   int			id;
   int			rc;
   // UNUSED int done=0;
   int			pollution=5;
-  
+
   // try to use what was here before
   do
   {
@@ -610,7 +545,7 @@ void grabsharedmemory(int size)
     if (id != -1)
     {
       rc=shmctl(id, IPC_STAT, &shminfo); // get stats on it
-      if (!rc) 
+      if (!rc)
       {
 	if (shminfo.shm_nattch)
 	{
@@ -628,15 +563,15 @@ void grabsharedmemory(int size)
 		      "Was able to kill my old shared memory\n");
 	    else
 	      I_Error("Was NOT able to kill my old shared memory");
-	    
+
 	    id = shmget((key_t)key, size, IPC_CREAT|0777);
 	    if (id==-1)
 	      I_Error("Could not get shared memory");
-	    
+
 	    rc=shmctl(id, IPC_STAT, &shminfo);
-	    
+
 	    break;
-	    
+
 	  }
 	  if (size >= shminfo.shm_segsz)
 	  {
@@ -673,36 +608,45 @@ void grabsharedmemory(int size)
       break;
     }
   } while (--pollution);
-  
+
   if (!pollution)
   {
     I_Error("Sorry, system too polluted with stale "
 	    "shared memory segments.\n");
-    }	
-  
+    }
+
   X_shminfo.shmid = id;
-  
+
   // attach to the shared memory segment
   image->data = X_shminfo.shmaddr = shmat(id, 0, 0);
-  
+
   fprintf(stderr, "shared memory id=%d, addr=0x%x\n", id,
-	  (int) (image->data));
+	  (int) (image->data));*/
 }
 
 void I_InitGraphics(void)
 {
+    if ( SDL_Init(SDL_INIT_VIDEO) < 0 )
+	I_Error("Could not initialize SDL");
 
-    char*		displayname;
+    sdl.window = SDL_CreateWindow(
+	"Doom",
+	SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+	SCREENWIDTH, SCREENHEIGHT, SDL_WINDOW_SHOWN );
+    if (!sdl.window)
+	I_Error("Could not create window");
+
+  /*  char*		displayname;
     char*		d;
     int			n;
     int			pnum;
     int			x=0;
     int			y=0;
-    
+
     // warning: char format, different type arg
     char		xsign=' ';
     char		ysign=' ';
-    
+
     int			oktodraw;
     unsigned long	attribmask;
     XSetWindowAttributes attribs;
@@ -742,7 +686,7 @@ void I_InitGraphics(void)
     {
 	// warning: char format, different type arg 3,5
 	n = sscanf(myargv[pnum+1], "%c%d%c%d", &xsign, &x, &ysign, &y);
-	
+
 	if (n==2)
 	    x = y = 0;
 	else if (n==6)
@@ -766,7 +710,7 @@ void I_InitGraphics(void)
 	    I_Error("Could not open display (DISPLAY=[%s])", getenv("DISPLAY"));
     }
 
-    // use the default visual 
+    // use the default visual
     X_screen = DefaultScreen(X_display);
     if (!XMatchVisualInfo(X_display, X_screen, 8, PseudoColor, &X_visualinfo))
 	I_Error("xdoom currently only supports 256-color PseudoColor screens");
@@ -880,7 +824,7 @@ void I_InitGraphics(void)
 	// fprintf(stderr, "shared memory id=%d\n", X_shminfo.shmid);
 	// attach to the shared memory segment
 	// image->data = X_shminfo.shmaddr = shmat(X_shminfo.shmid, 0, 0);
-	
+
 
 	if (!image->data)
 	{
@@ -911,140 +855,5 @@ void I_InitGraphics(void)
 	screens[0] = (unsigned char *) (image->data);
     else
 	screens[0] = (unsigned char *) malloc (SCREENWIDTH * SCREENHEIGHT);
-
+*/
 }
-
-
-unsigned	exptable[256];
-
-void InitExpand (void)
-{
-    int		i;
-	
-    for (i=0 ; i<256 ; i++)
-	exptable[i] = i | (i<<8) | (i<<16) | (i<<24);
-}
-
-double		exptable2[256*256];
-
-void InitExpand2 (void)
-{
-    int		i;
-    int		j;
-    // UNUSED unsigned	iexp, jexp;
-    double*	exp;
-    union
-    {
-	double 		d;
-	unsigned	u[2];
-    } pixel;
-	
-    printf ("building exptable2...\n");
-    exp = exptable2;
-    for (i=0 ; i<256 ; i++)
-    {
-	pixel.u[0] = i | (i<<8) | (i<<16) | (i<<24);
-	for (j=0 ; j<256 ; j++)
-	{
-	    pixel.u[1] = j | (j<<8) | (j<<16) | (j<<24);
-	    *exp++ = pixel.d;
-	}
-    }
-    printf ("done.\n");
-}
-
-int	inited;
-
-void
-Expand4
-( unsigned*	lineptr,
-  double*	xline )
-{
-    double	dpixel;
-    unsigned	x;
-    unsigned 	y;
-    unsigned	fourpixels;
-    unsigned	step;
-    double*	exp;
-	
-    exp = exptable2;
-    if (!inited)
-    {
-	inited = 1;
-	InitExpand2 ();
-    }
-		
-		
-    step = 3*SCREENWIDTH/2;
-	
-    y = SCREENHEIGHT-1;
-    do
-    {
-	x = SCREENWIDTH;
-
-	do
-	{
-	    fourpixels = lineptr[0];
-			
-	    dpixel = *(double *)( (int)exp + ( (fourpixels&0xffff0000)>>13) );
-	    xline[0] = dpixel;
-	    xline[160] = dpixel;
-	    xline[320] = dpixel;
-	    xline[480] = dpixel;
-			
-	    dpixel = *(double *)( (int)exp + ( (fourpixels&0xffff)<<3 ) );
-	    xline[1] = dpixel;
-	    xline[161] = dpixel;
-	    xline[321] = dpixel;
-	    xline[481] = dpixel;
-
-	    fourpixels = lineptr[1];
-			
-	    dpixel = *(double *)( (int)exp + ( (fourpixels&0xffff0000)>>13) );
-	    xline[2] = dpixel;
-	    xline[162] = dpixel;
-	    xline[322] = dpixel;
-	    xline[482] = dpixel;
-			
-	    dpixel = *(double *)( (int)exp + ( (fourpixels&0xffff)<<3 ) );
-	    xline[3] = dpixel;
-	    xline[163] = dpixel;
-	    xline[323] = dpixel;
-	    xline[483] = dpixel;
-
-	    fourpixels = lineptr[2];
-			
-	    dpixel = *(double *)( (int)exp + ( (fourpixels&0xffff0000)>>13) );
-	    xline[4] = dpixel;
-	    xline[164] = dpixel;
-	    xline[324] = dpixel;
-	    xline[484] = dpixel;
-			
-	    dpixel = *(double *)( (int)exp + ( (fourpixels&0xffff)<<3 ) );
-	    xline[5] = dpixel;
-	    xline[165] = dpixel;
-	    xline[325] = dpixel;
-	    xline[485] = dpixel;
-
-	    fourpixels = lineptr[3];
-			
-	    dpixel = *(double *)( (int)exp + ( (fourpixels&0xffff0000)>>13) );
-	    xline[6] = dpixel;
-	    xline[166] = dpixel;
-	    xline[326] = dpixel;
-	    xline[486] = dpixel;
-			
-	    dpixel = *(double *)( (int)exp + ( (fourpixels&0xffff)<<3 ) );
-	    xline[7] = dpixel;
-	    xline[167] = dpixel;
-	    xline[327] = dpixel;
-	    xline[487] = dpixel;
-
-	    lineptr+=4;
-	    xline+=8;
-	} while (x-=16);
-	xline += step;
-    } while (y--);
-}
-
-

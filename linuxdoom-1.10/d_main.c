@@ -562,7 +562,7 @@ void IdentifyVersion (void)
     char*	doom1wad;
     char*	doomwad;
     char*	doomuwad;
-    char*	doom2wad;
+    char*	doom2wad = "doom2.wad";
 
     char*	doom2fwad;
     char*	plutoniawad;
@@ -1097,7 +1097,7 @@ void D_DoomMain (void)
     I_Init ();
 
     printf ("D_CheckNetGame: Checking network game status.\n");
-    D_CheckNetGame ();
+    //D_CheckNetGame ();
 
     printf ("S_Init: Setting up sound.\n");
     S_Init (snd_SfxVolume /* *8 */, snd_MusicVolume /* *8*/ );
