@@ -644,18 +644,33 @@ void M_LoadGame (int choice)
 void M_DrawSave(void)
 {
     int             i;
+    patch_t*        patch;
 
-    V_DrawPatchDirect (72,28,0,W_CacheLumpName("M_SAVEG",PU_CACHE));
+    patch = W_CacheLumpName("M_SAVEG",PU_CACHE);
+    V_DrawPatchScaled(
+	72 * menuscale + x_offset,
+	28 * menuscale + y_offset,
+	patch->width * menuscale,
+	patch->height * menuscale,
+	0, patch);
     for (i = 0;i < load_end; i++)
     {
-	M_DrawSaveLoadBorder(LoadDef.x,LoadDef.y+LINEHEIGHT*i);
-	M_WriteText(LoadDef.x,LoadDef.y+LINEHEIGHT*i,savegamestrings[i]);
+	M_DrawSaveLoadBorder(
+	    LoadDef.x * menuscale + x_offset,
+	    (LoadDef.y+LINEHEIGHT*i) * menuscale + y_offset);
+	M_WriteText(
+	    LoadDef.x * menuscale + x_offset,
+	    (LoadDef.y+LINEHEIGHT*i) * menuscale + y_offset,
+	    savegamestrings[i]);
     }
 
     if (saveStringEnter)
     {
 	i = M_StringWidth(savegamestrings[saveSlot]);
-	M_WriteText(LoadDef.x + i,LoadDef.y+LINEHEIGHT*saveSlot,"_");
+	M_WriteText(
+	    (LoadDef.x + i) * menuscale + x_offset,
+	    (LoadDef.y+LINEHEIGHT*saveSlot) * menuscale + y_offset,
+	    "_");
     }
 }
 
