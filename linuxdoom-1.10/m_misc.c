@@ -101,9 +101,6 @@ M_DrawText
 //
 // M_WriteFile
 //
-#ifndef O_BINARY
-#define O_BINARY 0
-#endif
 
 boolean
 M_WriteFile
@@ -111,16 +108,16 @@ M_WriteFile
   void*		source,
   int		length )
 {
-    int		handle;
+    FILE*	handle;
     int		count;
 
-    handle = open ( name, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666);
+    handle = fopen ( name, "wb" );
 
-    if (handle == -1)
+    if (handle == NULL)
 	return false;
 
-    count = write (handle, source, length);
-    close (handle);
+    count = fwrite( source, 1, length, handle );
+    fclose (handle);
 
     if (count < length)
 	return false;
