@@ -1,4 +1,6 @@
 
+#include <SDL.h>
+
 #include "z_zone.h"
 
 #include "i_system.h"
@@ -9,13 +11,57 @@
 
 #include "doomdef.h"
 
+struct
+{
+    SDL_AudioSpec format;
+    int device_id;
+} sdl_audio;
+
+void SDLCALL * AudioCallback (void *userdata, Uint8 * stream, int len)
+{
+}
 
 void I_InitSound()
 {
+    SDL_AudioSpec	audio_format;
+    char*		device_name;
+    int			i;
+    int			num_devices;
+    int			device_id;
+
+    SDL_InitSubSystem( SDL_INIT_AUDIO );
+
+
+    audio_format.channels = 1;
+    audio_format.freq = 22050;
+    audio_format.format = AUDIO_S16;
+    audio_format.silence = 0;
+    audio_format.samples = 16384;
+    audio_format.callback = AudioCallback;
+
+    device_id = 0;
+    num_devices = SDL_GetNumAudioDevices(0);
+    for( i = 0; i < num_devices; i++ )
+    {
+	device_name = SDL_GetAudioDeviceName(0, 0);
+	sdl_audio.device_id = SDL_OpenAudioDevice(device_name, 0, &audio_format, &sdl_audio.format, 0);
+	if (sdl_audio.device_id >= 2)
+	{
+	    printf( "I_InitSound: Open audio device: %s\n", device_name );
+	    break;
+	}
+    }
+
+    if (sdl_audio.device_id < 2)
+    {
+	printf( "I_InitSound: Could not open audio device\n" );
+	return;
+    }
 }
 
 void I_ShutdownSound()
 {
+    SDL_AudioQuit();
 }
 
 void I_ShutdownMusic()

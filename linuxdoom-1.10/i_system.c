@@ -97,6 +97,7 @@ int  I_GetTime (void)
 void I_Init (void)
 {
     I_InitSound();
+    SDL_Init(0);
 }
 
 //
@@ -109,6 +110,8 @@ void I_Quit (void)
     I_ShutdownMusic();
     M_SaveDefaults ();
     I_ShutdownGraphics();
+
+    SDL_Quit();
     exit(0);
 }
 
@@ -160,6 +163,9 @@ void I_Error (char *error, ...)
 
     D_QuitNetGame ();
     I_ShutdownGraphics();
+    I_ShutdownSound();
+    I_ShutdownMusic();
 
+    SDL_Quit();
     exit(-1);
 }
