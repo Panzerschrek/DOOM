@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -74,6 +74,15 @@ V_DrawPatch
   int		y,
   int		scrn,
   patch_t*	patch);
+
+void
+V_DrawPatchScaled
+( int		x,
+  int		y,
+  int		width,
+  int		height,
+  int		scrn,
+  patch_t*	patch );
 
 void
 V_DrawPatchDirect

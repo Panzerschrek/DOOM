@@ -428,7 +428,8 @@ void D_PageTicker (void)
 //
 void D_PageDrawer (void)
 {
-    V_DrawPatch (0,0, 0, W_CacheLumpName(pagename, PU_CACHE));
+    // PANZER - here all drawing of fuullscreen images. Draw it rescaled
+    V_DrawPatchScaled( 0, 0, SCREENWIDTH, SCREENHEIGHT, 0, W_CacheLumpName(pagename, PU_CACHE) );
 }
 
 
