@@ -27,12 +27,8 @@
 static const char
 rcsid[] = "$Id: m_misc.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <fcntl.h>
 #include <stdlib.h>
-#include <unistd.h>
-
+#include <fcntl.h>
 #include <ctype.h>
 
 
@@ -141,19 +137,21 @@ M_ReadFile
 ( char const*	name,
   byte**	buffer )
 {
-    int	handle, count, length;
-    struct stat	fileinfo;
+    int	  count, length;
+    FILE* handle;
     byte		*buf;
 
-    handle = open (name, O_RDONLY | O_BINARY, 0666);
-    if (handle == -1)
+    handle = fopen (name, "rb");
+    if (handle == NULL)
 	I_Error ("Couldn't read file %s", name);
-    if (fstat (handle,&fileinfo) == -1)
-	I_Error ("Couldn't read file %s", name);
-    length = fileinfo.st_size;
+
+    fseek (handle, 0, SEEK_END);
+    length = ftell (handle);
+    fseek (handle, 0, SEEK_SET);
+
     buf = Z_Malloc (length, PU_STATIC, NULL);
-    count = read (handle, buf, length);
-    close (handle);
+    count = fread (buf, 1, length, handle);
+    fclose (handle);
 
     if (count < length)
 	I_Error ("Couldn't read file %s", name);

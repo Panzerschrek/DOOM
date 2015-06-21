@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -29,8 +29,7 @@ rcsid[] = "$Id: m_bbox.c,v 1.1 1997/02/03 22:45:10 b1 Exp $";
 #include <string.h>
 
 #include <stdarg.h>
-#include <sys/time.h>
-#include <unistd.h>
+#include <time.h>
 
 #include "doomdef.h"
 #include "m_misc.h"
@@ -87,16 +86,7 @@ byte* I_ZoneBase (int*	size)
 //
 int  I_GetTime (void)
 {
-    struct timeval	tp;
-    struct timezone	tzp;
-    int			newtics;
-    static int		basetime=0;
-  
-    gettimeofday(&tp, &tzp);
-    if (!basetime)
-	basetime = tp.tv_sec;
-    newtics = (tp.tv_sec-basetime)*TICRATE + tp.tv_usec*TICRATE/1000000;
-    return newtics;
+    return clock() * TICRATE / CLOCKS_PER_SEC;
 }
 
 
@@ -107,7 +97,6 @@ int  I_GetTime (void)
 void I_Init (void)
 {
     I_InitSound();
-    //  I_InitGraphics();
 }
 
 //
@@ -125,15 +114,8 @@ void I_Quit (void)
 
 void I_WaitVBL(int count)
 {
-#ifdef SGI
-    sginap(1);                                           
-#else
-#ifdef SUN
-    sleep(0);
-#else
-    usleep (count * (1000000/70) );                                
-#endif
-#endif
+     // UNUSED - we do not need sleep
+     count = 0;
 }
 
 void I_BeginRead(void)
@@ -147,7 +129,7 @@ void I_EndRead(void)
 byte*	I_AllocLow(int length)
 {
     byte*	mem;
-        
+
     mem = (byte *)malloc (length);
     memset (mem,0,length);
     return mem;
@@ -178,6 +160,6 @@ void I_Error (char *error, ...)
 
     D_QuitNetGame ();
     I_ShutdownGraphics();
-    
+
     exit(-1);
 }

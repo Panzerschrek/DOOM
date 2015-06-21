@@ -550,6 +550,16 @@ void D_AddFile (char *file)
     wadfiles[numwadfiles] = newfile;
 }
 
+
+int CanOpenFile( char* file )
+{
+    FILE* f = fopen( file, "rb" );
+    if( f == NULL ) return false;
+
+    fclose(f);
+    return 1;
+}
+
 //
 // IdentifyVersion
 // Checks availability of IWAD files by name,
@@ -562,18 +572,13 @@ void IdentifyVersion (void)
     char*	doom1wad;
     char*	doomwad;
     char*	doomuwad;
-    char*	doom2wad = "doom2.wad";
+    char*	doom2wad;
 
     char*	doom2fwad;
     char*	plutoniawad;
     char*	tntwad;
 
-#ifdef NORMALUNIX
-    char *home;
-    char *doomwaddir;
-    doomwaddir = getenv("DOOMWADDIR");
-    if (!doomwaddir)
-	doomwaddir = ".";
+    char *doomwaddir = ".";
 
     // Commercial.
     doom2wad = malloc(strlen(doomwaddir)+1+9+1);
@@ -603,12 +608,6 @@ void IdentifyVersion (void)
     // French stuff.
     doom2fwad = malloc(strlen(doomwaddir)+1+10+1);
     sprintf(doom2fwad, "%s/doom2f.wad", doomwaddir);
-
-    home = getenv("HOME");
-    if (!home)
-      I_Error("Please set $HOME to your home directory");
-    sprintf(basedefault, "%s/.doomrc", home);
-#endif
 
     if (M_CheckParm ("-shdev"))
     {
@@ -651,7 +650,7 @@ void IdentifyVersion (void)
 	return;
     }
 
-    if ( !access (doom2fwad,R_OK) )
+    if ( CanOpenFile (doom2fwad) )
     {
 	gamemode = commercial;
 	// C'est ridicule!
@@ -662,42 +661,42 @@ void IdentifyVersion (void)
 	return;
     }
 
-    if ( !access (doom2wad,R_OK) )
+    if ( CanOpenFile (doom2wad) )
     {
 	gamemode = commercial;
 	D_AddFile (doom2wad);
 	return;
     }
 
-    if ( !access (plutoniawad, R_OK ) )
+    if ( CanOpenFile (plutoniawad) )
     {
       gamemode = commercial;
       D_AddFile (plutoniawad);
       return;
     }
 
-    if ( !access ( tntwad, R_OK ) )
+    if ( CanOpenFile (tntwad) )
     {
       gamemode = commercial;
       D_AddFile (tntwad);
       return;
     }
 
-    if ( !access (doomuwad,R_OK) )
+    if ( CanOpenFile (doomuwad) )
     {
       gamemode = retail;
       D_AddFile (doomuwad);
       return;
     }
 
-    if ( !access (doomwad,R_OK) )
+    if ( CanOpenFile (doomwad) )
     {
       gamemode = registered;
       D_AddFile (doomwad);
       return;
     }
 
-    if ( !access (doom1wad,R_OK) )
+    if ( CanOpenFile (doom1wad) )
     {
       gamemode = shareware;
       D_AddFile (doom1wad);
@@ -875,6 +874,10 @@ void D_DoomMain (void)
 	printf(D_CDROM);
 	mkdir("c:\\doomdata",0);
 	strcpy (basedefault,"c:/doomdata/default.cfg");
+    }
+    else
+    {
+    	strcpy (basedefault, "default.cfg");
     }
 
     // turbo option
