@@ -82,7 +82,7 @@ int			detailLevel;
 int			screenblocks;		// has default
 
 // variables for menu rescaling
-static int		menuscale;
+int			menuscale;
 static int		x_offset;
 static int		y_offset;
 
