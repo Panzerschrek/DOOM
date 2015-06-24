@@ -35,6 +35,7 @@ struct
 {
     SDL_AudioSpec format;
     int device_id;
+    SDL_mutex* mutex;
 } sdl_audio;
 
 
@@ -45,34 +46,50 @@ static int nearestpotfloor(int x)
     return r;
 }
 
+static int swapshort(short x)
+{
+    return ((x>>8)&0x0F) | (x<<8);
+   // return x;
+}
+
 void SDLCALL AudioCallback (void *userdata, Uint8 * stream, int len)
 {
-    int		i;
-    sample_t*	data;
-    static 	int shift = 0;
+    int			i;
+    int			j;
+    int			k;
+    int 		len_in_samples;
+    sample_t*		data;
+    snd_channel_t*	channel;
+
+    SDL_LockMutex(sdl_audio.mutex);
 
     data = (sample_t*) stream;
+    len_in_samples = len / sizeof(sample_t);
 
-    static sfxinfo_t info;
-    static int length;
-    if (!info.name)
+    for ( i = 0; i < len_in_samples; i++ ) data[i] = 0;
+
+    for ( i = 0; i < MAX_CHANNELS; i++ )
     {
-	info.name = malloc( 32 );
-	strcpy(info.name, "getpow");
-	info.lumpnum = I_GetSfxLumpNum(&info);
+	channel = &channels[i];
+	if (channel->id == 0) continue;
 
-	info.data = (char *) W_CacheLumpNum(info.lumpnum, PU_MUSIC) + sizeof(lumpinfo_t);
+	for ( j = channel->pos, k = 0; j < channel->length && k < len_in_samples; k++, j++ )
+	    data[k] += (channel->src_data[j] - 127 );
 
-	length = W_LumpLength(info.lumpnum);
+	channel->pos += len_in_samples;
+	if ( channel->pos >= channel->length ) channel->id = 0; // reset channel
     }
 
-    for( i= 0; i < len / sizeof(sample_t) && shift < length; i++ )
+    for ( i = 0; i < len_in_samples; i++ )
     {
-    	data[i] = ((char*)info.data)[shift] << 7;
-    	shift++;
+	k = data[i] << 7;
+	if( k > 32767 ) k = 32767;
+	else if( k < -32768 ) k = -32768;
+
+	data[i] = k;
     }
-    for( ; i < len / sizeof(sample_t); i++ )
-	data[i] = 0;
+
+    SDL_UnlockMutex(sdl_audio.mutex);
 }
 
 void I_InitSound()
@@ -112,10 +129,9 @@ void I_InitSound()
 	return;
     }
 
-    for( i = 0; i < MAX_CHANNELS; i++ )
-    {
-    	channels[i].id = 0;
-    }
+    sdl_audio.mutex = SDL_CreateMutex();
+
+    for( i = 0; i < MAX_CHANNELS; i++ ) channels[i].id = 0;
 
     SDL_PauseAudioDevice(sdl_audio.device_id , 0);
 }
@@ -128,6 +144,7 @@ void I_UpdateSound()
 void I_ShutdownSound()
 {
     SDL_AudioQuit();
+    SDL_DestroyMutex(sdl_audio.mutex);
 }
 
 void I_ShutdownMusic()
@@ -149,7 +166,8 @@ int I_StartSound
     int			freeslot;
     snd_channel_t*	channel;
     sfxinfo_t*		info;
-    char name[16];
+
+    SDL_LockMutex( sdl_audio.mutex );
 
     freeslot = -1;
     for( i = 0; i < MAX_CHANNELS; i++ )
@@ -172,20 +190,46 @@ int I_StartSound
 
     info = &S_sfx[id];
     info->data = W_CacheLumpNum(info->lumpnum, PU_SOUND) + sizeof(lumpinfo_t);
+    info->usefulness++;
 
     channel->src_data = info->data;
-    //TODO
+    channel->length = W_LumpLength(info->lumpnum);
 
+    SDL_UnlockMutex( sdl_audio.mutex );
     return channel->id;
 }
 
 int I_SoundIsPlaying(int handle)
 {
-	return true;
+    int i;
+
+    SDL_LockMutex( sdl_audio.mutex );
+
+    for( i = 0; i < MAX_CHANNELS; i++ )
+	if(channels[i].id == handle)
+	{
+	    SDL_UnlockMutex( sdl_audio.mutex );
+	    return true;
+	}
+
+    SDL_UnlockMutex( sdl_audio.mutex );
+    return false;
 }
 
 void I_StopSound(int handle)
 {
+    int i;
+
+    SDL_LockMutex( sdl_audio.mutex );
+
+    for( i = 0; i < MAX_CHANNELS; i++ )
+	if(channels[i].id == handle)
+	{
+	    channels[i].id = 0;
+	    break;
+	}
+
+    SDL_UnlockMutex( sdl_audio.mutex );
 }
 
 void I_PlaySong
