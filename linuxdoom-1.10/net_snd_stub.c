@@ -13,18 +13,21 @@
 
 
 #define MAX_CHANNELS 32
+#define ID_SAMPLE_RATE 11025
+#define MAX_VOLUME_LOG2 8
 
 typedef short sample_t;
+typedef int fixed8_t;
 
 typedef struct
 {
     int		id; // id for sound, 0 - not initialized
 
     byte*	src_data;
-    int		length; // sample count of source data
-    int		pos; // position in destination buffer ( in destination values )
-    fixed_t	pitch;
-    fixed_t	volume;
+    fixed8_t	length; // sample count of source data
+    fixed8_t	pos; // position in source buffer
+    fixed8_t	fetch_step;
+    int		volume[2]; // in range 0 - (1<<MAX_VOLUME_LOG2)
 } snd_channel_t;
 
 static int snd_id = 1; // 0 is reserved
@@ -33,9 +36,11 @@ snd_channel_t channels[MAX_CHANNELS];
 
 struct
 {
-    SDL_AudioSpec format;
-    int device_id;
-    SDL_mutex* mutex;
+    SDL_AudioSpec	format;
+    int			device_id;
+
+    int*		mixbuffer;
+    SDL_mutex*		mutex;
 } sdl_audio;
 
 
@@ -46,10 +51,10 @@ static int nearestpotfloor(int x)
     return r;
 }
 
-static int swapshort(short x)
+static void genchannelvolume(snd_channel_t* channel, int vol, int sep)
 {
-    return ((x>>8)&0x0F) | (x<<8);
-   // return x;
+    channel->volume[0] = (vol * sep) >> 4;
+    channel->volume[1] = (vol * (255-sep)) >> 4;
 }
 
 void SDLCALL AudioCallback (void *userdata, Uint8 * stream, int len)
@@ -64,25 +69,33 @@ void SDLCALL AudioCallback (void *userdata, Uint8 * stream, int len)
     SDL_LockMutex(sdl_audio.mutex);
 
     data = (sample_t*) stream;
-    len_in_samples = len / sizeof(sample_t);
+    len_in_samples = len / ( sizeof(sample_t) * sdl_audio.format.channels );
 
-    for ( i = 0; i < len_in_samples; i++ ) data[i] = 0;
+    for ( i = 0; i < len_in_samples * sdl_audio.format.channels; i++ ) sdl_audio.mixbuffer[i] = 0;
 
     for ( i = 0; i < MAX_CHANNELS; i++ )
     {
 	channel = &channels[i];
 	if (channel->id == 0) continue;
 
-	for ( j = channel->pos, k = 0; j < channel->length && k < len_in_samples; k++, j++ )
-	    data[k] += (channel->src_data[j] - 127 );
+	for ( j = channel->pos, k = 0; j < channel->length && k < len_in_samples; k++, j+= channel->fetch_step )
+	{
+	    int mul_k = j & 0xFF;
+	    int inv_mul_k = 256 - mul_k;
+	    int coord = j >> 8;
+	    sdl_audio.mixbuffer[k*2] +=
+		(channel->src_data[coord] * inv_mul_k + channel->src_data[coord + 1] * mul_k - (127<<8) ) * channel->volume[1];
+	    sdl_audio.mixbuffer[k*2+1] +=
+		(channel->src_data[coord] * inv_mul_k + channel->src_data[coord + 1] * mul_k - (127<<8) ) * channel->volume[0];
+	}
 
-	channel->pos += len_in_samples;
+	channel->pos = j;
 	if ( channel->pos >= channel->length ) channel->id = 0; // reset channel
     }
 
-    for ( i = 0; i < len_in_samples; i++ )
+    for ( i = 0; i < len_in_samples * sdl_audio.format.channels; i++ )
     {
-	k = data[i] << 7;
+	k = sdl_audio.mixbuffer[i] >> MAX_VOLUME_LOG2;
 	if( k > 32767 ) k = 32767;
 	else if( k < -32768 ) k = -32768;
 
@@ -102,8 +115,8 @@ void I_InitSound()
     SDL_InitSubSystem( SDL_INIT_AUDIO );
 
 
-    audio_format.channels = 1;
-    audio_format.freq = 11025;
+    audio_format.channels = 2;
+    audio_format.freq = 22050;
     audio_format.format = AUDIO_S16;
     audio_format.silence = 0;
     audio_format.callback = AudioCallback;
@@ -130,6 +143,7 @@ void I_InitSound()
     }
 
     sdl_audio.mutex = SDL_CreateMutex();
+    sdl_audio.mixbuffer = malloc( 4 * sizeof(sample_t) * sdl_audio.format.samples * sdl_audio.format.channels );
 
     for( i = 0; i < MAX_CHANNELS; i++ ) channels[i].id = 0;
 
@@ -145,6 +159,7 @@ void I_ShutdownSound()
 {
     SDL_AudioQuit();
     SDL_DestroyMutex(sdl_audio.mutex);
+    free(sdl_audio.mixbuffer);
 }
 
 void I_ShutdownMusic()
@@ -185,15 +200,15 @@ int I_StartSound
     snd_id++;
 
     channel->pos = 0;
-    channel->pitch = 1 << FRACBITS;
-    channel->volume = (vol << FRACBITS) / 128;
+    genchannelvolume( channel, vol, sep );
 
     info = &S_sfx[id];
     info->data = W_CacheLumpNum(info->lumpnum, PU_SOUND) + sizeof(lumpinfo_t);
     info->usefulness++;
 
     channel->src_data = info->data;
-    channel->length = W_LumpLength(info->lumpnum);
+    channel->length = (W_LumpLength(info->lumpnum) - sizeof(lumpinfo_t)) << 8;
+    channel->fetch_step = (ID_SAMPLE_RATE << 8) / sdl_audio.format.freq;
 
     SDL_UnlockMutex( sdl_audio.mutex );
     return channel->id;
@@ -294,6 +309,16 @@ I_UpdateSoundParams
   int	sep,
   int	pitch)
 {
+    int		i;
+
+    for( i = 0; i < MAX_CHANNELS; i++ )
+    {
+    	if (channels[i].id == handle)
+	{
+	    genchannelvolume( &channels[i], vol, sep );
+    	    break;
+	}
+    }
 }
 
 //
