@@ -53,8 +53,10 @@ static int nearestpotfloor(int x)
 
 static void genchannelvolume(snd_channel_t* channel, int vol, int sep)
 {
-    channel->volume[0] = (vol * sep) >> 4;
-    channel->volume[1] = (vol * (255-sep)) >> 4;
+    // input volume is in range [0;15],  separation - [0; 255]
+    // output range [0;256]
+    channel->volume[0] = (vol * sep) / 15;
+    channel->volume[1] = (vol * (256-sep)) / 15;
 }
 
 void SDLCALL AudioCallback (void *userdata, Uint8 * stream, int len)
