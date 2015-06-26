@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -35,7 +35,8 @@ extern char* sndserver_filename;
 #include "doomstat.h"
 #include "sounds.h"
 
-
+// PANZER - make it, for more accuracy in volume calculation of 3d sounds
+#define S_VOLUME_SCALER 16
 
 // Init at program start...
 void I_InitSound();
