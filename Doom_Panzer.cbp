@@ -102,10 +102,6 @@
 			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
 		<Unit filename="linuxdoom-1.10\i_net.h" />
-		<Unit filename="linuxdoom-1.10\i_sound.c">
-			<Option compilerVar="CC" />
-			<Option target="&lt;{~None~}&gt;" />
-		</Unit>
 		<Unit filename="linuxdoom-1.10\i_sound.h" />
 		<Unit filename="linuxdoom-1.10\i_system.c">
 			<Option compilerVar="CC" />
