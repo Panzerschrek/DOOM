@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -25,17 +25,11 @@
 
 #include "doomdef.h"
 
-// UNIX hack, to be removed.
-#ifdef SNDSERV
-#include <stdio.h>
-extern FILE* sndserver;
-extern char* sndserver_filename;
-#endif
-
 #include "doomstat.h"
 #include "sounds.h"
 
-
+// PANZER - make it, for more accuracy in volume calculation of 3d sounds
+#define S_VOLUME_SCALER 16
 
 // Init at program start...
 void I_InitSound();

@@ -52,6 +52,7 @@ void I_ShutdownGraphics(void)
 {
     SDL_DestroyWindow(sdl.window);
     SDL_ShowCursor(true);
+    SDL_VideoQuit();
 
     free( sdl.screen_data );
     screens[0] = NULL;
@@ -243,7 +244,7 @@ void I_SetPalette (byte* palette)
 
 void I_InitGraphics(void)
 {
-    if ( SDL_Init(SDL_INIT_VIDEO) < 0 )
+    if ( SDL_InitSubSystem(SDL_INIT_VIDEO) < 0 )
 	I_Error("Could not initialize SDL");
 
     sdl.window = SDL_CreateWindow(
