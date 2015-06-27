@@ -234,8 +234,6 @@ void D_Display (void)
       case GS_LEVEL:
 	if (!gametic)
 	    break;
-	if (automapactive)
-	    AM_Drawer ();
 	if (wipe || (viewheight != ID_SCREENHEIGHT && fullscreen) )
 	    redrawsbar = true;
 	if (inhelpscreensstate && !inhelpscreens)
@@ -260,12 +258,14 @@ void D_Display (void)
     I_UpdateNoBlit ();
 
     // draw the view directly
-    if (gamestate == GS_LEVEL && !automapactive && gametic)
+    if (gamestate == GS_LEVEL && gametic)
     {
 	R_RenderPlayerView (&players[displayplayer]);
-	R_FillBackScreen ();
+	if (automapactive) AM_Drawer();
+	else R_FillBackScreen();
 	ST_Drawer (viewheight == SCREENHEIGHT, redrawsbar );
     }
+
 
     if (gamestate == GS_LEVEL && gametic)
 	HU_Drawer ();

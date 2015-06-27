@@ -43,10 +43,6 @@ rcsid[] = "$Id: r_draw.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 #include "doomstat.h"
 
 
-// ?
-#define MAXWIDTH			1120
-#define MAXHEIGHT			832
-
 // status bar height at bottom of screen
 #define SBARHEIGHT		32
 
@@ -67,8 +63,8 @@ int		scaledviewwidth;
 int		viewheight;
 int		viewwindowx;
 int		viewwindowy;
-byte*		ylookup[MAXHEIGHT];
-int		columnofs[MAXWIDTH];
+byte*		ylookup[MAX_SCREENHEIGHT];
+int		columnofs[MAX_SCREENWIDTH];
 
 // Color tables for different players,
 //  translate a limited part to another
