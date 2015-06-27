@@ -83,8 +83,8 @@ int			screenblocks;		// has default
 
 // variables for menu rescaling
 int			menuscale;
-static int		x_offset;
-static int		y_offset;
+int		x_offset;
+int		y_offset;
 
 // temp for screenblocks (0-9)
 int			screenSize;

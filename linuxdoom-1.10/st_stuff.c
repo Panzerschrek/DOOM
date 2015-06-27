@@ -266,6 +266,10 @@ rcsid[] = "$Id: st_stuff.c,v 1.6 1997/02/03 22:45:13 b1 Exp $";
 #define ST_MAPHEIGHT		1
 
 
+// in m_menu.c
+extern int menuscale;
+extern int x_offset;
+
 // main player in game
 static player_t*	plyr;
 
@@ -501,12 +505,13 @@ void ST_refreshBackground(void)
 
     if (st_statusbaron)
     {
-	V_DrawPatch(ST_X + (SCREENWIDTH - ID_SCREENWIDTH) / 2, 0, BG, sbar);
+	V_DrawPatchScaled(
+	    ST_X * menuscale +  SCREENWIDTH / 2 - ( menuscale * ID_SCREENWIDTH / 2), SCREENHEIGHT - ST_HEIGHT * menuscale,
+	    sbar->width * menuscale, sbar->height * menuscale,
+	    0, sbar);
 
-	if (netgame)
-	    V_DrawPatch(ST_FX, 0, BG, faceback);
-
-	V_CopyRect(ST_X, 0, BG, ST_WIDTH, ST_HEIGHT, ST_X, ST_Y, FG);
+	//if (netgame)
+	//    V_DrawPatch(ST_FX, 0, BG, faceback);
     }
 
 }
@@ -1051,7 +1056,7 @@ void ST_doPaletteStuff(void)
 
 }
 
-void ST_drawWidgets(boolean refresh)
+void ST_drawWidgets()
 {
     int		i;
 
@@ -1061,64 +1066,44 @@ void ST_drawWidgets(boolean refresh)
     // used by w_frags widget
     st_fragson = deathmatch && st_statusbaron;
 
-    STlib_updateNum(&w_ready, refresh);
+    STlib_updateNum(&w_ready);
 
     for (i=0;i<4;i++)
     {
-	STlib_updateNum(&w_ammo[i], refresh);
-	STlib_updateNum(&w_maxammo[i], refresh);
+	STlib_updateNum(&w_ammo[i]);
+	STlib_updateNum(&w_maxammo[i]);
     }
 
-    STlib_updatePercent(&w_health, refresh);
-    STlib_updatePercent(&w_armor, refresh);
+    STlib_updatePercent(&w_health);
+    STlib_updatePercent(&w_armor);
 
-    STlib_updateBinIcon(&w_armsbg, refresh);
+    STlib_updateBinIcon(&w_armsbg);
 
     for (i=0;i<6;i++)
-	STlib_updateMultIcon(&w_arms[i], refresh);
+	STlib_updateMultIcon(&w_arms[i]);
 
-    STlib_updateMultIcon(&w_faces, refresh);
+    STlib_updateMultIcon(&w_faces);
 
     for (i=0;i<3;i++)
-	STlib_updateMultIcon(&w_keyboxes[i], refresh);
+	STlib_updateMultIcon(&w_keyboxes[i]);
 
-    STlib_updateNum(&w_frags, refresh);
+    STlib_updateNum(&w_frags);
 
-}
-
-void ST_doRefresh(void)
-{
-
-    st_firsttime = false;
-
-    // draw status bar background to off-screen buff
-    ST_refreshBackground();
-
-    // and refresh all widgets
-    ST_drawWidgets(true);
-
-}
-
-void ST_diffDraw(void)
-{
-    // update all widgets
-    ST_drawWidgets(false);
 }
 
 void ST_Drawer (boolean fullscreen, boolean refresh)
 {
-
     st_statusbaron = (!fullscreen) || automapactive;
     st_firsttime = st_firsttime || refresh;
 
     // Do red-/gold-shifts from damage/items
     ST_doPaletteStuff();
 
-    // If just after ST_Start(), refresh all
-    if (st_firsttime) ST_doRefresh();
-    // Otherwise, update as little as possible
-    else ST_diffDraw();
+    // draw status bar background to off-screen buff
+    ST_refreshBackground();
 
+    // and refresh all widgets
+    ST_drawWidgets();
 }
 
 void ST_loadGraphics(void)

@@ -42,7 +42,6 @@ struct
     SDL_Window *window;
     SDL_Event last_event;
     SDL_Surface* window_surface;
-    byte* screen_data;
     byte palette[1024];
 
     int mouse_buttons_state_bits;
@@ -53,9 +52,6 @@ void I_ShutdownGraphics(void)
     SDL_DestroyWindow(sdl.window);
     SDL_ShowCursor(true);
     SDL_VideoQuit();
-
-    free( sdl.screen_data );
-    screens[0] = NULL;
 }
 
 //
@@ -255,10 +251,6 @@ void I_InitGraphics(void)
 	I_Error("Could not create window");
 
     sdl.window_surface = SDL_GetWindowSurface( sdl.window );
-
-    sdl.screen_data = malloc( SCREENWIDTH * SCREENHEIGHT );
-
-    screens[0] = sdl.screen_data;
 
     SDL_ShowCursor(false);
 }

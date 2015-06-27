@@ -238,7 +238,6 @@ void D_Display (void)
 	    redrawsbar = true;
 	if (inhelpscreensstate && !inhelpscreens)
 	    redrawsbar = true;              // just put away the help screen
-	ST_Drawer (viewheight == ID_SCREENHEIGHT, redrawsbar );
 	fullscreen = viewheight == ID_SCREENHEIGHT;
 	break;
 
@@ -258,9 +257,19 @@ void D_Display (void)
     // draw buffered stuff to screen
     I_UpdateNoBlit ();
 
+    // see if the border needs to be initially drawn
+    if (gamestate == GS_LEVEL && oldgamestate != GS_LEVEL)
+    {
+	viewactivestate = false;        // view was not active
+	R_FillBackScreen ();    // draw the pattern into the back screen
+    }
+
     // draw the view directly
     if (gamestate == GS_LEVEL && !automapactive && gametic)
+    {
 	R_RenderPlayerView (&players[displayplayer]);
+	ST_Drawer (viewheight == ID_SCREENHEIGHT, redrawsbar );
+    }
 
     if (gamestate == GS_LEVEL && gametic)
 	HU_Drawer ();
@@ -268,13 +277,6 @@ void D_Display (void)
     // clean up border stuff
     if (gamestate != oldgamestate && gamestate != GS_LEVEL)
 	I_SetPalette (W_CacheLumpName ("PLAYPAL",PU_CACHE));
-
-    // see if the border needs to be initially drawn
-    if (gamestate == GS_LEVEL && oldgamestate != GS_LEVEL)
-    {
-	viewactivestate = false;        // view was not active
-	R_FillBackScreen ();    // draw the pattern into the back screen
-    }
 
     // see if the border needs to be updated to the screen
     if (gamestate == GS_LEVEL && !automapactive && scaledviewwidth != SCREENWIDTH)

@@ -43,6 +43,10 @@ rcsid[] = "$Id: st_lib.c,v 1.4 1997/02/03 16:47:56 b1 Exp $";
 #include "r_local.h"
 
 
+// in m_menu.c
+extern int menuscale;
+extern int x_offset;
+
 // in AM_map.c
 extern boolean		automapactive;
 
@@ -72,8 +76,8 @@ STlib_initNum
   boolean*		on,
   int			width )
 {
-    n->x	= x + (SCREENWIDTH - ID_SCREENWIDTH) / 2;
-    n->y	= y + SCREENHEIGHT - ID_SCREENHEIGHT;
+    n->x	= x * menuscale + x_offset;
+    n->y	= SCREENHEIGHT - ( ID_SCREENHEIGHT - y ) * menuscale;
     n->oldnum	= 0;
     n->width	= width;
     n->num	= num;
@@ -89,15 +93,14 @@ STlib_initNum
 //
 void
 STlib_drawNum
-( st_number_t*	n,
-  boolean	refresh )
+( st_number_t*	n )
 {
 
+    patch_t*	patch;
     int		numdigits = n->width;
     int		num = *n->num;
 
-    int		w = SHORT(n->p[0]->width);
-    int		h = SHORT(n->p[0]->height);
+    int		w = SHORT(n->p[0]->width) * menuscale;
     int		x = n->x;
 
     int		neg;
@@ -119,11 +122,6 @@ STlib_drawNum
     // clear the area
     x = n->x - numdigits*w;
 
-    if (n->y - ST_Y < 0)
-	I_Error("drawNum: n->y - ST_Y < 0");
-
-    V_CopyRect(x, n->y - ST_Y, BG, w*numdigits, h, x, n->y, FG);
-
     // if non-number, do not draw it
     if (num == 1994)
 	return;
@@ -132,29 +130,32 @@ STlib_drawNum
 
     // in the special case of 0, you draw 0
     if (!num)
-	V_DrawPatch(x - w, n->y, FG, n->p[ 0 ]);
+	V_DrawPatchScaled(
+	    x - w, n->y,
+	    n->p[0]->width * menuscale, n->p[0]->height * menuscale,
+	    0, n->p[0]);
 
     // draw the new number
     while (num && numdigits--)
     {
+	patch = n->p[ num % 10 ];
 	x -= w;
-	V_DrawPatch(x, n->y, FG, n->p[ num % 10 ]);
+	V_DrawPatchScaled( x, n->y, patch->width * menuscale, patch->height * menuscale, 0, patch );
 	num /= 10;
     }
 
     // draw a minus sign if necessary
     if (neg)
-	V_DrawPatch(x - 8, n->y, FG, sttminus);
+	V_DrawPatchScaled( x - 8 * menuscale, n->y, sttminus->width * menuscale, sttminus->height * menuscale, 0, sttminus );
 }
 
 
 //
 void
 STlib_updateNum
-( st_number_t*		n,
-  boolean		refresh )
+( st_number_t*		n )
 {
-    if (*n->on) STlib_drawNum(n, refresh);
+    if (*n->on) STlib_drawNum(n);
 }
 
 
@@ -178,13 +179,15 @@ STlib_initPercent
 
 void
 STlib_updatePercent
-( st_percent_t*		per,
-  int			refresh )
+( st_percent_t*		per )
 {
-    if (refresh && *per->n.on)
-	V_DrawPatch(per->n.x, per->n.y, FG, per->p);
+    if (*per->n.on)
+	V_DrawPatchScaled(
+	    per->n.x, per->n.y,
+	    per->p->width * menuscale, per->p->height * menuscale,
+	    0, per->p);
 
-    STlib_updateNum(&per->n, refresh);
+    STlib_updateNum(&per->n);
 }
 
 
@@ -198,8 +201,8 @@ STlib_initMultIcon
   int*			inum,
   boolean*		on )
 {
-    i->x	= x + (SCREENWIDTH - ID_SCREENWIDTH) / 2;
-    i->y	= y + SCREENHEIGHT - ID_SCREENHEIGHT;
+    i->x	= x * menuscale + x_offset;
+    i->y	= SCREENHEIGHT - ( ID_SCREENHEIGHT - y ) * menuscale;
     i->oldinum 	= -1;
     i->inum	= inum;
     i->on	= on;
@@ -210,31 +213,19 @@ STlib_initMultIcon
 
 void
 STlib_updateMultIcon
-( st_multicon_t*	mi,
-  boolean		refresh )
+( st_multicon_t*	mi )
 {
-    int			w;
-    int			h;
-    int			x;
-    int			y;
+    patch_t*		patch;
 
     if (*mi->on
-	&& (mi->oldinum != *mi->inum || refresh)
 	&& (*mi->inum!=-1))
     {
-	if (mi->oldinum != -1)
-	{
-	    x = mi->x - SHORT(mi->p[mi->oldinum]->leftoffset);
-	    y = mi->y - SHORT(mi->p[mi->oldinum]->topoffset);
-	    w = SHORT(mi->p[mi->oldinum]->width);
-	    h = SHORT(mi->p[mi->oldinum]->height);
+	patch = mi->p[*mi->inum];
+	V_DrawPatchScaled(
+	    mi->x, mi->y,
+	    patch->width * menuscale, patch->height * menuscale,
+	    0, patch );
 
-	    if (y - ST_Y < 0)
-		I_Error("updateMultIcon: y - ST_Y < 0");
-
-	    V_CopyRect(x, y-ST_Y, BG, w, h, x, y, FG);
-	}
-	V_DrawPatch(mi->x, mi->y, FG, mi->p[*mi->inum]);
 	mi->oldinum = *mi->inum;
     }
 }
@@ -250,8 +241,8 @@ STlib_initBinIcon
   boolean*		val,
   boolean*		on )
 {
-    b->x	= x + (SCREENWIDTH - ID_SCREENWIDTH) / 2;
-    b->y	= y + SCREENHEIGHT - ID_SCREENHEIGHT;
+    b->x	= x * menuscale + x_offset;
+    b->y	= SCREENHEIGHT - ( ID_SCREENHEIGHT - y ) * menuscale;
     b->oldval	= 0;
     b->val	= val;
     b->on	= on;
@@ -262,32 +253,16 @@ STlib_initBinIcon
 
 void
 STlib_updateBinIcon
-( st_binicon_t*		bi,
-  boolean		refresh )
+( st_binicon_t*		bi )
 {
-    int			x;
-    int			y;
-    int			w;
-    int			h;
-
-    if (*bi->on
-	&& (bi->oldval != *bi->val || refresh))
+    if (*bi->on)
     {
-	x = bi->x - SHORT(bi->p->leftoffset);
-	y = bi->y - SHORT(bi->p->topoffset);
-	w = SHORT(bi->p->width);
-	h = SHORT(bi->p->height);
-
-	if (y - ST_Y < 0)
-	    I_Error("updateBinIcon: y - ST_Y < 0");
-
-	if (*bi->val)
-	    V_DrawPatch(bi->x, bi->y, FG, bi->p);
-	else
-	    V_CopyRect(x, y-ST_Y, BG, w, h, x, y, FG);
+	V_DrawPatchScaled(
+	    bi->x, bi->y,
+	    bi->p->width * menuscale, bi->p->height * menuscale,
+	    0, bi->p);
 
 	bi->oldval = *bi->val;
     }
-
 }
 
