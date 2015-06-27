@@ -492,8 +492,8 @@ void G_DoLoadLevel (void)
     joyxmove = joyymove = 0;
     mousex = mousey = 0;
     sendpause = sendsave = paused = false;
-    memset (mousebuttons, 0, sizeof(mousebuttons));
-    memset (joybuttons, 0, sizeof(joybuttons));
+    memset (mousearray, 0, sizeof(mousearray));
+    memset (joyarray, 0, sizeof(joyarray));
 }
 
 
@@ -760,11 +760,6 @@ void G_Ticker (void)
 //
 void G_InitPlayer (int player)
 {
-    player_t*	p;
-
-    // set up the saved info
-    p = &players[player];
-
     // clear everything else to defaults
     G_PlayerReborn (player);
 

@@ -737,7 +737,6 @@ void R_FillBackScreen (void)
     int		x;
     int		y;
     int		y2;
-    patch_t*	patch;
 
     // DOOM border patch.
     char	name1[] = "FLOOR7_2";

@@ -12,8 +12,12 @@
 				<Option type="1" />
 				<Option compiler="mingw_qt_53" />
 				<Compiler>
+					<Add option="-pg" />
 					<Add option="-g" />
 				</Compiler>
+				<Linker>
+					<Add option="-pg -lgmon" />
+				</Linker>
 			</Target>
 			<Target title="Release">
 				<Option output="Doom_Panzer" prefix_auto="1" extension_auto="1" />

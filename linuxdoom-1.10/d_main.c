@@ -145,7 +145,8 @@ int 		eventtail;
 void D_PostEvent (event_t* ev)
 {
     events[eventhead] = *ev;
-    eventhead = (++eventhead)&(MAXEVENTS-1);
+    ++eventhead;
+    eventhead &= (MAXEVENTS-1);
 }
 
 
@@ -162,7 +163,7 @@ void D_ProcessEvents (void)
 	 && (W_CheckNumForName("map01")<0) )
       return;
 
-    for ( ; eventtail != eventhead ; eventtail = (++eventtail)&(MAXEVENTS-1) )
+    for ( ; eventtail != eventhead ; ++eventtail, eventtail &= (MAXEVENTS-1) )
     {
 	ev = &events[eventtail];
 	if (M_Responder (ev))
@@ -187,12 +188,9 @@ void R_ExecuteSetViewSize (void);
 
 void D_Display (void)
 {
-    static  boolean		viewactivestate = false;
-    static  boolean		menuactivestate = false;
     static  boolean		inhelpscreensstate = false;
     static  boolean		fullscreen = false;
     static  gamestate_t		oldgamestate = -1;
-    static  int			borderdrawcount;
     int				nowtime;
     int				tics;
     int				wipestart;
@@ -211,7 +209,6 @@ void D_Display (void)
     {
 	R_ExecuteSetViewSize ();
 	oldgamestate = -1;                      // force background redraw
-	borderdrawcount = 3;
     }
 
     // save the current screen if about to wipe
@@ -272,9 +269,6 @@ void D_Display (void)
     if (gamestate != oldgamestate && gamestate != GS_LEVEL)
 	I_SetPalette (W_CacheLumpName ("PLAYPAL",PU_CACHE));
 
-
-    menuactivestate = menuactive;
-    viewactivestate = viewactive;
     inhelpscreensstate = inhelpscreens;
     oldgamestate = wipegamestate = gamestate;
 
@@ -849,16 +843,7 @@ void D_DoomMain (void)
     if (devparm)
 	printf(D_DEVSTR);
 
-    if (M_CheckParm("-cdrom"))
-    {
-	printf(D_CDROM);
-	mkdir("c:\\doomdata",0);
-	strcpy (basedefault,"c:/doomdata/default.cfg");
-    }
-    else
-    {
-    	strcpy (basedefault, "default.cfg");
-    }
+    strcpy (basedefault, "default.cfg");
 
     // turbo option
     if ( (p=M_CheckParm ("-turbo")) )

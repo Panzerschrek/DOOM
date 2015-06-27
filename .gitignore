@@ -1,6 +1,7 @@
 *.depend
 *.layout
 *.o
+*.out
 *.exe
 *.dll
 *.wad
