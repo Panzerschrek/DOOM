@@ -1,0 +1,15 @@
+﻿------------------------0.3------------------------
+
+* Igra kompilirujetsä pod Windows x86 s pomoscju
+  MinGW.
+* Kartinka risujetsä, podderživajetsä toljko režim
+  B8R8G8A8. Jestj podderžka razlicnyh ražrešenij
+  ekrana, vplotj do 1536x1536.
+* Sdelano rastägivanije interfejsa, no ne vezde.
+* Jestj vyvod zvuka, povyšeno kacestvo, ulucšen 3d
+  zvuk.
+* jestj polnoçennoje upravlenije cerez klaviaturu
+  i myšj.
+* Netu setevoj igry.
+* Netu muzyki.
+* Netu sborki pod drugije pklatformy.
