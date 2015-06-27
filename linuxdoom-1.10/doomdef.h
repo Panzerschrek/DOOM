@@ -74,34 +74,12 @@ typedef enum
 // most parameter validation debugging code will not be compiled
 #define RANGECHECK
 
+extern int SCREENWIDTH;
+extern int SCREENHEIGHT;
 
-// This one switches between MIT SHM (no proper mouse)
-// and XFree86 DGA (mickey sampling). The original
-// linuxdoom used SHM, which is default.
-//#define X11_DGA		1
-
-
-//
-// For resize of screen, at start of game.
-// It will not work dynamically, see visplanes.
-//
-#define	BASE_WIDTH		1024
-
-// It is educational but futile to change this
-//  scaling e.g. to 2. Drawing of status bar,
-//  menues etc. is tied to the scale implied
-//  by the graphics.F
-#define	SCREEN_MUL		1
-#define	INV_ASPECT_RATIO	0.625 // 0.75, ideally
-
-// Defines suck. C sucks.
-// C++ might sucks for OOP, but it sure is a better C.
-// So there.
-#define SCREENWIDTH  1024
-//SCREEN_MUL*BASE_WIDTH //320
-#define SCREENHEIGHT 768
-//(int)(SCREEN_MUL*BASE_WIDTH*INV_ASPECT_RATIO) //200
-
+// Vanila renderer can not greater resolutions
+#define MAX_SCREENWIDTH 1536
+#define MAX_SCREENHEIGHT 1536
 
 // screen resolution of base game
 #define ID_SCREENWIDTH 320

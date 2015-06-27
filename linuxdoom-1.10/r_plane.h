@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -23,7 +23,6 @@
 #ifndef __R_PLANE__
 #define __R_PLANE__
 
-
 #include "r_data.h"
 
 #ifdef __GNUG__
@@ -40,11 +39,11 @@ typedef void (*planefunction_t) (int top, int bottom);
 extern planefunction_t	floorfunc;
 extern planefunction_t	ceilingfunc_t;
 
-extern short		floorclip[SCREENWIDTH];
-extern short		ceilingclip[SCREENWIDTH];
+extern short		floorclip[MAX_SCREENWIDTH];
+extern short		ceilingclip[MAX_SCREENWIDTH];
 
-extern fixed_t		yslope[SCREENHEIGHT];
-extern fixed_t		distscale[SCREENWIDTH];
+extern fixed_t		yslope[MAX_SCREENHEIGHT];
+extern fixed_t		distscale[MAX_SCREENWIDTH];
 
 void R_InitPlanes (void);
 void R_ClearPlanes (void);

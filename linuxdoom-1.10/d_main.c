@@ -72,6 +72,11 @@ static const char rcsid[] = "$Id: d_main.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 
 #include "d_main.h"
 
+
+//PANZER - now, we can different resolutions
+int SCREENWIDTH = ID_SCREENWIDTH * 2;
+int SCREENHEIGHT = ID_SCREENHEIGHT * 2;
+
 //
 // D-DoomLoop()
 // Not a globally visible function,
@@ -773,6 +778,21 @@ void D_DoomMain (void)
 
     setbuf (stdout, NULL);
     modifiedgame = false;
+
+    p = M_CheckParm( "-width" );
+    if(p && p <= myargc - 1 )
+    {
+	SCREENWIDTH = atoi( myargv[p+1] );
+	if( SCREENWIDTH < ID_SCREENWIDTH ) SCREENWIDTH = ID_SCREENWIDTH;
+	else if( SCREENWIDTH > MAX_SCREENWIDTH ) SCREENWIDTH = MAX_SCREENWIDTH;
+    }
+    p = M_CheckParm( "-height" );
+    if(p && p <= myargc - 1 )
+    {
+	SCREENHEIGHT = atoi( myargv[p+1] );
+	if( SCREENHEIGHT < ID_SCREENHEIGHT ) SCREENHEIGHT = ID_SCREENHEIGHT;
+	else if( SCREENHEIGHT > MAX_SCREENHEIGHT ) SCREENHEIGHT = MAX_SCREENHEIGHT;
+    }
 
     nomonsters = M_CheckParm ("-nomonsters");
     respawnparm = M_CheckParm ("-respawn");

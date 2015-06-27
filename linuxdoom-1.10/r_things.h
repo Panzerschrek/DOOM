@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -36,8 +36,8 @@ extern vissprite_t	vsprsortedhead;
 
 // Constant arrays used for psprite clipping
 //  and initializing clipping.
-extern short		negonearray[SCREENWIDTH];
-extern short		screenheightarray[SCREENWIDTH];
+extern short		negonearray[MAX_SCREENWIDTH];
+extern short		screenheightarray[MAX_SCREENWIDTH];
 
 // vars for R_DrawMaskedColumn
 extern short*		mfloorclip;

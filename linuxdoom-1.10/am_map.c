@@ -219,8 +219,8 @@ static int 	grid = 0;
 static int 	leveljuststarted = 1; 	// kluge until AM_LevelInit() is called
 
 boolean    	automapactive = false;
-static int 	finit_width = SCREENWIDTH;
-static int 	finit_height = SCREENHEIGHT - 32;
+static int 	finit_width = MAX_SCREENWIDTH;
+static int 	finit_height = MAX_SCREENHEIGHT - 32;
 
 // location of window on screen
 static int 	f_x;
