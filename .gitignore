@@ -4,8 +4,15 @@
 *.out
 *.exe
 *.dll
+
 *.wad
 *.sav
 *.dsg
 *.CFG
+
 screenshots/*
+
+*.zip
+*.7z
+*.tar.gz
+*.rar
