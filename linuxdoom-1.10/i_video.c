@@ -37,6 +37,11 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 
 #include "doomdef.h"
 
+#define MOUSE_MOTION_SCALE 3
+
+// m_misc.c
+extern int	usemouse;
+
 struct
 {
     SDL_Window *window;
@@ -44,13 +49,17 @@ struct
     SDL_Surface* window_surface;
     byte palette[1024];
 
+    boolean is_focus;
     int mouse_buttons_state_bits;
+    int mouse_delta_x;
+    int mouse_delta_y;
 } sdl;
 
 void I_ShutdownGraphics(void)
 {
     SDL_DestroyWindow(sdl.window);
     SDL_ShowCursor(true);
+    SDL_SetRelativeMouseMode(false);
     SDL_VideoQuit();
 }
 
@@ -127,6 +136,18 @@ int sdllatemousebutton(int button)
     };
 }
 
+void I_GrabMouse (void)
+{
+    if (usemouse) SDL_SetRelativeMouseMode(true);
+    else SDL_ShowCursor(false);
+}
+
+void I_UngrabMouse (void)
+{
+    if (usemouse) SDL_SetRelativeMouseMode(false);
+    else SDL_ShowCursor(true);
+}
+
 void I_GetEvent(void)
 {
     event_t event;
@@ -161,11 +182,24 @@ void I_GetEvent(void)
 	break;
 
     case SDL_MOUSEMOTION:
-	event.type = ev_mouse;
-	event.data1 = sdl.mouse_buttons_state_bits;
-	event.data2 = sdl.last_event.motion.xrel;
-	event.data3 = sdl.last_event.motion.yrel;
-	D_PostEvent(&event);
+	sdl.mouse_delta_x += sdl.last_event.motion.xrel;
+	sdl.mouse_delta_y += sdl.last_event.motion.yrel;
+	break;
+
+    case SDL_WINDOWEVENT_ENTER:
+	if (!sdl.is_focus)
+	{
+	    sdl.is_focus = true;
+	    I_GrabMouse();
+	}
+	break;
+
+    case SDL_WINDOWEVENT_LEAVE:
+	if (sdl.is_focus)
+	{
+	    sdl.is_focus = false;
+	    I_UngrabMouse();
+	}
 	break;
 
     case SDL_WINDOWEVENT_CLOSE:
@@ -183,9 +217,20 @@ void I_GetEvent(void)
 //
 void I_StartTic (void)
 {
+    event_t event;
+
+    sdl.mouse_delta_x = sdl.mouse_delta_y = 0;
+
     while( SDL_PollEvent(&sdl.last_event) )
-    {
 	I_GetEvent();
+
+    if (usemouse)
+    {
+	event.type = ev_mouse;
+	event.data1 = sdl.mouse_buttons_state_bits;
+	event.data2 = sdl.mouse_delta_x * MOUSE_MOTION_SCALE;
+	event.data3 = -sdl.mouse_delta_y * MOUSE_MOTION_SCALE;
+	D_PostEvent(&event);
     }
 }
 
@@ -252,5 +297,6 @@ void I_InitGraphics(void)
 
     sdl.window_surface = SDL_GetWindowSurface( sdl.window );
 
-    SDL_ShowCursor(false);
+    sdl.is_focus = true;
+    I_GrabMouse();
 }
