@@ -423,8 +423,6 @@ void WI_drawLF(void)
     int y = WI_TITLEY;
 
     // draw <LevelName>
-    //V_DrawPatch((SCREENWIDTH - SHORT(lnames[wbs->last]->width))/2,
-//		y, FB, lnames[wbs->last]);
     V_DrawPatchScaled(
 	SCREENWIDTH/2 - menuscale * SHORT(lnames[wbs->last]->width)/2,
 	y * menuscale,
@@ -436,8 +434,6 @@ void WI_drawLF(void)
     // draw "Finished!"
     y += (5*SHORT(lnames[wbs->last]->height))/4 * menuscale;
 
-    //V_DrawPatch((SCREENWIDTH - SHORT(finished->width))/2,
-//		y, FB, finished
     V_DrawPatchScaled(
 	SCREENWIDTH/2 - menuscale * SHORT(finished->width)/2,
 	y * menuscale,
@@ -454,6 +450,7 @@ void WI_drawEL(void)
 {
     int y = WI_TITLEY;
 
+    // draw "Entering"
     V_DrawPatchScaled(
 	SCREENWIDTH/2 - menuscale * SHORT(entering->width)/2,
 	y * menuscale,
@@ -461,15 +458,9 @@ void WI_drawEL(void)
 	entering->height * menuscale,
 	FB,
 	entering);
-    // draw "Entering"
-    //V_DrawPatch((SCREENWIDTH - SHORT(entering->width))/2,
-//		y, FB, entering);
 
     // draw level
     y += (5*SHORT(lnames[wbs->next]->height))/4 * menuscale;
-
-  //  V_DrawPatch((SCREENWIDTH - SHORT(lnames[wbs->next]->width))/2,
-//		y, FB, lnames[wbs->next]);
 
     V_DrawPatchScaled(
 	SCREENWIDTH/2 - menuscale * SHORT(lnames[wbs->next]->width)/2,
@@ -493,6 +484,8 @@ WI_drawOnLnode
     int		bottom;
     boolean	fits = false;
 
+    // PANZER - TODO. invent how draw this
+    return;
     i = 0;
     do
     {
@@ -624,7 +617,13 @@ void WI_drawAnimatedBack(void)
 	a = &anims[wbs->epsd][i];
 
 	if (a->ctr >= 0)
-	    V_DrawPatch(a->loc.x, a->loc.y, FB, a->p[a->ctr]);
+	{
+	    patch_t* patch = a->p[a->ctr];
+	    V_DrawPatchScaled(
+		a->loc.x * SCREENWIDTH / ID_SCREENWIDTH, a->loc.y * SCREENHEIGHT / ID_SCREENHEIGHT,
+		patch->width * SCREENWIDTH / ID_SCREENWIDTH, patch->height * SCREENHEIGHT / ID_SCREENHEIGHT,
+		FB, patch );
+	}
     }
 
 }
@@ -680,8 +679,10 @@ WI_drawNum
     // draw the new number
     while (digits--)
     {
-	x -= fontwidth;
-	V_DrawPatch(x, y, FB, num[ n % 10 ]);
+    	patch_t* patch = num[ n % 10 ];
+	x -= fontwidth * menuscale;
+	//V_DrawPatch(x, y, FB, num[ n % 10 ]);
+	V_DrawPatchScaled( x, y, patch->width * menuscale, patch->height * menuscale, FB, patch );
 	n /= 10;
     }
 
@@ -702,7 +703,8 @@ WI_drawPercent
     if (p < 0)
 	return;
 
-    V_DrawPatch(x, y, FB, percent);
+    V_DrawPatchScaled(x, y, percent->width * menuscale, percent->height * menuscale, FB, percent);
+    //V_DrawPatch(x, y, FB, percent);
     WI_drawNum(x, y, p, -1);
 }
 
@@ -732,19 +734,22 @@ WI_drawTime
 	do
 	{
 	    n = (t / div) % 60;
-	    x = WI_drawNum(x, y, n, 2) - SHORT(colon->width);
+	    x = WI_drawNum(x, y, n, 2) - SHORT(colon->width) * menuscale;
 	    div *= 60;
 
 	    // draw
 	    if (div==60 || t / div)
-		V_DrawPatch(x, y, FB, colon);
+		V_DrawPatchScaled( x, y, colon->width * menuscale, colon->height * menuscale, FB, colon );
 
 	} while (t / div);
     }
     else
     {
 	// "sucks"
-	V_DrawPatch(x - SHORT(sucks->width), y, FB, sucks);
+	V_DrawPatchScaled(
+	    x - SHORT(sucks->width) * menuscale, y,
+	    sucks->width * menuscale, sucks->height * menuscale,
+	    FB, sucks);
     }
 }
 
@@ -1475,22 +1480,37 @@ void WI_drawStats(void)
 
     WI_drawLF();
 
-    V_DrawPatch(SP_STATSX, SP_STATSY, FB, kills);
-    WI_drawPercent(SCREENWIDTH - SP_STATSX, SP_STATSY, cnt_kills[0]);
+    V_DrawPatchScaled(
+	SP_STATSX * menuscale, SP_STATSY * menuscale,
+	kills->width * menuscale, kills->height * menuscale,
+	FB, kills);
+    WI_drawPercent(SCREENWIDTH - SP_STATSX * menuscale, SP_STATSY * menuscale, cnt_kills[0]);
 
-    V_DrawPatch(SP_STATSX, SP_STATSY+lh, FB, items);
-    WI_drawPercent(SCREENWIDTH - SP_STATSX, SP_STATSY+lh, cnt_items[0]);
+    V_DrawPatchScaled(
+	SP_STATSX * menuscale, (SP_STATSY + lh) * menuscale,
+	items->width * menuscale, items->height * menuscale,
+	FB, items);
+    WI_drawPercent(SCREENWIDTH - SP_STATSX * menuscale, (SP_STATSY+lh) * menuscale, cnt_items[0]);
 
-    V_DrawPatch(SP_STATSX, SP_STATSY+2*lh, FB, sp_secret);
-    WI_drawPercent(SCREENWIDTH - SP_STATSX, SP_STATSY+2*lh, cnt_secret[0]);
+    V_DrawPatchScaled(
+	SP_STATSX * menuscale, (SP_STATSY + 2*lh) * menuscale,
+	sp_secret->width * menuscale, sp_secret->height * menuscale,
+	FB, sp_secret);
+    WI_drawPercent(SCREENWIDTH - SP_STATSX * menuscale, (SP_STATSY+2*lh) * menuscale, cnt_secret[0]);
 
-    V_DrawPatch(SP_TIMEX, SP_TIMEY, FB, time);
-    WI_drawTime(SCREENWIDTH/2 - SP_TIMEX, SP_TIMEY, cnt_time);
+    V_DrawPatchScaled(
+	SP_TIMEX * menuscale, SCREENHEIGHT - 32 * menuscale,
+	time->width * menuscale, time->height * menuscale,
+	FB, time);
+    WI_drawTime(SCREENWIDTH/2 - SP_TIMEX * menuscale, SCREENHEIGHT - 32 * menuscale, cnt_time);
 
     if (wbs->epsd < 3)
     {
-	V_DrawPatch(SCREENWIDTH/2 + SP_TIMEX, SP_TIMEY, FB, par);
-	WI_drawTime(SCREENWIDTH - SP_TIMEX, SP_TIMEY, cnt_par);
+	V_DrawPatchScaled(
+	    SCREENWIDTH/2 + SP_TIMEX * menuscale, SCREENHEIGHT - 32 * menuscale,
+	    par->width * menuscale, par->height * menuscale,
+	    FB, par);
+	WI_drawTime(SCREENWIDTH - SP_TIMEX * menuscale, SCREENHEIGHT - 32 * menuscale, cnt_par);
     }
 
 }

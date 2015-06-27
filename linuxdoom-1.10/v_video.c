@@ -273,7 +273,6 @@ V_DrawPatchScaled
   patch_t*	patch )
 {
     int		col;
-    int		cur_y;
     column_t*	column;
     byte*	desttop;
     byte*	dest;
@@ -314,21 +313,19 @@ V_DrawPatchScaled
 	column = (column_t *)((byte *)patch + LONG(patch->columnofs[u >> FRACBITS]));
 
 	// step through the posts in a column
-	cur_y = y;
 	v = 0;
 	while (column->topdelta != 0xff )
 	{
 	    source = (byte *)column + 3;
-	    dest = desttop + ((column->topdelta << FRACBITS) / v_step) * SCREENWIDTH;
+	    dest = desttop + (column->topdelta * height / patch->height) * SCREENWIDTH;
+	    v = 0; //HACK - not worked correctly if scale of image not integer
 
 	    while ((v >> FRACBITS) < column->length)
 	    {
 	    	*dest = source[ v >> FRACBITS ];
 	    	dest += SCREENWIDTH;
 	    	v += v_step;
-	    	cur_y ++;
 	    }
-	    v -= column->length << FRACBITS;
 	    column = (column_t *)(  (byte *)column + column->length
 				    + 4 );
 	}
