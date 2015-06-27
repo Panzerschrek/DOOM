@@ -47,7 +47,8 @@ static const char rcsid[] = "$Id: r_main.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 // Fineangles in the SCREENWIDTH wide window.
 #define FIELDOFVIEW		2048
 
-
+// m_menu.c
+extern int menuscale;
 
 int			viewangleoffset;
 
@@ -687,7 +688,7 @@ void R_ExecuteSetViewSize (void)
     else
     {
 	scaledviewwidth = setblocks * SCREENWIDTH / 10;//setblocks*32;
-	viewheight = (setblocks*(SCREENHEIGHT - 32)/10)&~7;//(setblocks*168/10)&~7;
+	viewheight = (setblocks*(SCREENHEIGHT - 32 * menuscale)/10)&~7;//(setblocks*168/10)&~7;
     }
 
     detailshift = setdetail;
@@ -719,8 +720,8 @@ void R_ExecuteSetViewSize (void)
     R_InitTextureMapping ();
 
     // psprite scales
-    pspritescale = FRACUNIT*viewwidth/ID_SCREENWIDTH;
-    pspriteiscale = FRACUNIT*ID_SCREENWIDTH/viewwidth;
+    pspritescale = FRACUNIT*viewheight/ID_SCREENHEIGHT;
+    pspriteiscale = FRACUNIT*ID_SCREENHEIGHT/viewheight;
 
     // thing clipping
     for (i=0 ; i<viewwidth ; i++)

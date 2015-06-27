@@ -713,7 +713,7 @@ R_InitBuffer
     if (width == SCREENWIDTH)
 	viewwindowy = 0;
     else
-	viewwindowy = (SCREENHEIGHT-SBARHEIGHT*menuscale-height) >> 1;
+	viewwindowy = (SCREENHEIGHT-height) >> 1;
 
     // Preclaculate all row offsets.
     for (i=0 ; i<height ; i++)
@@ -731,21 +731,22 @@ R_InitBuffer
 //
 void R_FillBackScreen (void)
 {
+    byte*	texture;
     byte*	src;
     byte*	dest;
     int		x;
     int		y;
+    int		y2;
     patch_t*	patch;
 
     // DOOM border patch.
     char	name1[] = "FLOOR7_2";
-
     // DOOM II border patch.
     char	name2[] = "GRNROCK";
 
     char*	name;
 
-    if (scaledviewwidth == SCREENWIDTH)
+    if (viewheight == SCREENHEIGHT)
 	return;
 
     if ( gamemode == commercial)
@@ -753,22 +754,27 @@ void R_FillBackScreen (void)
     else
 	name = name1;
 
-    src = W_CacheLumpName (name, PU_CACHE);
-    dest = screens[0];
+    texture = W_CacheLumpName (name, PU_CACHE);
 
-    for (y=0 ; y<SCREENHEIGHT; y++)
+    y2 = viewwindowy + viewheight;
+    for( y = 0; y < viewwindowy; y++ )
     {
-	for (x=0 ; x<SCREENWIDTH/64 ; x++)
-	{
-	    memcpy (dest, src+((y&63)<<6), 64);
-	    dest += 64;
-	}
-
-	if (SCREENWIDTH&63)
-	{
-	    memcpy (dest, src+((y&63)<<6), SCREENWIDTH&63);
-	    dest += (SCREENWIDTH&63);
-	}
+	dest = screens[0] + SCREENWIDTH * y;
+	src = texture + (y%63) * 64;
+	for( x = 0; x< SCREENWIDTH; x++, dest++ ) *dest = src[x&63];
+    }
+    for( y = viewwindowy; y < y2; y++ )
+    {
+	dest = screens[0] + SCREENWIDTH * y;
+	src = texture + (y%63) * 64;
+	for( x = 0; x < viewwindowx; x++ ) dest[x] = src[x&63];
+	for( x = viewwindowx + viewwidth; x < SCREENWIDTH; x++ ) dest[x] = src[x&63];
+    }
+    for( y = y2; y < SCREENHEIGHT; y++ )
+    {
+	dest = screens[0] + SCREENWIDTH * y;
+	src = texture + (y%63) * 64;
+	for( x = 0; x< SCREENWIDTH; x++, dest++ ) *dest = src[x&63];
     }
 
     /*patch = W_CacheLumpName ("brdr_t",PU_CACHE);
@@ -826,53 +832,6 @@ R_VideoErase
   //  a 32bit CPU, as GNU GCC/Linux libc did
   //  at one point.
     memcpy (screens[0]+ofs, screens[1]+ofs, count);
-}
-
-
-//
-// R_DrawViewBorder
-// Draws the border around the view
-//  for different size windows?
-//
-void
-V_MarkRect
-( int		x,
-  int		y,
-  int		width,
-  int		height );
-
-void R_DrawViewBorder (void)
-{
-    int		top;
-    int		side;
-    int		ofs;
-    int		i;
-return;
-    if (scaledviewwidth == SCREENWIDTH)
-	return;
-
-    top = ((SCREENHEIGHT-SBARHEIGHT*menuscale)-viewheight)/2;
-    side = (SCREENWIDTH-scaledviewwidth)/2;
-
-    // copy top and one line of left side
-    R_VideoErase (0, top*SCREENWIDTH+side);
-
-    // copy one line of right side and bottom
-    ofs = (viewheight+top)*SCREENWIDTH-side;
-    R_VideoErase (ofs, top*SCREENWIDTH+side);
-
-    // copy sides using wraparound
-    ofs = top*SCREENWIDTH + SCREENWIDTH-side;
-    side <<= 1;
-
-    for (i=1 ; i<viewheight ; i++)
-    {
-	R_VideoErase (ofs, side);
-	ofs += SCREENWIDTH;
-    }
-
-    // ?
-    V_MarkRect (0,0,SCREENWIDTH, SCREENHEIGHT-SBARHEIGHT);
 }
 
 

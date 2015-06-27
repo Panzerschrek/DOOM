@@ -257,18 +257,12 @@ void D_Display (void)
     // draw buffered stuff to screen
     I_UpdateNoBlit ();
 
-    // see if the border needs to be initially drawn
-    if (gamestate == GS_LEVEL && oldgamestate != GS_LEVEL)
-    {
-	viewactivestate = false;        // view was not active
-	R_FillBackScreen ();    // draw the pattern into the back screen
-    }
-
     // draw the view directly
     if (gamestate == GS_LEVEL && !automapactive && gametic)
     {
 	R_RenderPlayerView (&players[displayplayer]);
-	ST_Drawer (viewheight == ID_SCREENHEIGHT, redrawsbar );
+	R_FillBackScreen ();
+	ST_Drawer (viewheight == SCREENHEIGHT, redrawsbar );
     }
 
     if (gamestate == GS_LEVEL && gametic)
@@ -278,18 +272,6 @@ void D_Display (void)
     if (gamestate != oldgamestate && gamestate != GS_LEVEL)
 	I_SetPalette (W_CacheLumpName ("PLAYPAL",PU_CACHE));
 
-    // see if the border needs to be updated to the screen
-    if (gamestate == GS_LEVEL && !automapactive && scaledviewwidth != SCREENWIDTH)
-    {
-	if (menuactive || menuactivestate || !viewactivestate)
-	    borderdrawcount = 3;
-	if (borderdrawcount)
-	{
-	    R_DrawViewBorder ();    // erase old menu stuff
-	    borderdrawcount--;
-	}
-
-    }
 
     menuactivestate = menuactive;
     viewactivestate = viewactive;

@@ -1093,6 +1093,8 @@ void ST_drawWidgets()
 
 void ST_Drawer (boolean fullscreen, boolean refresh)
 {
+   if( fullscreen ) return;
+
     st_statusbaron = (!fullscreen) || automapactive;
     st_firsttime = st_firsttime || refresh;
 

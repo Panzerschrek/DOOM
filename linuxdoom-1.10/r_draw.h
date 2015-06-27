@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -37,7 +37,7 @@ extern fixed_t		dc_iscale;
 extern fixed_t		dc_texturemid;
 
 // first pixel in a column
-extern byte*		dc_source;		
+extern byte*		dc_source;
 
 
 // The span blitting interface.
@@ -73,7 +73,7 @@ extern fixed_t		ds_xstep;
 extern fixed_t		ds_ystep;
 
 // start of a 64*64 tile image
-extern byte*		ds_source;		
+extern byte*		ds_source;
 
 extern byte*		translationtables;
 extern byte*		dc_translation;
@@ -99,11 +99,8 @@ void	R_InitTranslationTables (void);
 
 
 
-// Rendering function.
-void R_FillBackScreen (void);
-
 // If the view size is not full screen, draws a border around it.
-void R_DrawViewBorder (void);
+void R_FillBackScreen (void);
 
 
 

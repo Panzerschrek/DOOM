@@ -432,7 +432,7 @@ void WI_drawLF(void)
 	lnames[wbs->last]);
 
     // draw "Finished!"
-    y += (5*SHORT(lnames[wbs->last]->height))/4 * menuscale;
+    y += (5*SHORT(lnames[wbs->last]->height))/4;
 
     V_DrawPatchScaled(
 	SCREENWIDTH/2 - menuscale * SHORT(finished->width)/2,
