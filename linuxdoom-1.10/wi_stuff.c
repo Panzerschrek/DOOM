@@ -460,7 +460,7 @@ void WI_drawEL(void)
 	entering);
 
     // draw level
-    y += (5*SHORT(lnames[wbs->next]->height))/4 * menuscale;
+    y += (5*SHORT(lnames[wbs->next]->height))/4;
 
     V_DrawPatchScaled(
 	SCREENWIDTH/2 - menuscale * SHORT(lnames[wbs->next]->width)/2,

@@ -34,6 +34,9 @@ rcsid[] = "$Id: hu_lib.c,v 1.3 1997/01/26 07:44:58 b1 Exp $";
 #include "r_local.h"
 #include "r_draw.h"
 
+// m_menu.c
+extern int menuscale;
+
 // boolean : whether the screen is always erased
 #define noterased viewwindowx
 
@@ -106,6 +109,7 @@ HUlib_drawTextLine
     int			w;
     int			x;
     unsigned char	c;
+    patch_t*		patch;
 
     // draw the new stuff
     x = l->x;
@@ -116,15 +120,20 @@ HUlib_drawTextLine
 	    && c >= l->sc
 	    && c <= '_')
 	{
-	    w = SHORT(l->f[c - l->sc]->width);
+	    w = SHORT(l->f[c - l->sc]->width) * menuscale;
 	    if (x+w > SCREENWIDTH)
 		break;
-	    V_DrawPatchDirect(x, l->y, FG, l->f[c - l->sc]);
+	    patch = l->f[c - l->sc];
+	    V_DrawPatchScaled(
+		x, l->y,
+		patch->width * menuscale,
+		patch->height * menuscale,
+		0, patch );
 	    x += w;
 	}
 	else
 	{
-	    x += 4;
+	    x += 4 * menuscale;
 	    if (x >= SCREENWIDTH)
 		break;
 	}
@@ -132,9 +141,14 @@ HUlib_drawTextLine
 
     // draw the cursor if requested
     if (drawcursor
-	&& x + SHORT(l->f['_' - l->sc]->width) <= SCREENWIDTH)
+	&& x + SHORT(l->f['_' - l->sc]->width * menuscale) <= SCREENWIDTH)
     {
-	V_DrawPatchDirect(x, l->y, FG, l->f['_' - l->sc]);
+	patch = l->f['_' - l->sc];
+	    V_DrawPatchScaled(
+		x, l->y,
+		patch->width * menuscale,
+		patch->height * menuscale,
+		0, patch );
     }
 }
 
@@ -190,7 +204,7 @@ HUlib_initSText
     s->cl = 0;
     for (i=0;i<h;i++)
 	HUlib_initTextLine(&s->l[i],
-			   x, y - i*(SHORT(font[0]->height)+1),
+			   x, y - i*(SHORT(font[0]->height)+1) * menuscale,
 			   font, startchar);
 
 }

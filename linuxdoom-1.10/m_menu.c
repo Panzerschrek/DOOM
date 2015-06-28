@@ -578,8 +578,8 @@ void M_DrawSaveLoadBorder(int x,int y)
 
     patch = W_CacheLumpName("M_LSLEFT",PU_CACHE);
     V_DrawPatchScaled(
-	x - 8,
-	y + 7,
+	x - 8 * menuscale,
+	y + 7 * menuscale,
 	patch->width * menuscale,
 	patch->height * menuscale,
 	0, patch);
@@ -589,7 +589,7 @@ void M_DrawSaveLoadBorder(int x,int y)
     {
 	V_DrawPatchScaled(
 	    x,
-	    y + 7,
+	    y + 7 * menuscale,
 	    patch->width * menuscale,
 	    patch->height * menuscale,
 	    0, patch);
@@ -599,7 +599,7 @@ void M_DrawSaveLoadBorder(int x,int y)
     patch = W_CacheLumpName("M_LSRGHT",PU_CACHE);
     V_DrawPatchScaled(
 	x,
-	y + 7,
+	y + 7 * menuscale,
 	patch->width * menuscale,
 	patch->height * menuscale,
 	0, patch);

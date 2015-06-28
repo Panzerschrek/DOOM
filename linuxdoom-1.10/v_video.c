@@ -282,8 +282,8 @@ V_DrawPatchScaled
     fixed_t	u_step;
     fixed_t	v_step;
 
-    y -= SHORT(patch->topoffset);
-    x -= SHORT(patch->leftoffset);
+    y -= SHORT(patch->topoffset) * width / patch->width;
+    x -= SHORT(patch->leftoffset) * height / patch->height;
 #ifdef RANGECHECK
     if (x<0
 	||x+SHORT(width) >SCREENWIDTH
