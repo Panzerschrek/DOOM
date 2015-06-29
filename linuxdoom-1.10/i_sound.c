@@ -16,8 +16,53 @@
 #define ID_SAMPLE_RATE 11025
 #define MAX_VOLUME_LOG2 8
 
+#define MUS_MAX_CHANNELS 16
+#define MUS_TICKS_PER_SEC 70
+#define MUS_MAX_NOTES 128
+
 typedef short sample_t;
 typedef int fixed8_t;
+
+typedef struct
+{
+    char	ID[4];          // identifier "MUS" 0x1A
+    short	scoreLen;
+    short	scoreStart;
+    short	channels;	// count of primary channels
+    short	sec_channels;	// count of secondary channels
+    short	instrCnt;
+    short	dummy;
+    // variable-length part starts here
+    short	instruments[];
+} mus_header_t;
+
+typedef struct mus_note_s
+{
+    int			position; // position in samples
+    byte		volume;
+    byte		instrument;
+
+    struct mus_note_s*	next;
+    struct mus_note_s*	prev;
+} mus_note_t;
+
+typedef struct
+{
+    mus_note_t		notes[MUS_MAX_NOTES];
+    byte		current_instrument;
+    byte		current_volume;
+
+    struct
+    {
+    } next_event_t;
+} mus_channel_t;
+
+
+struct
+{
+    mus_channel_t	channels[MUS_MAX_CHANNELS];
+    int			position; // in samples
+} current_music;
 
 typedef struct
 {
@@ -31,6 +76,7 @@ typedef struct
 } snd_channel_t;
 
 static int snd_id = 1; // 0 is reserved
+static int mus_id = 1; // 0 is reserved
 
 snd_channel_t channels[MAX_CHANNELS];
 
@@ -290,7 +336,94 @@ void I_PlaySong
 
 int I_RegisterSong(void *data)
 {
-	return 1;
+    int		i;
+
+    mus_header_t* mus = (mus_header_t*)data;
+
+    byte* d = ((byte*)data) + mus->scoreStart;
+    byte* end = d + mus->scoreLen;
+
+    for( i = 0; i < mus->instrCnt; i++ )
+    {
+    	printf( "instrument: %d\n", mus->instruments[i] );
+    }
+    int notes[256];
+    memset( notes, 0, sizeof(notes) );
+    while(d < end)
+    {
+	byte event = *d;
+	d++;
+	int event_type = (event & 0x70) >> 4;
+	int channel = event & 0x0F;
+
+	switch(event_type)
+	{
+	case 0: // release note
+	{
+	    int note_number = *d & 127;
+	    printf( "r: %d ch: %d\n", note_number, channel );
+	    notes[ note_number ] -- ;
+	    d++;
+	}
+	    break;
+	case 1: // play note
+	{
+	    int note_number = *d & 127;
+	    printf( "p: %d ch: %d\n", note_number, channel );
+	    int is_volume = *d & 128;
+	    notes[ note_number ] ++ ;
+	    d++;
+	    if(is_volume) d++; // volume
+	}
+	    break;
+	case 2: // pitch wheel
+	    printf( "pitch wheel\n" );
+	    d++; // pitch wheel value
+	    break;
+	case 3: // system event
+	    printf( "system event\n" );
+	    d++; // system event number
+	    break;
+	case 4: // change controller
+	{
+	    int controller_number = *d;
+	    d++;
+	    int controller_value = *d;
+	    d++;
+	    if (controller_number == 0 ) printf( "select instrument: %d ch: %d\n", controller_value, channel );
+	    else printf( "change controller. cont: %d value: %d\n", controller_number, controller_value );
+	}
+	    break;
+	case 5: // unknown
+	    printf( "unknwn5 ");
+	    break;
+	case 6: // score end
+	    printf( "mus end. delta: %d\n", end - d );
+	    d++;
+	    break;
+	case 7: // unknown
+	    printf( "unknwn7 ");
+	    break;
+	default:
+	    break;
+	};
+
+	int time = 0;
+	if (event & 128)
+	{
+	    byte time_byte;
+	    do
+	    {
+		time_byte = *d;
+		d++;
+		time = time * 128 + (time_byte&127);
+	    }while( time_byte & 128);
+	    printf( "t: %d ", time );
+        }
+    } // while not end of mus
+
+    for( i = 0; i < 256; i++ ) printf( "%d ", notes[i] );
+    return mus_id++;
 }
 
 void I_UnRegisterSong(int handle)
