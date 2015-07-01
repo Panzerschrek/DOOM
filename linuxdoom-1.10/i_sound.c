@@ -19,7 +19,7 @@
 #define MAX_VOLUME_LOG2 8
 
 #define MUS_MAX_CHANNELS 16
-#define MUS_TICKS_PER_SEC 70
+#define MUS_TICKS_PER_SEC 140
 #define MUS_MAX_NOTES 128
 
 
@@ -43,8 +43,9 @@ typedef struct
 
 typedef struct mus_note_s
 {
+    int 		is_active;
     int			position; // position in samples
-    byte		volume;
+    byte		volume; // in range [0; 127]
     byte		instrument;
 
     struct mus_note_s*	next;
@@ -56,7 +57,7 @@ typedef struct
     mus_note_t		notes[MUS_MAX_NOTES];
     mus_note_t*		first_playing_note;
     byte		current_instrument;
-    byte		current_volume;
+    byte		current_volume; // in range [0; 127]
 
 } mus_channel_t;
 
@@ -64,6 +65,7 @@ typedef struct
 struct
 {
     mus_channel_t	channels[MUS_MAX_CHANNELS];
+    byte		master_volume;  // in range [0; 127]
 
      // in samples
     int			position;
@@ -121,6 +123,8 @@ void StartNote( mus_channel_t* channel, int n, int volume )
 {
     mus_note_t* note = &channel->notes[n];
 
+    //if (note->is_active) return;
+
     mus_note_t* first_note_in_list = channel->first_playing_note;
 
     if (first_note_in_list) first_note_in_list->prev = note;
@@ -130,6 +134,8 @@ void StartNote( mus_channel_t* channel, int n, int volume )
     note->prev = NULL;
 
     note->volume = volume;
+    note->position = 0;
+    note->is_active = 1;
 }
 
 void StopNote( mus_channel_t* channel, int n )
@@ -138,15 +144,22 @@ void StopNote( mus_channel_t* channel, int n )
     mus_note_t* prev = note->prev;
     mus_note_t* next = note->next;
 
+    //if (!note->is_active) return;
+
     if (note == channel->first_playing_note) channel->first_playing_note = note->next;
 
     if( prev ) prev->next = next;
     if( next ) next->prev = prev;
+
+    note->is_active = 0;
 }
 
-void I_MixMusic(sample_t* data, int len)
+void I_MixMusic(sample_t* data, int len )
 {
     int i = 0;
+
+    if (!current_music.music_data) return;
+
     do
     {
     	for( ; current_music.position < current_music.next_event_position && i < len; i++, current_music.position++ )
@@ -154,15 +167,31 @@ void I_MixMusic(sample_t* data, int len)
 	    int ch;
 	    for( ch = 0; ch < MUS_MAX_CHANNELS; ch++ )
 	    {
-		mus_note_t* note = current_music.channels[ch].first_playing_note;
+		/*mus_note_t* note = current_music.channels[ch].first_playing_note;
 		while( note )
 		{
 		    float freq = notes_freq[ note - current_music.channels[ch].notes ];
-		    int val = (int)( ((float)note->volume) * sin( freq * 2.0f * 3.1415926535f ) * 64.0f );
+		    int val = (int)( ((float)note->volume) * sin( ((float)note->position) * freq * 2.0f * 3.1415926535f ) * 128.0f );
 		    sdl_audio.mixbuffer[i*2] +=  val;
 		    sdl_audio.mixbuffer[i*2+1] +=  val;
+		    note->position++;
 		    note = note->next;
+		}*/
+		mus_note_t* note = current_music.channels[ch].notes;
+		mus_note_t* note_end = note + 128;
+		int val = 0;
+		for( ; note < note_end; note++ )
+		{
+		    if (!note->is_active) continue;
+		    float freq = notes_freq[ note - current_music.channels[ch].notes ];
+		    val += (int)( ((float)note->volume) * sin( ((float)note->position) * freq * (2.0f * 3.1415926535f) / ((float)sdl_audio.format.freq) ) * ((float)current_music.master_volume/2) );
+		    note->position++;
+		    //note = note->next;
 		}
+		if( val > 32767 ) val = 32767;
+		else if ( val < -32768 ) val = -32768;
+		data[i*2]   += val;
+		data[i*2+1] += val;
 	    }
 	}
 
@@ -173,7 +202,7 @@ void I_MixMusic(sample_t* data, int len)
 	    mus_channel_t* channel = & current_music.channels[ event & 0x0F ];
 	    current_music.mus_position++;
 
-	    switch (event)
+	    switch (event_type)
 	    {
 	    case 0: // release note
 	    {
@@ -193,6 +222,7 @@ void I_MixMusic(sample_t* data, int len)
 		{
 		    volume = *current_music.mus_position;
 		    current_music.mus_position++;
+		    channel->current_volume = volume;
 		}
 		else volume = channel->current_volume;
 		StartNote( channel, note_number, volume );
@@ -214,7 +244,7 @@ void I_MixMusic(sample_t* data, int len)
 		    int controller_value = *current_music.mus_position;
 		    current_music.mus_position++;
 		    if (controller_number == 3 ) // set volume. controller_value is volume
-		    {}
+			current_music.master_volume = controller_value;
 		}
 		break;
 
@@ -222,7 +252,8 @@ void I_MixMusic(sample_t* data, int len)
 		break;
 
 	    case 6: // score end
-		current_music.mus_position++;
+		current_music.music_data = NULL;
+		goto stop_music;
 		break;
 
 	    case 7: // unknown
@@ -252,6 +283,8 @@ void I_MixMusic(sample_t* data, int len)
 	} // if new event
 
     } while( i < len );
+
+    stop_music:;
 }
 
 void SDLCALL AudioCallback (void *userdata, Uint8 * stream, int len)
@@ -296,6 +329,9 @@ void SDLCALL AudioCallback (void *userdata, Uint8 * stream, int len)
 
 	data[i] = k;
     }
+
+
+    I_MixMusic( data, len_in_samples );
 
     SDL_UnlockMutex(sdl_audio.mutex);
 }
@@ -356,9 +392,10 @@ void I_InitSound()
 
     for( i = 0; i < MAX_CHANNELS; i++ ) channels[i].id = 0;
 
-    SDL_PauseAudioDevice(sdl_audio.device_id , 0);
-
     I_InitNoteTable();
+    current_music.music_data = NULL;
+
+    SDL_PauseAudioDevice(sdl_audio.device_id , 0);
 }
 
 void I_UpdateSound()
@@ -588,7 +625,20 @@ int I_RegisterSong(void *data)
     } // while not end of mus
 
     for( i = 0; i < 256; i++ ) printf( "%d ", notes[i] );
-    return mus_id++;
+
+    current_music.music_data = current_music.mus_position = ((byte*)data) + mus->scoreStart;;
+    current_music.position = 0;
+    current_music.next_event_position = 0;
+    current_music.master_volume = 0;
+    current_music.current_event_tick = 0;
+
+    for( i = 0; i < MUS_MAX_CHANNELS; i++ )
+    {
+	current_music.channels[i].first_playing_note = NULL;
+	current_music.channels[i].current_volume = 0;
+    }
+
+     return mus_id++;
 }
 
 void I_UnRegisterSong(int handle)
