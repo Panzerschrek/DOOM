@@ -371,7 +371,7 @@ void I_InitSound()
     const char*		device_name;
     int			i;
     int			num_devices;
-
+LoadSoundFont();
     SDL_InitSubSystem( SDL_INIT_AUDIO );
 
 

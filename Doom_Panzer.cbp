@@ -259,6 +259,9 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="linuxdoom-1.10\r_things.h" />
+		<Unit filename="linuxdoom-1.10\s_sf2.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="linuxdoom-1.10\s_sound.c">
 			<Option compilerVar="CC" />
 		</Unit>
