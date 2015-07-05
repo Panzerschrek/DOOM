@@ -25,7 +25,6 @@
 				<Option object_output="obj\Release\" />
 				<Option type="1" />
 				<Option compiler="mingw_qt_53" />
-				<Option parameters="-width 1024 -height 768" />
 				<Compiler>
 					<Add option="-O2" />
 				</Compiler>

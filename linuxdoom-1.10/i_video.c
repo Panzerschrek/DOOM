@@ -42,12 +42,38 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 // m_misc.c
 extern int	usemouse;
 
+// settings variables
+int		v_fullscreen;
+int		v_display;
+
+enum
+{
+    COMPONENT_R,
+    COMPONENT_G,
+    COMPONENT_B,
+};
+
+typedef union
+{
+    byte		components[4];
+    unsigned int	pixel;
+} four_component_pixel_t;
+
 struct
 {
     SDL_Window *window;
     SDL_Event last_event;
     SDL_Surface* window_surface;
-    byte palette[1024];
+    four_component_pixel_t palette[256];
+
+    struct
+    {
+	int component_index[3];
+    } pixel_format;
+
+    int		current_display;
+    int		current_display_mode;
+    boolean	fullscreen;
 
     boolean is_focus;
     int mouse_buttons_state_bits;
@@ -250,12 +276,17 @@ void I_FinishUpdate (void)
 
     int i;
     int* p;
+    int must_lock;
+
+    must_lock = SDL_MUSTLOCK(sdl.window_surface);
+
+    if (must_lock) SDL_LockSurface( sdl.window_surface );
 
     p = sdl.window_surface->pixels;
     for( i = 0; i < SCREENWIDTH * SCREENHEIGHT; i++ )
-    {
-	p[i] = ((int*)sdl.palette)[ screens[0][i] ];
-    }
+	p[i] = sdl.palette[ screens[0][i] ].pixel;
+
+    if (must_lock) SDL_UnlockSurface( sdl.window_surface );
     SDL_UpdateWindowSurface( sdl.window );
 }
 
@@ -273,29 +304,98 @@ void I_ReadScreen (byte* scr)
 //
 void I_SetPalette (byte* palette)
 {
+    // Input format - RGB
     int i;
     for( i = 0; i < 256; i++ )
     {
-	sdl.palette[i*4  ] = palette[i*3+2];
-	sdl.palette[i*4+1] = palette[i*3+1];
-	sdl.palette[i*4+2] = palette[i*3  ];
-	sdl.palette[i*4+3] = 255;
+	sdl.palette[i].components[ sdl.pixel_format.component_index[COMPONENT_R] ] = palette[i*3];
+	sdl.palette[i].components[ sdl.pixel_format.component_index[COMPONENT_G] ] = palette[i*3+1];
+	sdl.palette[i].components[ sdl.pixel_format.component_index[COMPONENT_B] ] = palette[i*3+2];
     }
 }
 
 void I_InitGraphics(void)
 {
+    int			i;
+    SDL_DisplayMode	display_mode;
+
     if ( SDL_InitSubSystem(SDL_INIT_VIDEO) < 0 )
 	I_Error("Could not initialize SDL");
 
+
+    sdl.fullscreen = false;
+    if (v_fullscreen)
+    {
+    	int	display_count;
+	int	mode_count;
+
+	display_count = SDL_GetNumVideoDisplays();
+
+	if (v_display >= display_count) v_display = 0; // reset display, if we lost previous
+
+	mode_count = SDL_GetNumDisplayModes(v_display);
+
+	for ( i = 0; i < mode_count; i++ )
+	{
+	    SDL_DisplayMode mode;
+	    SDL_GetDisplayMode( v_display, i, &mode );
+	    if (mode.w == SCREENWIDTH && mode.h == SCREENHEIGHT && SDL_BYTESPERPIXEL(mode.format) == 4)
+	    {
+		sdl.fullscreen = true; // found necessary mode
+		display_mode = mode;
+	    }
+	}
+	if (!sdl.fullscreen ) v_fullscreen = 0; // not found necessary mode, reset fullscreen setting
+    }
+
     sdl.window = SDL_CreateWindow(
-	"Doom",
+	"PanzerDoom",
 	SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-	SCREENWIDTH, SCREENHEIGHT, SDL_WINDOW_SHOWN );
+	SCREENWIDTH, SCREENHEIGHT,
+	    SDL_WINDOW_SHOWN | (sdl.fullscreen ? SDL_WINDOW_FULLSCREEN : 0) );
     if (!sdl.window)
-	I_Error("Could not create window");
+	I_Error("I_InitGraphics: Could not create window");
+
+    if (sdl.fullscreen)
+    {
+    	int result = SDL_SetWindowDisplayMode( sdl.window, &display_mode );
+	    printf( "I_InitGraphics: %s %dx%dx%d %dHz\n",
+		result ? "warning, could not set display mode" : "set display mode",
+		display_mode.w, display_mode.h,
+		SDL_BITSPERPIXEL(display_mode.format), display_mode.refresh_rate);
+
+	// reset fullscreen settings, if we have problems
+	sdl.fullscreen = !result;
+	v_fullscreen = !result;
+    }
 
     sdl.window_surface = SDL_GetWindowSurface( sdl.window );
+
+    SDL_PixelFormat* pixel_format = sdl.window_surface->format;
+
+    if (pixel_format->BytesPerPixel != 4)
+	I_Error("I_InitGraphics: invalid pixel format. Requred 4 bytes per pixel, actual - %d\n", pixel_format->BytesPerPixel);
+
+	 if (pixel_format->Rmask ==       0xFF) sdl.pixel_format.component_index[ COMPONENT_R ] = 0;
+    else if (pixel_format->Rmask ==     0xFF00) sdl.pixel_format.component_index[ COMPONENT_R ] = 1;
+    else if (pixel_format->Rmask ==   0xFF0000) sdl.pixel_format.component_index[ COMPONENT_R ] = 2;
+    else if (pixel_format->Rmask == 0xFF000000) sdl.pixel_format.component_index[ COMPONENT_R ] = 3;
+    else sdl.pixel_format.component_index[ COMPONENT_R ] = -1;
+	 if (pixel_format->Gmask ==       0xFF) sdl.pixel_format.component_index[ COMPONENT_G ] = 0;
+    else if (pixel_format->Gmask ==     0xFF00) sdl.pixel_format.component_index[ COMPONENT_G ] = 1;
+    else if (pixel_format->Gmask ==   0xFF0000) sdl.pixel_format.component_index[ COMPONENT_G ] = 2;
+    else if (pixel_format->Gmask == 0xFF000000) sdl.pixel_format.component_index[ COMPONENT_G ] = 3;
+    else sdl.pixel_format.component_index[ COMPONENT_G ] = -1;
+	 if (pixel_format->Bmask ==       0xFF) sdl.pixel_format.component_index[ COMPONENT_B ] = 0;
+    else if (pixel_format->Bmask ==     0xFF00) sdl.pixel_format.component_index[ COMPONENT_B ] = 1;
+    else if (pixel_format->Bmask ==   0xFF0000) sdl.pixel_format.component_index[ COMPONENT_B ] = 2;
+    else if (pixel_format->Bmask == 0xFF000000) sdl.pixel_format.component_index[ COMPONENT_B ] = 3;
+    else sdl.pixel_format.component_index[ COMPONENT_B ] = -1;
+
+   if ( sdl.pixel_format.component_index[ COMPONENT_R ] == -1 ||
+	sdl.pixel_format.component_index[ COMPONENT_G ] == -1 ||
+	sdl.pixel_format.component_index[ COMPONENT_B ] == -1 )
+	I_Error("I_InitGraphics: invalid pixel format. Unknown color component order");
 
     sdl.is_focus = true;
     I_GrabMouse();

@@ -785,21 +785,6 @@ void D_DoomMain (void)
     setbuf (stdout, NULL);
     modifiedgame = false;
 
-    p = M_CheckParm( "-width" );
-    if(p && p <= myargc - 1 )
-    {
-	SCREENWIDTH = atoi( myargv[p+1] );
-	if( SCREENWIDTH < ID_SCREENWIDTH ) SCREENWIDTH = ID_SCREENWIDTH;
-	else if( SCREENWIDTH > MAX_SCREENWIDTH ) SCREENWIDTH = MAX_SCREENWIDTH;
-    }
-    p = M_CheckParm( "-height" );
-    if(p && p <= myargc - 1 )
-    {
-	SCREENHEIGHT = atoi( myargv[p+1] );
-	if( SCREENHEIGHT < ID_SCREENHEIGHT ) SCREENHEIGHT = ID_SCREENHEIGHT;
-	else if( SCREENHEIGHT > MAX_SCREENHEIGHT ) SCREENHEIGHT = MAX_SCREENHEIGHT;
-    }
-
     nomonsters = M_CheckParm ("-nomonsters");
     respawnparm = M_CheckParm ("-respawn");
     fastparm = M_CheckParm ("-fast");
@@ -997,12 +982,12 @@ void D_DoomMain (void)
 	autostart = true;
     }
 
+    printf ("M_LoadDefaults: Load system defaults.\n");
+    M_LoadDefaults ();              // load before initing other systems
+
     // init subsystems
     printf ("V_Init: allocate screens.\n");
     V_Init ();
-
-    printf ("M_LoadDefaults: Load system defaults.\n");
-    M_LoadDefaults ();              // load before initing other systems
 
     printf ("Z_Init: Init zone memory allocation daemon. \n");
     Z_Init ();

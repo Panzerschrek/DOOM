@@ -624,7 +624,12 @@ void V_Init (void)
     int		i;
     byte*	base;
 
-    // stick these in low dos memory on PCs
+    // correct screen size, if it incorrect
+    if( SCREENWIDTH < ID_SCREENWIDTH ) SCREENWIDTH = ID_SCREENWIDTH;
+    else if( SCREENWIDTH > MAX_SCREENWIDTH ) SCREENWIDTH = MAX_SCREENWIDTH;
+
+    if( SCREENHEIGHT < ID_SCREENHEIGHT ) SCREENHEIGHT = ID_SCREENHEIGHT;
+    else if( SCREENHEIGHT > MAX_SCREENHEIGHT ) SCREENHEIGHT = MAX_SCREENHEIGHT;
 
     base = I_AllocLow (SCREENWIDTH*SCREENHEIGHT*4);
 

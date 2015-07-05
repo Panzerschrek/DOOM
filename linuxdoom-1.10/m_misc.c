@@ -204,6 +204,9 @@ extern	int	numChannels;
 
 extern char*	chat_macros[];
 
+extern int	v_fullscreen;
+extern int	v_display;
+
 
 
 typedef struct
@@ -258,6 +261,11 @@ default_t	defaults[] =
 
 
     {"usegamma",&usegamma, 0},
+    // PANZER
+    { "fullscreen", &v_fullscreen, 0 },
+    { "display", &v_display, 0 },
+    { "screenwidth", &SCREENWIDTH, 0 },
+    { "screenheight", &SCREENHEIGHT, 0 },
 
     {"chatmacro0", (int *) &chat_macros[0], (int) HUSTR_CHATMACRO0 },
     {"chatmacro1", (int *) &chat_macros[1], (int) HUSTR_CHATMACRO1 },
@@ -269,7 +277,6 @@ default_t	defaults[] =
     {"chatmacro7", (int *) &chat_macros[7], (int) HUSTR_CHATMACRO7 },
     {"chatmacro8", (int *) &chat_macros[8], (int) HUSTR_CHATMACRO8 },
     {"chatmacro9", (int *) &chat_macros[9], (int) HUSTR_CHATMACRO9 }
-
 };
 
 int	numdefaults;
