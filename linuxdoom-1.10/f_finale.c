@@ -265,9 +265,8 @@ extern	patch_t *hu_font[HU_FONTSIZE];
 void F_TextWrite (void)
 {
     byte*	src;
-    byte*	dest;
 
-    int		x,y,w;
+    int		w;
     int		count;
     char*	ch;
     int		c;
@@ -276,22 +275,7 @@ void F_TextWrite (void)
 
     // erase the entire screen to a tiled background
     src = W_CacheLumpName ( finaleflat , PU_CACHE);
-    dest = screens[0];
-
-    for (y=0 ; y<SCREENHEIGHT ; y++)
-    {
-	for (x=0 ; x<SCREENWIDTH/64 ; x++)
-	{
-	    memcpy (dest, src+((y&63)<<6), 64);
-	    dest += 64;
-	}
-	if (SCREENWIDTH&63)
-	{
-	    memcpy (dest, src+((y&63)<<6), SCREENWIDTH&63);
-	    dest += (SCREENWIDTH&63);
-	}
-    }
-
+    V_FillRectByTexture(0, 0, SCREENWIDTH, SCREENHEIGHT, 64, 64, menuscale, src);
     V_MarkRect (0, 0, SCREENWIDTH, SCREENHEIGHT);
 
     // draw some of the text onto the screen
@@ -548,12 +532,12 @@ void F_CastPrint (char* text)
 	    continue;
 	}
 
-	w = SHORT (hu_font[c]->width);
+	w = SHORT (hu_font[c]->width) * menuscale;
 	width += w;
     }
 
     // draw it
-    cx = 160-width/2;
+    cx = SCREENWIDTH / 2 -width/2;
     ch = text;
     while (ch)
     {
@@ -567,8 +551,11 @@ void F_CastPrint (char* text)
 	    continue;
 	}
 
-	w = SHORT (hu_font[c]->width);
-	V_DrawPatch(cx, 180, 0, hu_font[c]);
+	w = SHORT (hu_font[c]->width) * menuscale;
+	V_DrawPatchScaled(
+	    cx, SCREENHEIGHT - 20 * menuscale,
+	    w, hu_font[c]->height * menuscale,
+	    0, hu_font[c] );
 	cx+=w;
     }
 
@@ -589,7 +576,7 @@ void F_CastDrawer (void)
     patch_t*		patch;
 
     // erase the entire screen to a background
-    V_DrawPatch (0,0,0, W_CacheLumpName ("BOSSBACK", PU_CACHE));
+    V_DrawPatchScaled(0,0, SCREENWIDTH, SCREENHEIGHT, 0, W_CacheLumpName ("BOSSBACK", PU_CACHE));
 
     F_CastPrint (castorder[castnum].name);
 
@@ -600,45 +587,10 @@ void F_CastDrawer (void)
     flip = (boolean)sprframe->flip[0];
 
     patch = W_CacheLumpNum (lump+firstspritelump, PU_CACHE);
-    if (flip)
-	V_DrawPatchFlipped (160,170,0,patch);
-    else
-	V_DrawPatch (160,170,0,patch);
-}
-
-
-//
-// F_DrawPatchCol
-//
-void
-F_DrawPatchCol
-( int		x,
-  patch_t*	patch,
-  int		col )
-{
-    column_t*	column;
-    byte*	source;
-    byte*	dest;
-    byte*	desttop;
-    int		count;
-
-    column = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
-    desttop = screens[0]+x;
-
-    // step through the posts in a column
-    while (column->topdelta != 0xff )
-    {
-	source = (byte *)column + 3;
-	dest = desttop + column->topdelta*SCREENWIDTH;
-	count = column->length;
-
-	while (count--)
-	{
-	    *dest = *source++;
-	    dest += SCREENWIDTH;
-	}
-	column = (column_t *)(  (byte *)column + column->length + 4 );
-    }
+    V_DrawPatchScaled(
+	SCREENWIDTH / 2, SCREENHEIGHT - 30 * menuscale,
+	patch->width * menuscale, patch->height * menuscale,
+	0, patch );
 }
 
 
@@ -654,6 +606,7 @@ void F_BunnyScroll (void)
     char	name[10];
     int		stage;
     static int	laststage;
+    patch_t*	patch;
 
     p1 = W_CacheLumpName ("PFUB2", PU_LEVEL);
     p2 = W_CacheLumpName ("PFUB1", PU_LEVEL);
@@ -668,18 +621,22 @@ void F_BunnyScroll (void)
 
     for ( x=0 ; x<SCREENWIDTH ; x++)
     {
-	if (x+scrolled < 320)
-	    F_DrawPatchCol (x, p1, x+scrolled);
+	int col_x = x * ID_SCREENWIDTH / SCREENWIDTH;
+	if (col_x+scrolled < 320)
+	    V_DrawPatchCol (x, SCREENHEIGHT, p1, col_x+scrolled);
 	else
-	    F_DrawPatchCol (x, p2, x+scrolled - 320);
+	    V_DrawPatchCol (x, SCREENHEIGHT, p2, col_x+scrolled - 320);
     }
 
     if (finalecount < 1130)
 	return;
     if (finalecount < 1180)
     {
-	V_DrawPatch ((SCREENWIDTH-13*8)/2,
-		     (SCREENHEIGHT-8*8)/2,0, W_CacheLumpName ("END0",PU_CACHE));
+	patch = W_CacheLumpName ("END0",PU_CACHE);
+	V_DrawPatchScaled (
+	    (SCREENWIDTH-13*8 * menuscale)/2, (SCREENHEIGHT-8*8 * menuscale)/2,
+	    patch->width * menuscale, patch->height * menuscale,
+	    0, patch);
 	laststage = 0;
 	return;
     }
@@ -694,7 +651,11 @@ void F_BunnyScroll (void)
     }
 
     sprintf (name,"END%i",stage);
-    V_DrawPatch ((SCREENWIDTH-13*8)/2, (SCREENHEIGHT-8*8)/2,0, W_CacheLumpName (name,PU_CACHE));
+    patch = W_CacheLumpName (name,PU_CACHE);
+    V_DrawPatchScaled(
+	(SCREENWIDTH-13*8*menuscale)/2, (SCREENHEIGHT-8*8*menuscale)/2,
+	patch->width * menuscale, patch->height * menuscale,
+	0, patch );
 }
 
 
@@ -717,21 +678,21 @@ void F_Drawer (void)
 	{
 	  case 1:
 	    if ( gamemode == retail )
-	      V_DrawPatch (0,0,0,
+	      V_DrawPatchScaled (0,0, SCREENWIDTH, SCREENHEIGHT, 0,
 			 W_CacheLumpName("CREDIT",PU_CACHE));
 	    else
-	      V_DrawPatch (0,0,0,
+	      V_DrawPatchScaled (0,0, SCREENWIDTH, SCREENHEIGHT, 0,
 			 W_CacheLumpName("HELP2",PU_CACHE));
 	    break;
 	  case 2:
-	    V_DrawPatch(0,0,0,
+	      V_DrawPatchScaled (0,0, SCREENWIDTH, SCREENHEIGHT, 0,
 			W_CacheLumpName("VICTORY2",PU_CACHE));
 	    break;
 	  case 3:
 	    F_BunnyScroll ();
 	    break;
 	  case 4:
-	    V_DrawPatch (0,0,0,
+	    V_DrawPatchScaled (0,0, SCREENWIDTH, SCREENHEIGHT, 0,
 			 W_CacheLumpName("ENDPIC",PU_CACHE));
 	    break;
 	}

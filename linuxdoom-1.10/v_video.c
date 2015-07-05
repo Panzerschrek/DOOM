@@ -136,6 +136,37 @@ byte gammatable[5][256] =
 
 int	usegamma;
 
+
+void
+V_FillRectByTexture
+( int		x,
+  int		y,
+  int		width,
+  int		height,
+  int		tex_width,
+  int		tex_height,
+  int		tex_scale,
+  byte*		tex_data )
+{
+    int		x0 = x;
+    int		x_end = x + width;
+    int		y_end = y + height;
+    int		tex_width1 = tex_width - 1;
+    int		tex_height1 = tex_height - 1;
+    fixed_t	step = FRACUNIT / tex_scale;
+    fixed_t	u;
+    byte*	dest;
+    byte*	src;
+
+    for ( ; y < y_end; y++ )
+    {
+	dest = screens[0] + y * SCREENWIDTH + x0;
+	src = tex_data + (((y*step)>>FRACBITS) & tex_height1) * tex_width;
+	for( x = x0, u = x0 * step; x < x_end; x++, dest++, u+= step )
+	    *dest = src[ (u>>FRACBITS) & tex_width1 ];
+    }
+}
+
 //
 // V_MarkRect
 //
@@ -259,6 +290,45 @@ V_DrawPatch
 	    column = (column_t *)(  (byte *)column + column->length
 				    + 4 );
 	}
+    }
+}
+
+
+//
+// V_DrawPatchCol
+//
+void
+V_DrawPatchCol
+( int		x,
+  int		height,
+  patch_t*	patch,
+  int		col )
+{
+    column_t*	column;
+    byte*	source;
+    byte*	dest;
+    byte*	desttop;
+    int		v;
+    int		v_step;
+
+    column = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
+    desttop = screens[0]+x;
+
+    // step through the posts in a column
+    v_step = (patch->height <<FRACBITS) / height;
+    while (column->topdelta != 0xff )
+    {
+	source = (byte *)column + 3;
+	dest = desttop + (column->topdelta * height / patch->height) * SCREENWIDTH;
+	v = 0; //HACK - not worked correctly if scale of image not integer
+
+	while ((v >> FRACBITS) < column->length)
+	{
+		*dest = source[ v >> FRACBITS ];
+		dest += SCREENWIDTH;
+		v += v_step;
+	}
+	column = (column_t *)(  (byte *)column + column->length + 4 );
     }
 }
 

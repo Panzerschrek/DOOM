@@ -681,7 +681,6 @@ WI_drawNum
     {
     	patch_t* patch = num[ n % 10 ];
 	x -= fontwidth * menuscale;
-	//V_DrawPatch(x, y, FB, num[ n % 10 ]);
 	V_DrawPatchScaled( x, y, patch->width * menuscale, patch->height * menuscale, FB, patch );
 	n /= 10;
     }
@@ -704,7 +703,6 @@ WI_drawPercent
 	return;
 
     V_DrawPatchScaled(x, y, percent->width * menuscale, percent->height * menuscale, FB, percent);
-    //V_DrawPatch(x, y, FB, percent);
     WI_drawNum(x, y, p, -1);
 }
 

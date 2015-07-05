@@ -125,6 +125,9 @@ static const char rcsid[] = "$Id: am_map.c,v 1.4 1997/02/03 21:24:33 b1 Exp $";
 // the following is crap
 #define LINE_NEVERSEE ML_DONTDRAW
 
+// m_menu.c
+extern int menuscale;
+
 typedef struct
 {
     int x, y;
@@ -1310,12 +1313,12 @@ void AM_drawMarks(void)
 	{
 	    //      w = SHORT(marknums[i]->width);
 	    //      h = SHORT(marknums[i]->height);
-	    w = 5; // because something's wrong with the wad, i guess
-	    h = 6; // because something's wrong with the wad, i guess
+	    w = 5 * menuscale; // because something's wrong with the wad, i guess
+	    h = 6 * menuscale; // because something's wrong with the wad, i guess
 	    fx = CXMTOF(markpoints[i].x);
 	    fy = CYMTOF(markpoints[i].y);
 	    if (fx >= f_x && fx <= f_w - w && fy >= f_y && fy <= f_h - h)
-		V_DrawPatch(fx, fy, FB, marknums[i]);
+		V_DrawPatchScaled( fx, fy, w, h, 0, marknums[i] );
 	}
     }
 

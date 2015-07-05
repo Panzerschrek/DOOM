@@ -728,11 +728,6 @@ R_InitBuffer
 void R_FillBackScreen (void)
 {
     byte*	texture;
-    byte*	src;
-    byte*	dest;
-    int		x;
-    int		y;
-    int		y2;
 
     // DOOM border patch.
     char	name1[] = "FLOOR7_2";
@@ -751,65 +746,25 @@ void R_FillBackScreen (void)
 
     texture = W_CacheLumpName (name, PU_CACHE);
 
-    y2 = viewwindowy + viewheight;
-    for( y = 0; y < viewwindowy; y++ )
-    {
-	dest = screens[0] + SCREENWIDTH * y;
-	src = texture + (y%63) * 64;
-	for( x = 0; x< SCREENWIDTH; x++, dest++ ) *dest = src[x&63];
-    }
-    for( y = viewwindowy; y < y2; y++ )
-    {
-	dest = screens[0] + SCREENWIDTH * y;
-	src = texture + (y%63) * 64;
-	for( x = 0; x < viewwindowx; x++ ) dest[x] = src[x&63];
-	for( x = viewwindowx + viewwidth; x < SCREENWIDTH; x++ ) dest[x] = src[x&63];
-    }
-    for( y = y2; y < SCREENHEIGHT; y++ )
-    {
-	dest = screens[0] + SCREENWIDTH * y;
-	src = texture + (y%63) * 64;
-	for( x = 0; x< SCREENWIDTH; x++, dest++ ) *dest = src[x&63];
-    }
+    V_FillRectByTexture(
+	0, 0,
+	SCREENWIDTH, viewwindowy,
+	64, 64, menuscale, texture );
 
-    /*patch = W_CacheLumpName ("brdr_t",PU_CACHE);
+    V_FillRectByTexture(
+	0, viewwindowy,
+	viewwindowx, viewheight,
+	64, 64, menuscale, texture );
 
-    for (x=0 ; x<scaledviewwidth ; x+=8)
-	V_DrawPatch (viewwindowx+x,viewwindowy-8,1,patch);
-    patch = W_CacheLumpName ("brdr_b",PU_CACHE);
+    V_FillRectByTexture(
+	viewwindowx + viewwidth, viewwindowy,
+	SCREENWIDTH - (viewwindowx + viewwidth), viewheight,
+	64, 64, menuscale, texture );
 
-    for (x=0 ; x<scaledviewwidth ; x+=8)
-	V_DrawPatch (viewwindowx+x,viewwindowy+viewheight,1,patch);
-    patch = W_CacheLumpName ("brdr_l",PU_CACHE);
-
-    for (y=0 ; y<viewheight ; y+=8)
-	V_DrawPatch (viewwindowx-8,viewwindowy+y,1,patch);
-    patch = W_CacheLumpName ("brdr_r",PU_CACHE);
-
-    for (y=0 ; y<viewheight ; y+=8)
-	V_DrawPatch (viewwindowx+scaledviewwidth,viewwindowy+y,1,patch);
-
-
-    // Draw beveled edge.
-    V_DrawPatch (viewwindowx-8,
-		 viewwindowy-8,
-		 1,
-		 W_CacheLumpName ("brdr_tl",PU_CACHE));
-
-    V_DrawPatch (viewwindowx+scaledviewwidth,
-		 viewwindowy-8,
-		 1,
-		 W_CacheLumpName ("brdr_tr",PU_CACHE));
-
-    V_DrawPatch (viewwindowx-8,
-		 viewwindowy+viewheight,
-		 1,
-		 W_CacheLumpName ("brdr_bl",PU_CACHE));
-
-    V_DrawPatch (viewwindowx+scaledviewwidth,
-		 viewwindowy+viewheight,
-		 1,
-		 W_CacheLumpName ("brdr_br",PU_CACHE));*/
+    V_FillRectByTexture(
+	0, viewwindowy + viewheight,
+	SCREENWIDTH, SCREENHEIGHT - (viewwindowy + viewheight),
+	64, 64, menuscale, texture);
 }
 
 

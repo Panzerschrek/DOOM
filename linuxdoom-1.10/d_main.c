@@ -72,6 +72,9 @@ static const char rcsid[] = "$Id: d_main.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 
 #include "d_main.h"
 
+// m_menu.c
+extern int menuscale;
+
 
 //PANZER - now, we can different resolutions
 int SCREENWIDTH = ID_SCREENWIDTH * 2;
@@ -281,11 +284,14 @@ void D_Display (void)
     if (paused)
     {
 	if (automapactive)
-	    y = 4;
+	    y = 4 * menuscale;
 	else
-	    y = viewwindowy+4;
-	V_DrawPatchDirect(viewwindowx+(scaledviewwidth-68)/2,
-			  y,0,W_CacheLumpName ("M_PAUSE", PU_CACHE));
+	    y = viewwindowy+4*menuscale;
+	patch_t* patch = W_CacheLumpName ("M_PAUSE", PU_CACHE);
+	V_DrawPatchScaled(
+	    viewwindowx+(scaledviewwidth - 68*menuscale)/2, y,
+	    patch->width * menuscale, patch->height * menuscale,
+	    0, patch );
     }
 
 

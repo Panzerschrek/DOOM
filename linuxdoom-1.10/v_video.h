@@ -76,6 +76,14 @@ V_DrawPatch
   patch_t*	patch);
 
 void
+V_DrawPatchCol
+( int		x,
+  int		height,
+  patch_t*	patch,
+  int		col );
+
+
+void
 V_DrawPatchScaled
 ( int		x,
   int		y,
@@ -119,6 +127,18 @@ V_MarkRect
   int		y,
   int		width,
   int		height );
+
+
+void
+V_FillRectByTexture
+( int		x,
+  int		y,
+  int		width,
+  int		height,
+  int		tex_width,
+  int		tex_height,
+  int		tex_scale,
+  byte*		tex_data );
 
 #endif
 //-----------------------------------------------------------------------------
