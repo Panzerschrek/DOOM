@@ -181,6 +181,30 @@ void D_ProcessEvents (void)
 }
 
 
+void D_CalcFPS()
+{
+    static int prev_tick_time = 0;
+    static int ticks = 0;
+
+    const int ticks_for_scaling = TICRATE;
+
+    int current_time = I_GetTime();
+    if (!prev_tick_time)
+    {
+	HU_SetFPS(0);
+	prev_tick_time = current_time;
+    }
+
+    ticks++;
+    int time_delta = current_time - prev_tick_time;
+    if (time_delta > ticks_for_scaling)
+    {
+	fixed_t fps = time_delta ? ((ticks * TICRATE) << FRACBITS) / time_delta : 0;
+	HU_SetFPS( fps );
+	ticks = 0;
+	prev_tick_time += ticks_for_scaling;
+    }
+}
 
 
 //
@@ -228,6 +252,8 @@ void D_Display (void)
     else
 	wipe = false;
 
+    D_CalcFPS();
+
     if (gamestate == GS_LEVEL && gametic)
 	HU_Erase();
 
@@ -268,7 +294,6 @@ void D_Display (void)
 	else R_FillBackScreen();
 	ST_Drawer (viewheight == SCREENHEIGHT, redrawsbar );
     }
-
 
     if (gamestate == GS_LEVEL && gametic)
 	HU_Drawer ();

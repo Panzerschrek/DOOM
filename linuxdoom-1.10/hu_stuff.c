@@ -105,6 +105,8 @@ static boolean		message_nottobefuckedwith;
 static hu_stext_t	w_message;
 static int		message_counter;
 
+static hu_textline_t	fps_message;
+
 extern int		showMessages;
 extern boolean		automapactive;
 
@@ -446,6 +448,11 @@ void HU_Start(void)
 		       hu_font,
 		       HU_FONTSTART);
 
+    HUlib_initTextLine(&fps_message,
+		    SCREENWIDTH - 16 * menuscale * hu_font[HU_FONTSTART]->width, 0,
+		    hu_font,
+		    HU_FONTSTART);
+
     switch ( gamemode )
     {
       case shareware:
@@ -490,6 +497,7 @@ void HU_Drawer(void)
 {
 
     HUlib_drawSText(&w_message);
+    HUlib_drawTextLine(&fps_message, false);
     HUlib_drawIText(&w_chat);
     if (automapactive)
 	HUlib_drawTextLine(&w_title, false);
@@ -577,7 +585,22 @@ void HU_Ticker(void)
 	    }
 	}
     }
+}
 
+void HU_SetFPS(fixed_t fps)
+{
+    char	text_buff[32];
+    char*	t = text_buff;
+
+    HUlib_clearTextLine( &fps_message );
+
+    sprintf( t, "fps: %d.%d\n", fps >> FRACBITS, ((fps * 100) >> FRACBITS) % 100 );
+
+    while( *t )
+    {
+	HUlib_addCharToTextLine( &fps_message, *t );
+	t++;
+    }
 }
 
 #define QUEUESIZE		128

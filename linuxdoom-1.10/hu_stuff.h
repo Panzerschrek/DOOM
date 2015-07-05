@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -22,7 +22,7 @@
 #define __HU_STUFF_H__
 
 #include "d_event.h"
-
+#include "m_fixed.h"
 
 //
 // Globally visible constants.
@@ -31,7 +31,7 @@
 #define HU_FONTEND	'_'	// the last font characters
 
 // Calculate # of glyphs in font.
-#define HU_FONTSIZE	(HU_FONTEND - HU_FONTSTART + 1)	
+#define HU_FONTSIZE	(HU_FONTEND - HU_FONTSTART + 1)
 
 #define HU_BROADCAST	5
 
@@ -56,6 +56,8 @@ void HU_Ticker(void);
 void HU_Drawer(void);
 char HU_dequeueChatChar(void);
 void HU_Erase(void);
+
+void HU_SetFPS(fixed_t fps);
 
 
 #endif
