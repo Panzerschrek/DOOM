@@ -276,7 +276,6 @@ void F_TextWrite (void)
     // erase the entire screen to a tiled background
     src = W_CacheLumpName ( finaleflat , PU_CACHE);
     V_FillRectByTexture(0, 0, SCREENWIDTH, SCREENHEIGHT, 64, 64, menuscale, src);
-    V_MarkRect (0, 0, SCREENWIDTH, SCREENHEIGHT);
 
     // draw some of the text onto the screen
     cx = 10 * menuscale;
@@ -610,8 +609,6 @@ void F_BunnyScroll (void)
 
     p1 = W_CacheLumpName ("PFUB2", PU_LEVEL);
     p2 = W_CacheLumpName ("PFUB1", PU_LEVEL);
-
-    V_MarkRect (0, 0, SCREENWIDTH, SCREENHEIGHT);
 
     scrolled = 320 - (finalecount-230)/2;
     if (scrolled > 320)
