@@ -311,6 +311,8 @@ void SDLCALL AudioCallback (void *userdata, Uint8 * stream, int len)
     data = (sample_t*) stream;
     len_in_samples = len / ( sizeof(sample_t) * sdl_audio.format.channels );
 
+    I_MixMusic( len_in_samples );
+
     for ( i = 0; i < len_in_samples * sdl_audio.format.channels; i++ ) sdl_audio.mixbuffer[i] = sdl_audio.format.silence;
 
     for ( i = 0; i < MAX_CHANNELS; i++ )
@@ -341,9 +343,6 @@ void SDLCALL AudioCallback (void *userdata, Uint8 * stream, int len)
 
 	data[i] = k;
     }
-
-
-    I_MixMusic( len_in_samples );
 
     SDL_UnlockMutex(sdl_audio.mutex);
 }
