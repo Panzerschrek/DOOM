@@ -165,6 +165,36 @@ V_FillRectByTexture
     }
 }
 
+void
+V_DrawPixel
+( int x,
+  int y,
+  int color_index )
+{
+    screens[0][ x + y * SCREENWIDTH ] = color_index;
+}
+
+void
+V_FillRect
+( int x,
+  int y,
+  int width,
+  int height,
+  int color_index )
+{
+    byte*	dst;
+    int		xx;
+    int		yy;
+    int		x_end = x + width;
+    int		y_end = y + height;
+
+    for( yy = y; yy < y_end; yy++ )
+    {
+	dst = screens[0] + yy * SCREENWIDTH + xx;
+	for( xx = x; xx < x_end; xx++, dst++ ) *dst = color_index;
+    }
+}
+
 
 //
 // V_DrawPatch

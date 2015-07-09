@@ -46,8 +46,6 @@
 
 extern	byte*		screens[5];
 
-extern  int	dirtybox[4];
-
 extern	byte	gammatable[5][256];
 extern	int	usegamma;
 
@@ -113,6 +111,22 @@ V_FillRectByTexture
   int		tex_height,
   int		tex_scale,
   byte*		tex_data );
+
+
+void
+V_DrawPixel
+( int x,
+  int y,
+  int color_index );
+
+
+void
+V_FillRect
+( int x,
+  int y,
+  int width,
+  int height,
+  int color_index );
 
 #endif
 //-----------------------------------------------------------------------------

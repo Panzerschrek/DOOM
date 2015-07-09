@@ -84,9 +84,6 @@ static const char rcsid[] = "$Id: am_map.c,v 1.4 1997/02/03 21:24:33 b1 Exp $";
 #define GRIDRANGE	0
 #define XHAIRCOLORS	GRAYS
 
-// drawing stuff
-#define	FB		0
-
 #define AM_PANDOWNKEY	KEY_DOWNARROW
 #define AM_PANUPKEY	KEY_UPARROW
 #define AM_PANRIGHTKEY	KEY_RIGHTARROW
@@ -232,7 +229,6 @@ static int 	f_w;
 static int	f_h;
 
 static int 	lightlev; 		// used for funky strobing effect
-static byte*	fb; 			// pseudo-frame buffer
 static int 	amclock;
 
 static mpoint_t m_paninc; // how far the window pans each tic (map coords)
@@ -291,7 +287,6 @@ static cheatseq_t cheat_amap = { cheat_amap_seq, 0 };
 static boolean stopped = true;
 
 extern boolean viewactive;
-//extern byte screens[][SCREENWIDTH*SCREENHEIGHT];
 
 
 
@@ -455,7 +450,6 @@ void AM_initVariables(void)
     static event_t st_notify = { ev_keyup, AM_MSGENTERED };
 
     automapactive = true;
-    fb = screens[0];
 
     f_oldloc.x = MAXINT;
     amclock = 0;
@@ -826,7 +820,7 @@ void AM_Ticker (void)
 //
 void AM_clearFB(int color)
 {
-    memset(fb, color, f_w*f_h);
+    V_FillRect(0, 0, SCREENWIDTH, SCREENHEIGHT, color);
 }
 
 
@@ -995,8 +989,6 @@ AM_drawFline
 	return;
     }
 
-#define PUTDOT(xx,yy,cc) fb[(yy)*f_w+(xx)]=(cc)
-
     dx = fl->b.x - fl->a.x;
     ax = 2 * (dx<0 ? -dx : dx);
     sx = dx<0 ? -1 : 1;
@@ -1013,7 +1005,7 @@ AM_drawFline
 	d = ay - ax/2;
 	while (1)
 	{
-	    PUTDOT(x,y,color);
+	    V_DrawPixel(x,y,color);
 	    if (x == fl->b.x) return;
 	    if (d>=0)
 	    {
@@ -1029,7 +1021,7 @@ AM_drawFline
 	d = ax - ay/2;
 	while (1)
 	{
-	    PUTDOT(x, y, color);
+	    V_DrawPixel(x, y, color);
 	    if (y == fl->b.y) return;
 	    if (d >= 0)
 	    {
@@ -1319,8 +1311,7 @@ void AM_drawMarks(void)
 
 void AM_drawCrosshair(int color)
 {
-    fb[(f_w*(f_h+1))/2] = color; // single point for now
-
+    V_DrawPixel( f_w / 2, f_h / 2, color ); // single point for now
 }
 
 void AM_Drawer (void)
