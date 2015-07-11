@@ -279,11 +279,6 @@ static anim_t *anims[NUMEPISODES] =
 // GENERAL DATA
 //
 
-//
-// Locally used stuff.
-//
-#define FB 0
-
 
 // States for single-player
 #define SP_KILLS		0
@@ -399,14 +394,6 @@ static patch_t**	lnames;
 // CODE
 //
 
-// slam background
-// UNUSED static unsigned char *background=0;
-
-
-void WI_slamBackground(void)
-{
-    memcpy(screens[0], screens[1], SCREENWIDTH * SCREENHEIGHT);
-}
 
 // The ticker is used to detect keys
 //  because of timing issues in netgames.
@@ -427,7 +414,6 @@ void WI_drawLF(void)
 	y * menuscale,
 	lnames[wbs->last]->width * menuscale,
 	lnames[wbs->last]->height * menuscale,
-	FB,
 	lnames[wbs->last]);
 
     // draw "Finished!"
@@ -438,7 +424,6 @@ void WI_drawLF(void)
 	y * menuscale,
 	finished->width * menuscale,
 	finished->height * menuscale,
-	FB,
 	finished);
 }
 
@@ -455,7 +440,6 @@ void WI_drawEL(void)
 	y * menuscale,
 	entering->width * menuscale,
 	entering->height * menuscale,
-	FB,
 	entering);
 
     // draw level
@@ -466,7 +450,7 @@ void WI_drawEL(void)
 	y * menuscale,
 	lnames[wbs->next]->width * menuscale,
 	lnames[wbs->next]->height * menuscale,
-	FB, lnames[wbs->next]);
+	lnames[wbs->next]);
 
 }
 
@@ -483,8 +467,6 @@ WI_drawOnLnode
     int		bottom;
     boolean	fits = false;
 
-    // PANZER - TODO. invent how draw this
-    return;
     i = 0;
     do
     {
@@ -492,6 +474,11 @@ WI_drawOnLnode
 	top = lnodes[wbs->epsd][n].y - SHORT(c[i]->topoffset);
 	right = left + SHORT(c[i]->width);
 	bottom = top + SHORT(c[i]->height);
+
+	left = left * SCREENWIDTH / ID_SCREENWIDTH;
+	top = top * SCREENHEIGHT / ID_SCREENHEIGHT;
+	right = right * SCREENWIDTH / ID_SCREENWIDTH;
+	bottom = bottom * SCREENHEIGHT / ID_SCREENHEIGHT;
 
 	if (left >= 0
 	    && right < SCREENWIDTH
@@ -508,8 +495,10 @@ WI_drawOnLnode
 
     if (fits && i<2)
     {
-	V_DrawPatch(lnodes[wbs->epsd][n].x, lnodes[wbs->epsd][n].y,
-		    FB, c[i]);
+	V_DrawPatchScaled(
+	    lnodes[wbs->epsd][n].x  * SCREENWIDTH / ID_SCREENWIDTH, lnodes[wbs->epsd][n].y * SCREENHEIGHT / ID_SCREENHEIGHT,
+	    c[i]->width * SCREENWIDTH / ID_SCREENWIDTH, c[i]->height * SCREENHEIGHT / ID_SCREENHEIGHT,
+	    c[i]);
     }
     else
     {
@@ -605,7 +594,7 @@ void WI_drawAnimatedBack(void)
     int			i;
     anim_t*		a;
 
-    if (commercial)
+    if (gamemode == commercial)
 	return;
 
     if (wbs->epsd > 2)
@@ -621,7 +610,7 @@ void WI_drawAnimatedBack(void)
 	    V_DrawPatchScaled(
 		a->loc.x * SCREENWIDTH / ID_SCREENWIDTH, a->loc.y * SCREENHEIGHT / ID_SCREENHEIGHT,
 		patch->width * SCREENWIDTH / ID_SCREENWIDTH, patch->height * SCREENHEIGHT / ID_SCREENHEIGHT,
-		FB, patch );
+		patch );
 	}
     }
 
@@ -680,13 +669,13 @@ WI_drawNum
     {
     	patch_t* patch = num[ n % 10 ];
 	x -= fontwidth * menuscale;
-	V_DrawPatchScaled( x, y, patch->width * menuscale, patch->height * menuscale, FB, patch );
+	V_DrawPatchScaled( x, y, patch->width * menuscale, patch->height * menuscale, patch );
 	n /= 10;
     }
 
     // draw a minus sign if necessary
     if (neg)
-	V_DrawPatch(x-=8, y, FB, wiminus);
+	V_DrawPatch(x-=8, y, wiminus);
 
     return x;
 
@@ -701,7 +690,7 @@ WI_drawPercent
     if (p < 0)
 	return;
 
-    V_DrawPatchScaled(x, y, percent->width * menuscale, percent->height * menuscale, FB, percent);
+    V_DrawPatchScaled(x, y, percent->width * menuscale, percent->height * menuscale, percent);
     WI_drawNum(x, y, p, -1);
 }
 
@@ -736,7 +725,7 @@ WI_drawTime
 
 	    // draw
 	    if (div==60 || t / div)
-		V_DrawPatchScaled( x, y, colon->width * menuscale, colon->height * menuscale, FB, colon );
+		V_DrawPatchScaled( x, y, colon->width * menuscale, colon->height * menuscale, colon );
 
 	} while (t / div);
     }
@@ -746,7 +735,7 @@ WI_drawTime
 	V_DrawPatchScaled(
 	    x - SHORT(sucks->width) * menuscale, y,
 	    sucks->width * menuscale, sucks->height * menuscale,
-	    FB, sucks);
+	    sucks);
     }
 }
 
@@ -804,7 +793,6 @@ void WI_drawShowNextLoc(void)
     int		i;
     int		last;
 
-    WI_slamBackground();
 
     // draw animated background
     WI_drawAnimatedBack();
@@ -1017,7 +1005,6 @@ void WI_drawDeathmatchStats(void)
     int		y;
     int		w;
 
-    WI_slamBackground();
 
     // draw animated background
     WI_drawAnimatedBack();
@@ -1026,11 +1013,10 @@ void WI_drawDeathmatchStats(void)
     // draw stat titles (top line)
     V_DrawPatch(DM_TOTALSX-SHORT(total->width)/2,
 		DM_MATRIXY-WI_SPACINGY+10,
-		FB,
 		total);
 
-    V_DrawPatch(DM_KILLERSX, DM_KILLERSY, FB, killers);
-    V_DrawPatch(DM_VICTIMSX, DM_VICTIMSY, FB, victims);
+    V_DrawPatch(DM_KILLERSX, DM_KILLERSY, killers);
+    V_DrawPatch(DM_VICTIMSX, DM_VICTIMSY, victims);
 
     // draw P?
     x = DM_MATRIXX + DM_SPACINGX;
@@ -1042,24 +1028,20 @@ void WI_drawDeathmatchStats(void)
 	{
 	    V_DrawPatch(x-SHORT(p[i]->width)/2,
 			DM_MATRIXY - WI_SPACINGY,
-			FB,
 			p[i]);
 
 	    V_DrawPatch(DM_MATRIXX-SHORT(p[i]->width)/2,
 			y,
-			FB,
 			p[i]);
 
 	    if (i == me)
 	    {
 		V_DrawPatch(x-SHORT(p[i]->width)/2,
 			    DM_MATRIXY - WI_SPACINGY,
-			    FB,
 			    bstar);
 
 		V_DrawPatch(DM_MATRIXX-SHORT(p[i]->width)/2,
 			    y,
-			    FB,
 			    star);
 	    }
 	}
@@ -1291,8 +1273,6 @@ void WI_drawNetgameStats(void)
     int		y;
     int		pwidth = SHORT(percent->width);
 
-    WI_slamBackground();
-
     // draw animated background
     WI_drawAnimatedBack();
 
@@ -1300,17 +1280,17 @@ void WI_drawNetgameStats(void)
 
     // draw stat titles (top line)
     V_DrawPatch(NG_STATSX+NG_SPACINGX-SHORT(kills->width),
-		NG_STATSY, FB, kills);
+		NG_STATSY, kills);
 
     V_DrawPatch(NG_STATSX+2*NG_SPACINGX-SHORT(items->width),
-		NG_STATSY, FB, items);
+		NG_STATSY, items);
 
     V_DrawPatch(NG_STATSX+3*NG_SPACINGX-SHORT(secret->width),
-		NG_STATSY, FB, secret);
+		NG_STATSY, secret);
 
     if (dofrags)
 	V_DrawPatch(NG_STATSX+4*NG_SPACINGX-SHORT(frags->width),
-		    NG_STATSY, FB, frags);
+		    NG_STATSY, frags);
 
     // draw stats
     y = NG_STATSY + SHORT(kills->height);
@@ -1321,10 +1301,10 @@ void WI_drawNetgameStats(void)
 	    continue;
 
 	x = NG_STATSX;
-	V_DrawPatch(x-SHORT(p[i]->width), y, FB, p[i]);
+	V_DrawPatch(x-SHORT(p[i]->width), y, p[i]);
 
 	if (i == me)
-	    V_DrawPatch(x-SHORT(p[i]->width), y, FB, star);
+	    V_DrawPatch(x-SHORT(p[i]->width), y, star);
 
 	x += NG_SPACINGX;
 	WI_drawPercent(x-pwidth, y+10, cnt_kills[i]);	x += NG_SPACINGX;
@@ -1466,8 +1446,6 @@ void WI_drawStats(void)
 
     lh = (3*SHORT(num[0]->height))/2;
 
-    WI_slamBackground();
-
     // draw animated background
     WI_drawAnimatedBack();
 
@@ -1476,25 +1454,25 @@ void WI_drawStats(void)
     V_DrawPatchScaled(
 	SP_STATSX * menuscale, SP_STATSY * menuscale,
 	kills->width * menuscale, kills->height * menuscale,
-	FB, kills);
+	kills);
     WI_drawPercent(SCREENWIDTH - SP_STATSX * menuscale, SP_STATSY * menuscale, cnt_kills[0]);
 
     V_DrawPatchScaled(
 	SP_STATSX * menuscale, (SP_STATSY + lh) * menuscale,
 	items->width * menuscale, items->height * menuscale,
-	FB, items);
+	items);
     WI_drawPercent(SCREENWIDTH - SP_STATSX * menuscale, (SP_STATSY+lh) * menuscale, cnt_items[0]);
 
     V_DrawPatchScaled(
 	SP_STATSX * menuscale, (SP_STATSY + 2*lh) * menuscale,
 	sp_secret->width * menuscale, sp_secret->height * menuscale,
-	FB, sp_secret);
+	sp_secret);
     WI_drawPercent(SCREENWIDTH - SP_STATSX * menuscale, (SP_STATSY+2*lh) * menuscale, cnt_secret[0]);
 
     V_DrawPatchScaled(
 	SP_TIMEX * menuscale, SCREENHEIGHT - 32 * menuscale,
 	time->width * menuscale, time->height * menuscale,
-	FB, time);
+	time);
     WI_drawTime(SCREENWIDTH/2 - SP_TIMEX * menuscale, SCREENHEIGHT - 32 * menuscale, cnt_time);
 
     if (wbs->epsd < 3)
@@ -1502,7 +1480,7 @@ void WI_drawStats(void)
 	V_DrawPatchScaled(
 	    SCREENWIDTH/2 + SP_TIMEX * menuscale, SCREENHEIGHT - 32 * menuscale,
 	    par->width * menuscale, par->height * menuscale,
-	    FB, par);
+	    par);
 	WI_drawTime(SCREENWIDTH - SP_TIMEX * menuscale, SCREENHEIGHT - 32 * menuscale, cnt_par);
     }
 
@@ -1576,12 +1554,9 @@ void WI_Ticker(void)
 
 }
 
-void WI_loadData(void)
+void WI_drawBack(void)
 {
-    int		i;
-    int		j;
     char	name[9];
-    anim_t*	a;
 
     if (gamemode == commercial)
 	strcpy(name, "INTERPIC");
@@ -1594,9 +1569,16 @@ void WI_loadData(void)
 	strcpy(name,"INTERPIC");
     }
 
-    // background
     bg = W_CacheLumpName(name, PU_CACHE);
-    V_DrawPatchScaled( 0, 0, SCREENWIDTH, SCREENHEIGHT, 1, bg );
+    V_DrawPatchScaled( 0, 0, SCREENWIDTH, SCREENHEIGHT, bg );
+}
+
+void WI_loadData(void)
+{
+    int		i;
+    int		j;
+    char	name[9];
+    anim_t*	a;
 
 
     // UNUSED unsigned char *pic = screens[1];
@@ -1812,6 +1794,8 @@ void WI_unloadData(void)
 
 void WI_Drawer (void)
 {
+    WI_drawBack();
+
     switch (state)
     {
       case StatCount:

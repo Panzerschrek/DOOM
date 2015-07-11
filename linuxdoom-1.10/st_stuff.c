@@ -508,7 +508,7 @@ void ST_refreshBackground(void)
 	V_DrawPatchScaled(
 	    ST_X * menuscale +  SCREENWIDTH / 2 - ( menuscale * ID_SCREENWIDTH / 2), SCREENHEIGHT - ST_HEIGHT * menuscale,
 	    sbar->width * menuscale, sbar->height * menuscale,
-	    0, sbar);
+	    sbar);
 
 	//if (netgame)
 	//    V_DrawPatch(ST_FX, 0, BG, faceback);

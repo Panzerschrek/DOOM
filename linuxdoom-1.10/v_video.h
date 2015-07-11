@@ -59,7 +59,6 @@ void
 V_DrawPatch
 ( int		x,
   int		y,
-  int		scrn,
   patch_t*	patch);
 
 void
@@ -76,7 +75,15 @@ V_DrawPatchScaled
   int		y,
   int		width,
   int		height,
-  int		scrn,
+  patch_t*	patch );
+
+
+void
+V_DrawPatchScaledFlipped
+( int		x,
+  int		y,
+  int		width,
+  int		height,
   patch_t*	patch );
 
 
@@ -85,20 +92,9 @@ void
 V_DrawBlock
 ( int		x,
   int		y,
-  int		scrn,
   int		width,
   int		height,
   byte*		src );
-
-// Reads a linear block of pixels into the view buffer.
-void
-V_GetBlock
-( int		x,
-  int		y,
-  int		scrn,
-  int		width,
-  int		height,
-  byte*		dest );
 
 
 void

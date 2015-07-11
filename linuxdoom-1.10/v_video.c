@@ -151,7 +151,7 @@ V_FillRectByTexture
     int		y_end = y + height;
     int		tex_width1 = tex_width - 1;
     int		tex_height1 = tex_height - 1;
-    fixed_t	step = FRACUNIT / tex_scale;
+    fixed_t	step = FRACUNIT / tex_scale + 1;
     fixed_t	u;
     byte*	dest;
     byte*	src;
@@ -190,7 +190,7 @@ V_FillRect
 
     for( yy = y; yy < y_end; yy++ )
     {
-	dst = screens[0] + yy * SCREENWIDTH + xx;
+	dst = screens[0] + yy * SCREENWIDTH + x;
 	for( xx = x; xx < x_end; xx++, dst++ ) *dst = color_index;
     }
 }
@@ -204,7 +204,6 @@ void
 V_DrawPatch
 ( int		x,
   int		y,
-  int		scrn,
   patch_t*	patch )
 {
 
@@ -222,8 +221,7 @@ V_DrawPatch
     if (x<0
 	||x+SHORT(patch->width) >SCREENWIDTH
 	|| y<0
-	|| y+SHORT(patch->height)>SCREENHEIGHT
-	|| (unsigned)scrn>4)
+	|| y+SHORT(patch->height)>SCREENHEIGHT)
     {
       fprintf( stderr, "Patch at %d,%d exceeds LFB\n", x,y );
       // No I_Error abort - what is up with TNT.WAD?
@@ -234,7 +232,7 @@ V_DrawPatch
 
 
     col = 0;
-    desttop = screens[scrn]+y*SCREENWIDTH+x;
+    desttop = screens[0]+y*SCREENWIDTH+x;
 
     w = SHORT(patch->width);
 
@@ -260,7 +258,6 @@ V_DrawPatch
     }
 }
 
-
 //
 // V_DrawPatchCol
 //
@@ -277,39 +274,51 @@ V_DrawPatchCol
     byte*	desttop;
     int		v;
     int		v_step;
+    int		cur_y;
+    int		loc_y;
 
     column = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
     desttop = screens[0]+x;
 
     // step through the posts in a column
     v_step = (patch->height <<FRACBITS) / height;
-    while (column->topdelta != 0xff )
+    v = 0;
+    cur_y = 0;
+    while(column->topdelta != 0xff)
     {
-	source = (byte *)column + 3;
-	dest = desttop + (column->topdelta * height / patch->height) * SCREENWIDTH;
-	v = 0; //HACK - not worked correctly if scale of image not integer
-
-	while ((v >> FRACBITS) < column->length)
+	while((v>>FRACBITS) < column->topdelta)
 	{
-		*dest = source[ v >> FRACBITS ];
-		dest += SCREENWIDTH;
-		v += v_step;
+	    v+= v_step;
+	    cur_y++;
 	}
-	column = (column_t *)(  (byte *)column + column->length + 4 );
+	source = (byte *)column + 3;
+	dest = desttop + cur_y * SCREENWIDTH;
+
+	loc_y = (v>>FRACBITS) - column->topdelta;
+	while( loc_y < column->length && cur_y < height)
+	{
+	    *dest = source[loc_y];
+	    dest += SCREENWIDTH;
+	    v += v_step;
+	    cur_y++;
+	    loc_y = (v>>FRACBITS) - column->topdelta;
+	}
+	column = (column_t *)( (byte *)column + column->length + 4 );
     }
 }
 
 
 void
-V_DrawPatchScaled
+V_DrawPatchScaledInternal
 ( int		x,
   int		y,
   int		width,
   int		height,
-  int		scrn,
-  patch_t*	patch )
+  patch_t*	patch,
+  boolean	flipped )
 {
-    int		col;
+    int		cur_y;
+    int		loc_y;
     column_t*	column;
     byte*	desttop;
     byte*	dest;
@@ -318,15 +327,16 @@ V_DrawPatchScaled
     fixed_t	v;
     fixed_t	u_step;
     fixed_t	v_step;
+    int		x_end;
+    int		x_step;
 
-    y -= SHORT(patch->topoffset) * width / patch->width;
-    x -= SHORT(patch->leftoffset) * height / patch->height;
+    x -= patch->leftoffset * width / patch->width;
+    y -= patch->topoffset * height / patch->height;
 #ifdef RANGECHECK
     if (x<0
 	||x+SHORT(width) >SCREENWIDTH
 	|| y<0
-	|| y+SHORT(height)>SCREENHEIGHT
-	|| (unsigned)scrn>4)
+	|| y+SHORT(height)>SCREENHEIGHT)
     {
       fprintf( stderr, "Patch at %d,%d exceeds LFB\n", x,y );
       // No I_Error abort - what is up with TNT.WAD?
@@ -335,35 +345,76 @@ V_DrawPatchScaled
     }
 #endif
 
-    col = 0;
-    desttop = screens[scrn]+y*SCREENWIDTH+x;
-
-    u = 0;
     u_step = (patch->width << FRACBITS) / width;
-    v_step = (patch->height << FRACBITS) / height;
+    if ((((u_step+1) * (width - 1))>>FRACBITS) < patch->width ) u_step++;
+    v_step = (patch->height << FRACBITS) / height;v_step++;
+    if ((((v_step+1) * (height - 1))>>FRACBITS) < patch->height ) v_step++;
+    u = 0;
 
-    for ( ; col<width ; x++, col++, u += u_step, desttop++)
+    if (flipped)
+    {
+	x_end = x;
+	x += width;
+	x_step = -1;
+    }
+    else
+    {
+    	x_end = x + width;
+    	x_step = 1;
+    }
+    desttop = screens[0]+y*SCREENWIDTH+x;
+
+    for ( ; (x - x_end) * x_step < 0; u += u_step, desttop+= x_step, x+= x_step )
     {
 	column = (column_t *)((byte *)patch + LONG(patch->columnofs[u >> FRACBITS]));
 
 	// step through the posts in a column
 	v = 0;
-	while (column->topdelta != 0xff )
+	cur_y = 0;
+	while(column->topdelta != 0xff)
 	{
-	    source = (byte *)column + 3;
-	    dest = desttop + (column->topdelta * height / patch->height) * SCREENWIDTH;
-	    v = 0; //HACK - not worked correctly if scale of image not integer
-
-	    while ((v >> FRACBITS) < column->length)
+	    while((v>>FRACBITS) < column->topdelta)
 	    {
-	    	*dest = source[ v >> FRACBITS ];
-	    	dest += SCREENWIDTH;
-	    	v += v_step;
+		v+= v_step;
+		cur_y++;
 	    }
-	    column = (column_t *)(  (byte *)column + column->length
-				    + 4 );
+	    source = (byte *)column + 3;
+	    dest = desttop + cur_y * SCREENWIDTH;
+
+	    loc_y = (v>>FRACBITS) - column->topdelta;
+	    while( loc_y < column->length && cur_y < height)
+	    {
+		*dest = source[loc_y];
+		dest += SCREENWIDTH;
+		v += v_step;
+		cur_y++;
+		loc_y = (v>>FRACBITS) - column->topdelta;
+	    }
+	    column = (column_t *)( (byte *)column + column->length + 4 );
 	}
     }
+}
+
+void
+V_DrawPatchScaled
+( int		x,
+  int		y,
+  int		width,
+  int		height,
+  patch_t*	patch )
+{
+    V_DrawPatchScaledInternal(x, y, width, height, patch, false);
+}
+
+void
+V_DrawPatchScaledFlipped
+( int		x,
+  int		y,
+  int		width,
+  int		height,
+  patch_t*	patch )
+{
+    V_DrawPatchScaledInternal(x, y, width, height, patch, true);
 }
 
 //
@@ -375,7 +426,6 @@ void
 V_DrawPatchFlipped
 ( int		x,
   int		y,
-  int		scrn,
   patch_t*	patch )
 {
 
@@ -393,8 +443,7 @@ V_DrawPatchFlipped
     if (x<0
 	||x+SHORT(patch->width) >SCREENWIDTH
 	|| y<0
-	|| y+SHORT(patch->height)>SCREENHEIGHT
-	|| (unsigned)scrn>4)
+	|| y+SHORT(patch->height)>SCREENHEIGHT)
     {
       fprintf( stderr, "Patch origin %d,%d exceeds LFB\n", x,y );
       I_Error ("Bad V_DrawPatch in V_DrawPatchFlipped");
@@ -402,7 +451,7 @@ V_DrawPatchFlipped
 #endif
 
     col = 0;
-    desttop = screens[scrn]+y*SCREENWIDTH+x;
+    desttop = screens[0]+y*SCREENWIDTH+x;
 
     w = SHORT(patch->width);
 
@@ -437,7 +486,6 @@ void
 V_DrawBlock
 ( int		x,
   int		y,
-  int		scrn,
   int		width,
   int		height,
   byte*		src )
@@ -448,14 +496,13 @@ V_DrawBlock
     if (x<0
 	||x+width >SCREENWIDTH
 	|| y<0
-	|| y+height>SCREENHEIGHT
-	|| (unsigned)scrn>4 )
+	|| y+height>SCREENHEIGHT)
     {
 	I_Error ("Bad V_DrawBlock");
     }
 #endif
 
-    dest = screens[scrn] + y*SCREENWIDTH+x;
+    dest = screens[0] + y*SCREENWIDTH+x;
 
     while (height--)
     {
@@ -464,45 +511,6 @@ V_DrawBlock
 	dest += SCREENWIDTH;
     }
 }
-
-
-
-//
-// V_GetBlock
-// Gets a linear block of pixels from the view buffer.
-//
-void
-V_GetBlock
-( int		x,
-  int		y,
-  int		scrn,
-  int		width,
-  int		height,
-  byte*		dest )
-{
-    byte*	src;
-
-#ifdef RANGECHECK
-    if (x<0
-	||x+width >SCREENWIDTH
-	|| y<0
-	|| y+height>SCREENHEIGHT
-	|| (unsigned)scrn>4 )
-    {
-	I_Error ("Bad V_DrawBlock");
-    }
-#endif
-
-    src = screens[scrn] + y*SCREENWIDTH+x;
-
-    while (height--)
-    {
-	memcpy (dest, src, width);
-	src += SCREENWIDTH;
-	dest += width;
-    }
-}
-
 
 
 

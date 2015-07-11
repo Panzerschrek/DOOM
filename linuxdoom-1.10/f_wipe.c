@@ -254,7 +254,7 @@ wipe_EndScreen
 {
     wipe_scr_end = screens[3];
     I_ReadScreen(wipe_scr_end);
-    V_DrawBlock(x, y, 0, width, height, wipe_scr_start); // restore start scr.
+    V_DrawBlock(x, y, width, height, wipe_scr_start); // restore start scr.
     return 0;
 }
 
@@ -274,8 +274,6 @@ wipe_ScreenWipe
 	wipe_initMelt, wipe_doMelt, wipe_exitMelt
     };
 
-    void V_MarkRect(int, int, int, int);
-
     // initial stuff
     if (!go)
     {
@@ -287,7 +285,6 @@ wipe_ScreenWipe
 
     // do a piece of wipe-in
     rc = (*wipes[wipeno*3+1])(width, height, ticks);
-    //  V_DrawBlock(x, y, 0, width, height, wipe_scr); // DEBUG
 
     // final stuff
     if (rc)

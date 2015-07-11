@@ -128,7 +128,7 @@ HUlib_drawTextLine
 		x, l->y,
 		patch->width * menuscale,
 		patch->height * menuscale,
-		0, patch );
+		patch );
 	    x += w;
 	}
 	else
@@ -148,7 +148,7 @@ HUlib_drawTextLine
 		x, l->y,
 		patch->width * menuscale,
 		patch->height * menuscale,
-		0, patch );
+		patch );
     }
 }
 

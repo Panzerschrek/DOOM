@@ -133,20 +133,20 @@ STlib_drawNum
 	V_DrawPatchScaled(
 	    x - w, n->y,
 	    n->p[0]->width * menuscale, n->p[0]->height * menuscale,
-	    0, n->p[0]);
+	    n->p[0]);
 
     // draw the new number
     while (num && numdigits--)
     {
 	patch = n->p[ num % 10 ];
 	x -= w;
-	V_DrawPatchScaled( x, n->y, patch->width * menuscale, patch->height * menuscale, 0, patch );
+	V_DrawPatchScaled( x, n->y, patch->width * menuscale, patch->height * menuscale, patch );
 	num /= 10;
     }
 
     // draw a minus sign if necessary
     if (neg)
-	V_DrawPatchScaled( x - 8 * menuscale, n->y, sttminus->width * menuscale, sttminus->height * menuscale, 0, sttminus );
+	V_DrawPatchScaled( x - 8 * menuscale, n->y, sttminus->width * menuscale, sttminus->height * menuscale, sttminus );
 }
 
 
@@ -185,7 +185,7 @@ STlib_updatePercent
 	V_DrawPatchScaled(
 	    per->n.x, per->n.y,
 	    per->p->width * menuscale, per->p->height * menuscale,
-	    0, per->p);
+	    per->p);
 
     STlib_updateNum(&per->n);
 }
@@ -224,7 +224,7 @@ STlib_updateMultIcon
 	V_DrawPatchScaled(
 	    mi->x, mi->y,
 	    patch->width * menuscale, patch->height * menuscale,
-	    0, patch );
+	    patch );
 
 	mi->oldinum = *mi->inum;
     }
@@ -260,7 +260,7 @@ STlib_updateBinIcon
 	V_DrawPatchScaled(
 	    bi->x, bi->y,
 	    bi->p->width * menuscale, bi->p->height * menuscale,
-	    0, bi->p);
+	    bi->p);
 
 	bi->oldval = *bi->val;
     }

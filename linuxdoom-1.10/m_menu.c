@@ -549,7 +549,6 @@ void M_DrawLoad(void)
 	28 * menuscale + y_offset,
 	patch->width * menuscale,
 	patch->height * menuscale,
-	0,
 	patch);
     for (i = 0;i < load_end; i++)
     {
@@ -580,7 +579,7 @@ void M_DrawSaveLoadBorder(int x,int y)
 	y + 7 * menuscale,
 	patch->width * menuscale,
 	patch->height * menuscale,
-	0, patch);
+	patch);
 
     patch = W_CacheLumpName("M_LSCNTR",PU_CACHE);
     for (i = 0;i < 24;i++)
@@ -590,7 +589,7 @@ void M_DrawSaveLoadBorder(int x,int y)
 	    y + 7 * menuscale,
 	    patch->width * menuscale,
 	    patch->height * menuscale,
-	    0, patch);
+	    patch);
 	x += 8 * menuscale;
     }
 
@@ -600,7 +599,7 @@ void M_DrawSaveLoadBorder(int x,int y)
 	y + 7 * menuscale,
 	patch->width * menuscale,
 	patch->height * menuscale,
-	0, patch);
+	patch);
 }
 
 
@@ -650,7 +649,7 @@ void M_DrawSave(void)
 	28 * menuscale + y_offset,
 	patch->width * menuscale,
 	patch->height * menuscale,
-	0, patch);
+	patch);
     for (i = 0;i < load_end; i++)
     {
 	M_DrawSaveLoadBorder(
@@ -815,7 +814,7 @@ void M_DrawReadThis1(void)
 	break;
     }
     if (patch != NULL )
-	V_DrawPatchScaled( 0, 0, SCREENWIDTH, SCREENHEIGHT, 0, patch );
+	V_DrawPatchScaled( 0, 0, SCREENWIDTH, SCREENHEIGHT, patch );
 
     return;
 }
@@ -846,7 +845,7 @@ void M_DrawReadThis2(void)
     }
 
     if (patch != NULL )
-	V_DrawPatchScaled( 0, 0, SCREENWIDTH, SCREENHEIGHT, 0, patch );
+	V_DrawPatchScaled( 0, 0, SCREENWIDTH, SCREENHEIGHT, patch );
 
     return;
 }
@@ -863,7 +862,7 @@ void M_DrawSound(void)
 	38 * menuscale + y_offset,
 	patch->width * menuscale,
 	patch->height * menuscale,
-	0, patch );
+	patch );
 
     M_DrawThermo(
 	SoundDef.x * menuscale + x_offset,
@@ -929,7 +928,7 @@ void M_DrawMainMenu(void)
 	2 * menuactive + y_offset,
 	patch->width * menuscale,
 	patch->height * menuscale,
-	0, patch );
+	patch );
 }
 
 
@@ -948,7 +947,7 @@ void M_DrawNewGame(void)
 	14 * menuscale + y_offset,
 	patch->width * menuscale,
 	patch->height * menuscale,
-	0, patch );
+	patch );
 
     patch = W_CacheLumpName("M_SKILL",PU_CACHE);
     V_DrawPatchScaled(
@@ -956,7 +955,7 @@ void M_DrawNewGame(void)
 	38 * menuscale + y_offset,
 	patch->width * menuscale,
 	patch->height * menuscale,
-	0, patch );
+	patch );
 }
 
 void M_NewGame(int choice)
@@ -987,7 +986,7 @@ void M_DrawEpisode(void)
 	38 * menuscale + y_offset,
 	patch->width * menuscale,
 	patch->height * menuscale,
-	0, patch);
+	patch);
 }
 
 void M_VerifyNightmare(int ch)
@@ -1053,7 +1052,7 @@ void M_DrawOptions(void)
 	15 * menuscale + y_offset,
 	patch->width * menuscale,
 	patch->height * menuscale,
-	0, patch);
+	patch);
 
     patch = W_CacheLumpName(detailNames[detailLevel],PU_CACHE);
     V_DrawPatchScaled(
@@ -1061,7 +1060,7 @@ void M_DrawOptions(void)
 	(OptionsDef.y+LINEHEIGHT*detail) * menuscale + y_offset,
 	patch->width * menuscale,
 	patch->height * menuscale,
-	0, patch);
+	patch);
 
     patch = W_CacheLumpName(msgNames[showMessages],PU_CACHE);
     V_DrawPatchScaled(
@@ -1069,7 +1068,7 @@ void M_DrawOptions(void)
 	(OptionsDef.y+LINEHEIGHT*messages) * menuscale + y_offset,
 	patch->width * menuscale,
 	patch->height * menuscale,
-	0, patch);
+	patch);
 
     patch = W_CacheLumpName(msgNames[showMessages],PU_CACHE);
     M_DrawThermo(
@@ -1312,9 +1311,9 @@ M_DrawThermo
     xx = x;
     patch = W_CacheLumpName("M_THERML",PU_CACHE);
     V_DrawPatchScaled(
-	xx -  patch->leftoffset * menuscale, y,
+	xx, y,
 	patch->width * menuscale, patch->height * menuscale,
-	0, patch);
+	patch);
     xx += 8 * menuscale;
     for (i=0;i<thermWidth;i++)
     {
@@ -1322,7 +1321,7 @@ M_DrawThermo
 	V_DrawPatchScaled(
 	    xx, y,
 	    patch->width * menuscale, patch->height * menuscale,
-	    0, patch);
+	    patch);
 	xx += 8 * menuscale;
     }
 
@@ -1330,14 +1329,14 @@ M_DrawThermo
     V_DrawPatchScaled(
 	xx, y,
 	patch->width * menuscale, patch->height * menuscale,
-	0, patch);
+	patch);
 
     patch = W_CacheLumpName("M_THERMO",PU_CACHE);
     V_DrawPatchScaled(
 	x + (8 + thermDot*8) * menuscale,
 	y,
 	patch->width * menuscale, patch->height * menuscale,
-	0, patch);
+	patch);
 }
 
 
@@ -1449,7 +1448,7 @@ M_WriteText
 	w = SHORT (hu_font[c]->width) * menuscale;
 	if (cx+w > SCREENWIDTH)
 	    break;
-	V_DrawPatchScaled(cx, cy, w, hu_font[c]->height * menuscale, 0, hu_font[c]);
+	V_DrawPatchScaled(cx, cy, w, hu_font[c]->height * menuscale, hu_font[c]);
 	cx+=w;
     }
 }
@@ -1911,7 +1910,7 @@ void M_Drawer (void)
 	if (currentMenu->menuitems[i].name[0])
 	{
 	    patch_t* patch = W_CacheLumpName(currentMenu->menuitems[i].name ,PU_CACHE);
-	    V_DrawPatchScaled(x, y, patch->width * menuscale, patch->height * menuscale, 0, patch );
+	    V_DrawPatchScaled(x, y, patch->width * menuscale, patch->height * menuscale, patch );
 	}
 	y += LINEHEIGHT * menuscale;
     }
@@ -1923,7 +1922,6 @@ void M_Drawer (void)
 	(currentMenu->y - 5 + itemOn*LINEHEIGHT) * menuscale + y_offset,
 	skull_patch->width * menuscale,
 	skull_patch->height * menuscale,
-	0,
 	skull_patch);
 
 }

@@ -316,7 +316,7 @@ void D_Display (void)
 	V_DrawPatchScaled(
 	    viewwindowx+(scaledviewwidth - 68*menuscale)/2, y,
 	    patch->width * menuscale, patch->height * menuscale,
-	    0, patch );
+	    patch );
     }
 
 
@@ -438,8 +438,8 @@ void D_PageTicker (void)
 //
 void D_PageDrawer (void)
 {
-    // PANZER - here all drawing of fuullscreen images. Draw it rescaled
-    V_DrawPatchScaled( 0, 0, SCREENWIDTH, SCREENHEIGHT, 0, W_CacheLumpName(pagename, PU_CACHE) );
+    // PANZER - here all drawing of fullscreen images. Draw it rescaled
+    V_DrawPatchScaled( 0, 0, SCREENWIDTH, SCREENHEIGHT, W_CacheLumpName(pagename, PU_CACHE) );
 }
 
 
