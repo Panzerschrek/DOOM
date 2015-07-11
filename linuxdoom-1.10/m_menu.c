@@ -61,6 +61,12 @@ rcsid[] = "$Id: m_menu.c,v 1.7 1997/02/03 22:45:10 b1 Exp $";
 
 #include "m_menu.h"
 
+// data format of ENDOOM lump
+typedef struct
+{
+    char code;
+    char color;
+} endoom_char_t;
 
 
 extern patch_t*		hu_font[HU_FONTSIZE];
@@ -1163,7 +1169,24 @@ void M_FinishReadThis(int choice)
     M_SetupNextMenu(&MainDef);
 }
 
+void M_PrintENDoomMessage()
+{
+    char	text[ (80+1) * 25 + 1 ];
+    int		x;
+    int		y;
 
+    endoom_char_t* endoom = W_CacheLumpName("ENDOOM", PU_CACHE);
+
+    for( y = 0; y < 25; y++ )
+    {
+	for( x = 0; x < 80; x++, endoom++ )
+	    text[x + y * 81] = endoom->code;
+	text[80 + y * 81 ] = '\n';
+    }
+    text[ sizeof(text) - 1 ] = 0;
+
+    printf("%s", text);
+}
 
 
 //
@@ -1207,6 +1230,9 @@ void M_QuitResponse(int ch)
 	    S_StartSound(NULL,quitsounds[(gametic>>2)&7]);
 	I_WaitVBL(105);
     }
+
+    M_PrintENDoomMessage();
+
     I_Quit ();
 }
 
