@@ -37,6 +37,9 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 
 #include "doomdef.h"
 
+#include "r_panzer/rp_defs.h"
+#include "r_panzer/rp_video.h"
+
 #define MOUSE_MOTION_SCALE 3
 
 // m_misc.c
@@ -45,6 +48,7 @@ extern int	usemouse;
 // settings variables
 int		v_fullscreen;
 int		v_display;
+int		v_32bit;
 
 enum
 {
@@ -53,18 +57,11 @@ enum
     COMPONENT_B,
 };
 
-typedef union
-{
-    byte		components[4];
-    unsigned int	pixel;
-} four_component_pixel_t;
-
 struct
 {
     SDL_Window *window;
     SDL_Event last_event;
     SDL_Surface* window_surface;
-    four_component_pixel_t palette[256];
 
     struct
     {
@@ -273,18 +270,22 @@ void I_UpdateNoBlit (void)
 //
 void I_FinishUpdate (void)
 {
-
-    int i;
-    int* p;
-    int must_lock;
+    int		i;
+    int*	p;
+    int		must_lock;
+    pixel_t*	palette;
 
     must_lock = SDL_MUSTLOCK(sdl.window_surface);
 
     if (must_lock) SDL_LockSurface( sdl.window_surface );
 
-    p = sdl.window_surface->pixels;
-    for( i = 0; i < SCREENWIDTH * SCREENHEIGHT; i++ )
-	p[i] = sdl.palette[ screens[0][i] ].pixel;
+    if (!v_32bit)
+    {
+	palette = VP_GetPaletteStorage();
+	p = sdl.window_surface->pixels;
+	for( i = 0; i < SCREENWIDTH * SCREENHEIGHT; i++ )
+	    p[i] = palette[ screens[0][i] ].p;
+    }
 
     if (must_lock) SDL_UnlockSurface( sdl.window_surface );
     SDL_UpdateWindowSurface( sdl.window );
@@ -306,11 +307,13 @@ void I_SetPalette (byte* palette)
 {
     // Input format - RGB
     int i;
+    pixel_t* pal = VP_GetPaletteStorage();
+
     for( i = 0; i < 256; i++ )
     {
-	sdl.palette[i].components[ sdl.pixel_format.component_index[COMPONENT_R] ] = palette[i*3];
-	sdl.palette[i].components[ sdl.pixel_format.component_index[COMPONENT_G] ] = palette[i*3+1];
-	sdl.palette[i].components[ sdl.pixel_format.component_index[COMPONENT_B] ] = palette[i*3+2];
+	pal[i].components[ sdl.pixel_format.component_index[COMPONENT_R] ] = palette[i*3];
+	pal[i].components[ sdl.pixel_format.component_index[COMPONENT_G] ] = palette[i*3+1];
+	pal[i].components[ sdl.pixel_format.component_index[COMPONENT_B] ] = palette[i*3+2];
     }
 }
 
@@ -396,6 +399,9 @@ void I_InitGraphics(void)
 	sdl.pixel_format.component_index[ COMPONENT_G ] == -1 ||
 	sdl.pixel_format.component_index[ COMPONENT_B ] == -1 )
 	I_Error("I_InitGraphics: invalid pixel format. Unknown color component order");
+
+    if (v_32bit)
+	VP_SetupFramebuffer (sdl.window_surface->pixels);
 
     sdl.is_focus = true;
     I_GrabMouse();
