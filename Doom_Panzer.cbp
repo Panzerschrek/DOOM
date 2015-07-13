@@ -242,6 +242,10 @@
 		</Unit>
 		<Unit filename="linuxdoom-1.10\r_main.h" />
 		<Unit filename="linuxdoom-1.10\r_panzer\rp_defs.h" />
+		<Unit filename="linuxdoom-1.10\r_panzer\rp_main.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="linuxdoom-1.10\r_panzer\rp_main.h" />
 		<Unit filename="linuxdoom-1.10\r_panzer\rp_video.c">
 			<Option compilerVar="CC" />
 		</Unit>

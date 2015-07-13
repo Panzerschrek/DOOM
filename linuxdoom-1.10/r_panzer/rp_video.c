@@ -323,3 +323,8 @@ pixel_t* VP_GetPaletteStorage()
 {
     return palette;
 }
+
+pixel_t* VP_GetFramebuffer()
+{
+    return screen;
+}

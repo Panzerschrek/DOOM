@@ -73,6 +73,7 @@ static const char rcsid[] = "$Id: d_main.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 #include "d_main.h"
 
 #include "r_panzer/rp_video.h"
+#include "r_panzer/rp_main.h"
 
 // m_menu.c
 extern int menuscale;
@@ -293,7 +294,11 @@ void D_Display (void)
     // draw the view directly
     if (gamestate == GS_LEVEL && gametic)
     {
-	//R_RenderPlayerView (&players[displayplayer]);
+	//if (v_32bit) RP_RenderPlayerView();
+	//else R_RenderPlayerView ();
+
+	(v_32bit ? RP_RenderPlayerView : R_RenderPlayerView) (&players[displayplayer]);
+
 	if (automapactive) AM_Drawer();
 	else R_FillBackScreen();
 	ST_Drawer (viewheight == SCREENHEIGHT, redrawsbar );
