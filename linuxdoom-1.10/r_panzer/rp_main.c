@@ -93,43 +93,87 @@ void PR_DrawWallPart(seg_t* seg, fixed_t z_min, fixed_t z_max)
 {
     float	vertices[4][3];
     float	vertices_proj[4][3];
-    int		screen_pos[2];
+    int		screen_pos[4][2];
     int		i;
 
-   vertices[0][0] = FixedToFloat(seg->v1->x);
-   vertices[0][1] = FixedToFloat(seg->v1->y);
-   vertices[0][2] = FixedToFloat(z_min);
-   vertices[1][0] = FixedToFloat(seg->v1->x);
-   vertices[1][1] = FixedToFloat(seg->v1->y);
-   vertices[1][2] = FixedToFloat(z_max);
+    vertices[0][0] = FixedToFloat(seg->v1->x);
+    vertices[0][1] = FixedToFloat(seg->v1->y);
+    vertices[0][2] = FixedToFloat(z_min);
+    vertices[1][0] = FixedToFloat(seg->v1->x);
+    vertices[1][1] = FixedToFloat(seg->v1->y);
+    vertices[1][2] = FixedToFloat(z_max);
 
-   vertices[2][0] = FixedToFloat(seg->v2->x);
-   vertices[2][1] = FixedToFloat(seg->v2->y);
-   vertices[2][2] = FixedToFloat(z_min);
-   vertices[3][0] = FixedToFloat(seg->v2->x);
-   vertices[3][1] = FixedToFloat(seg->v2->y);
-   vertices[3][2] = FixedToFloat(z_max);
+    vertices[2][0] = FixedToFloat(seg->v2->x);
+    vertices[2][1] = FixedToFloat(seg->v2->y);
+    vertices[2][2] = FixedToFloat(z_min);
+    vertices[3][0] = FixedToFloat(seg->v2->x);
+    vertices[3][1] = FixedToFloat(seg->v2->y);
+    vertices[3][2] = FixedToFloat(z_max);
 
-   for( i = 0; i < 4; i++ )
-   	RP_VecMatMul( vertices[i], view_matrix, vertices_proj[i] );
+    for( i = 0; i < 4; i++ )
+    	RP_VecMatMul( vertices[i], view_matrix, vertices_proj[i] );
 
    // back side
    //if (vertices_proj[0][2] <= 0.0f ||  vertices_proj[2][2] <= 0.0f ) return;
 
-   for( i = 0; i < 4; i++ )
-   {
-   	if (vertices_proj[i][2] <= 0.0f ) continue;
+    int color_index = ((int)seg) & 255;
+    for( i = 0; i < 4; i++ )
+    {
+   	if (vertices_proj[i][2] <= 0.0f ) return;
 
-   	vertices_proj[i][0] /= vertices_proj[i][2];
-   	vertices_proj[i][1] /= vertices_proj[i][2];
+    	vertices_proj[i][0] /= vertices_proj[i][2];
+    	vertices_proj[i][1] /= vertices_proj[i][2];
 
-   	screen_pos[0] = (int)((vertices_proj[i][0] + 1.0f ) * ((float) SCREENWIDTH) * 0.5f );
-   	screen_pos[1] = (int)((vertices_proj[i][1] + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
-   	if (screen_pos[0] < 0 || screen_pos[0] >=  SCREENWIDTH) continue;
-   	if (screen_pos[1] < 0 || screen_pos[1] >= SCREENHEIGHT) continue;
+    	screen_pos[i][0] = (int)((vertices_proj[i][0] + 1.0f ) * ((float) SCREENWIDTH) * 0.5f );
+    	screen_pos[i][1] = (int)((vertices_proj[i][1] + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
+    	if (screen_pos[i][0] < 0 || screen_pos[i][0] >=  SCREENWIDTH) return;
+    	if (screen_pos[i][1] < 0 || screen_pos[i][1] >= SCREENHEIGHT) return;
 
-   	V_DrawPixel( screen_pos[0], screen_pos[1], /*112*/((int)seg) & 255 );
-   }
+    	//V_DrawPixel( screen_pos[i][0], screen_pos[i][1], /*112*/color_index );
+    }
+
+    pixel_t* framebuffer = VP_GetFramebuffer();
+    pixel_t* palette = VP_GetPaletteStorage();
+
+    int dx = screen_pos[2][0] - screen_pos[0][0];
+
+    int right_side, left_side;
+    if ( dx < 0 )
+    {
+    	dx = -dx;
+
+    	left_side = 2;
+	right_side = 0;
+    }
+    else if ( dx > 0 )
+    {
+	left_side = 0;
+	right_side = 2;
+    }
+    else return;
+
+    fixed_t top_dy =    ((screen_pos[right_side+1][1] - screen_pos[left_side+1][1]) << FRACBITS) / dx;
+    fixed_t bottom_dy = ((screen_pos[right_side  ][1] - screen_pos[left_side  ][1]) << FRACBITS) / dx;
+
+    fixed_t top_y =    screen_pos[left_side+1][1] << FRACBITS;
+    fixed_t bottom_y = screen_pos[left_side  ][1] << FRACBITS;
+
+    int x = screen_pos[left_side][0];
+
+    while( x < screen_pos[right_side][0])
+    {
+    	int y = top_y >> FRACBITS;
+    	int y_end = bottom_y >> FRACBITS;
+    	while( y < y_end)
+    	{
+    		framebuffer[ x + y * SCREENWIDTH ] = palette[ color_index ];
+    		y++;
+    	}
+
+    	top_y   +=  top_dy;
+    	bottom_y += bottom_dy;
+    	x++;
+    }
 }
 
 void PR_DrawWall(seg_t* seg)
@@ -193,7 +237,7 @@ void RP_RenderBSPNode (int bspnum)
     bsp = &nodes[bspnum];
 
     // Decide which side the view point is on.
-    side = R_PointOnSide (viewx, viewy, bsp);
+    side = 1 ^ R_PointOnSide (viewx, viewy, bsp);
 
     // Recursively divide front space.
     RP_RenderBSPNode (bsp->children[side]);
