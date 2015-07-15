@@ -8,6 +8,7 @@
 #include "../v_video.h"
 
 static float view_matrix[16];
+static fixed_t view_pos[3];
 
 static float FixedToFloat(fixed_t f)
 {
@@ -57,6 +58,10 @@ void RP_BuildViewMatrix(player_t *player)
     float		projection_matrix[16];
     float		tmp_mat[2][16];
     int			angle_num;
+
+    view_pos[0] = player->mo->x;
+    view_pos[1] = player->mo->y;
+    view_pos[2] = player->viewz;
 
     RP_MatIdentity(translate_matrix);
     translate_matrix[12] = - FixedToFloat(player->mo->x);
@@ -180,21 +185,28 @@ void PR_DrawWall(seg_t* seg)
 {
     sector_t*	sector;
 
-    if (seg->frontsector && seg->backsector)
-    {
-    	if (seg->backsector->floorheight > seg->frontsector->floorheight )
-		PR_DrawWallPart( seg, seg->frontsector->floorheight, seg->backsector->floorheight );
-	else if (seg->backsector->floorheight < seg->frontsector->floorheight )
-		PR_DrawWallPart( seg, seg->backsector->floorheight, seg->frontsector->floorheight );
+    fixed_t seg_normal[2];
+    fixed_t normal_angle = (ANG90 + seg->angle >> ANGLETOFINESHIFT) & FINEMASK;
+    seg_normal[0] = finecosine[ normal_angle ];
+    seg_normal[1] = finesine  [ normal_angle ];
 
-	if (seg->backsector->ceilingheight > seg->frontsector->ceilingheight )
-		PR_DrawWallPart( seg, seg->frontsector->ceilingheight, seg->backsector->ceilingheight );
-	else if (seg->backsector->ceilingheight < seg->frontsector->ceilingheight )
-		PR_DrawWallPart( seg, seg->backsector->ceilingheight, seg->frontsector->ceilingheight );
-    }
-    else
+    fixed_t vec_to_seg[2];
+    vec_to_seg[0] = seg->v1->x - view_pos[0];
+    vec_to_seg[1] = seg->v1->y - view_pos[1];
+
+    fixed_t dot_product = FixedMul(seg_normal[0], vec_to_seg[0] ) + FixedMul(seg_normal[1], vec_to_seg[1] );
+
+    if(seg->frontsector && seg->backsector)
     {
-    	sector = seg->frontsector ? seg->frontsector : seg->backsector;
+    	if (seg->backsector->floorheight > seg->frontsector->floorheight && dot_product > 0 )
+		PR_DrawWallPart( seg, seg->frontsector->floorheight, seg->backsector->floorheight );
+
+	if (seg->backsector->ceilingheight > seg->frontsector->ceilingheight && dot_product < 0 )
+		PR_DrawWallPart( seg, seg->frontsector->ceilingheight, seg->backsector->ceilingheight );
+    }
+    else if ( dot_product > 0 && seg->frontsector)
+    {
+    	sector = seg->frontsector;
     	PR_DrawWallPart( seg, sector->floorheight, sector->ceilingheight );
     }
 }
@@ -237,7 +249,7 @@ void RP_RenderBSPNode (int bspnum)
     bsp = &nodes[bspnum];
 
     // Decide which side the view point is on.
-    side = 1 ^ R_PointOnSide (viewx, viewy, bsp);
+    side = 1 ^ R_PointOnSide (view_pos[0], view_pos[1], bsp);
 
     // Recursively divide front space.
     RP_RenderBSPNode (bsp->children[side]);
