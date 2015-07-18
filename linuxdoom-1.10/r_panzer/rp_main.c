@@ -185,8 +185,10 @@ void PR_DrawWall(seg_t* seg)
 {
     sector_t*	sector;
 
+    if(seg->frontsector == seg->backsector) return;
+
     fixed_t seg_normal[2];
-    fixed_t normal_angle = (ANG90 + seg->angle >> ANGLETOFINESHIFT) & FINEMASK;
+    fixed_t normal_angle = ((ANG90 + seg->angle) >> ANGLETOFINESHIFT) & FINEMASK;
     seg_normal[0] = finecosine[ normal_angle ];
     seg_normal[1] = finesine  [ normal_angle ];
 
@@ -211,6 +213,98 @@ void PR_DrawWall(seg_t* seg)
     }
 }
 
+void PR_DrawSubsectorFlat(subsector_t* sub, fixed_t height)
+{
+    int			line_seg;
+    int			i, j;
+    seg_t*		seg;
+
+    short left_border [MAX_SCREENWIDTH];
+    short right_border[MAX_SCREENWIDTH];
+    int y_max = 0, y_min = SCREENHEIGHT;
+    for(i = 0; i < SCREENHEIGHT; i++ )
+    {
+    	left_border[i] = SCREENWIDTH;
+    	right_border[i] = 0;
+    }
+
+int color_index = ((int)sub) & 255;
+
+    for( seg = segs + sub->firstline, i = 0; i< sub->numlines; seg++, i++ )
+    {
+    	int v_ind;
+    	/*int fineangle = (seg->angle >> ANGLETOFINESHIFT) & FINEMASK;
+    	if( FixedMul(finesine  [fineangle], seg->v1->x - seg->v2->x) +
+	    FixedMul(finecosine[fineangle], seg->v1->y - seg->v2->y) >= 0)
+	    v_ind = 0;
+    	else v_ind = 1;*/
+    	v_ind = 1;
+
+	float vertices[2][3];
+	int   screen_vertices[2][2];
+
+    	vertices[0][0] = FixedToFloat( seg->v1->x );
+    	vertices[0][1] = FixedToFloat( seg->v1->y );
+    	vertices[0][2] = FixedToFloat(height);
+
+    	vertices[1][0] = FixedToFloat( seg->v2->x );
+    	vertices[1][1] = FixedToFloat( seg->v2->y );
+    	vertices[1][2] = FixedToFloat(height);
+
+    	for( j = 0; j < 2; j++ )
+    	{
+    		float vertex_proj[3];
+    		RP_VecMatMul( vertices[j], view_matrix, vertex_proj );
+		if (vertex_proj[2] < 0.0f ) return;
+		vertex_proj[0] /= vertex_proj[2];
+		vertex_proj[1] /= vertex_proj[2];
+
+		screen_vertices[j][0] = (int)((vertex_proj[0] + 1.0f ) * ((float)  SCREENWIDTH) * 0.5f );
+		screen_vertices[j][1] = (int)((vertex_proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f );
+		if (screen_vertices[j][0] < 0 || screen_vertices[j][0] >=  SCREENWIDTH) return;
+		if (screen_vertices[j][1] < 0 || screen_vertices[j][1] >= SCREENHEIGHT) return;
+
+		if(screen_vertices[j][1] < y_min ) y_min = screen_vertices[j][1];
+		if(screen_vertices[j][1] > y_max) y_max = screen_vertices[j][1];
+    	}
+
+    	int dy = screen_vertices[1][1] - screen_vertices[0][1];
+    	if (dy == 0) continue;
+    	//int y_step = dy > 0 ? 1 : -1;
+    	v_ind = dy > 0 ? 0 : 1;
+    	if (dy < 0 ) dy = -dy;
+    	int y;
+	fixed_t x = screen_vertices[v_ind][0] << FRACBITS;
+	fixed_t x_step = ((screen_vertices[v_ind^1][0] - screen_vertices[v_ind][0]) << FRACBITS) / dy;
+	int dir = v_ind ^ (dy > 0 ? 1 : 0);
+	for ( y = screen_vertices[v_ind][1]; y <= screen_vertices[v_ind^1][1]; y++, x += x_step )
+	{
+		V_DrawPixel( x >> FRACBITS, y, dir * 64 + 128 );
+	}
+
+	x = screen_vertices[v_ind][0] << FRACBITS;
+	if (!dir)
+	{
+	    for ( y = screen_vertices[v_ind][1]; y <= screen_vertices[v_ind^1][1]; y ++, x += x_step )
+		left_border[y] = x >>FRACBITS;
+	}
+	else
+	{
+	    for ( y = screen_vertices[v_ind][1]; y <= screen_vertices[v_ind^1][1]; y ++, x += x_step )
+		right_border[y] = x >>FRACBITS;
+	}
+    }
+
+
+    int y;
+    for( y = y_min; y < y_max; y++ )
+    {
+    	int x;
+    	for( x = left_border[y]; x < right_border[y]; x++ )
+    	    V_DrawPixel( x, y, color_index );
+    }
+}
+
 void RP_Subsector(int num)
 {
     subsector_t*	sub;
@@ -225,6 +319,8 @@ void RP_Subsector(int num)
     	seg = &segs[ line_seg ];
 	PR_DrawWall(seg);
     }
+    //PR_DrawSubsectorFlat( sub, sub->sector->floorheight );
+    //PR_DrawSubsectorFlat( sub, sub->sector->ceilingheight );
 }
 //
 // RenderBSPNode
