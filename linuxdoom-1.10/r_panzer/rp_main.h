@@ -3,6 +3,6 @@
 
 #include "../d_player.h"
 
-void RP_RenderPlayerView (player_t *player);
+void RP_Init();
 
 #endif//__RP_MAIN__

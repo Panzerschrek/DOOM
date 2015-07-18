@@ -294,13 +294,13 @@ void D_Display (void)
     // draw the view directly
     if (gamestate == GS_LEVEL && gametic)
     {
-	//if (v_32bit) RP_RenderPlayerView();
-	//else R_RenderPlayerView ();
-
-	(v_32bit ? RP_RenderPlayerView : R_RenderPlayerView) (&players[displayplayer]);
-
-	if (automapactive) AM_Drawer();
-	else R_FillBackScreen();
+	if (automapactive)
+	    AM_Drawer();
+	else
+	{
+	    R_RenderPlayerView(&players[displayplayer]);
+	    if(!v_32bit) R_FillBackScreen();
+	}
 	ST_Drawer (viewheight == SCREENHEIGHT, redrawsbar );
     }
 
@@ -1103,7 +1103,7 @@ void D_DoomMain (void)
     M_Init ();
 
     printf ("R_Init: Init DOOM refresh daemon - ");
-    R_Init ();
+    (v_32bit ? RP_Init : R_Init)();
 
     printf ("\nP_Init: Init Playloop state.\n");
     P_Init ();

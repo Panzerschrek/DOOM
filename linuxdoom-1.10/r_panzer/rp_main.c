@@ -4,11 +4,12 @@
 #include "../m_fixed.h"
 #include "../p_setup.h"
 #include "../r_main.h"
+#include "../r_things.h"
 #include "../tables.h"
 #include "../v_video.h"
 
-static float view_matrix[16];
-static fixed_t view_pos[3];
+static float g_view_matrix[16];
+static fixed_t g_view_pos[3];
 
 static float FixedToFloat(fixed_t f)
 {
@@ -59,9 +60,9 @@ void RP_BuildViewMatrix(player_t *player)
     float		tmp_mat[2][16];
     int			angle_num;
 
-    view_pos[0] = player->mo->x;
-    view_pos[1] = player->mo->y;
-    view_pos[2] = player->viewz;
+    g_view_pos[0] = player->mo->x;
+    g_view_pos[1] = player->mo->y;
+    g_view_pos[2] = player->viewz;
 
     RP_MatIdentity(translate_matrix);
     translate_matrix[12] = - FixedToFloat(player->mo->x);
@@ -91,7 +92,7 @@ void RP_BuildViewMatrix(player_t *player)
 
     RP_MatMul( translate_matrix, rotate_matrix, tmp_mat[0] );
     RP_MatMul( tmp_mat[0], basis_change_matrix, tmp_mat[1] );
-    RP_MatMul( tmp_mat[1], projection_matrix, view_matrix );
+    RP_MatMul( tmp_mat[1], projection_matrix, g_view_matrix );
 }
 
 void PR_DrawWallPart(seg_t* seg, fixed_t z_min, fixed_t z_max)
@@ -116,7 +117,7 @@ void PR_DrawWallPart(seg_t* seg, fixed_t z_min, fixed_t z_max)
     vertices[3][2] = FixedToFloat(z_max);
 
     for( i = 0; i < 4; i++ )
-    	RP_VecMatMul( vertices[i], view_matrix, vertices_proj[i] );
+    	RP_VecMatMul( vertices[i], g_view_matrix, vertices_proj[i] );
 
    // back side
    //if (vertices_proj[0][2] <= 0.0f ||  vertices_proj[2][2] <= 0.0f ) return;
@@ -193,8 +194,8 @@ void PR_DrawWall(seg_t* seg)
     seg_normal[1] = finesine  [ normal_angle ];
 
     fixed_t vec_to_seg[2];
-    vec_to_seg[0] = seg->v1->x - view_pos[0];
-    vec_to_seg[1] = seg->v1->y - view_pos[1];
+    vec_to_seg[0] = seg->v1->x - g_view_pos[0];
+    vec_to_seg[1] = seg->v1->y - g_view_pos[1];
 
     fixed_t dot_product = FixedMul(seg_normal[0], vec_to_seg[0] ) + FixedMul(seg_normal[1], vec_to_seg[1] );
 
@@ -254,7 +255,7 @@ int color_index = ((int)sub) & 255;
     	for( j = 0; j < 2; j++ )
     	{
     		float vertex_proj[3];
-    		RP_VecMatMul( vertices[j], view_matrix, vertex_proj );
+    		RP_VecMatMul( vertices[j], g_view_matrix, vertex_proj );
 		if (vertex_proj[2] < 0.0f ) return;
 		vertex_proj[0] /= vertex_proj[2];
 		vertex_proj[1] /= vertex_proj[2];
@@ -345,7 +346,7 @@ void RP_RenderBSPNode (int bspnum)
     bsp = &nodes[bspnum];
 
     // Decide which side the view point is on.
-    side = 1 ^ R_PointOnSide (view_pos[0], view_pos[1], bsp);
+    side = 1 ^ R_PointOnSide (g_view_pos[0], g_view_pos[1], bsp);
 
     // Recursively divide front space.
     RP_RenderBSPNode (bsp->children[side]);
@@ -355,7 +356,7 @@ void RP_RenderBSPNode (int bspnum)
     RP_RenderBSPNode (bsp->children[side^1]);
 }
 
-void RP_RenderPlayerView (player_t *player)
+void R_32b_RenderPlayerView (player_t *player)
 {
     //V_FillRect( SCREENWIDTH / 2 - 2, SCREENHEIGHT / 2 - 2, 4, 4, 32 );
 
@@ -363,4 +364,38 @@ void RP_RenderPlayerView (player_t *player)
 
     RP_BuildViewMatrix(player);
     RP_RenderBSPNode(numnodes-1);
+}
+
+// PANZER - STUBS
+void R_32b_SetViewSize(int blocks,int detail){}
+void R_32b_InitSprites (char** namelist){}
+void R_32b_ClearSprites(){}
+
+void R_32b_InitInterface()
+{
+    void R_32b_InitData (void);
+    void R_32b_PrecacheLevel(void);
+    int R_32b_FlatNumForName(char* name);
+    int R_32b_TextureNumForName(char* name);
+    int R_32b_CheckTextureNumForName(char* name);
+
+    R_SetViewSize = R_32b_SetViewSize;
+    R_RenderPlayerView = R_32b_RenderPlayerView;
+
+    R_InitData = R_32b_InitData;
+    R_InitSprites = R_32b_InitSprites;
+    R_ClearSprites = R_32b_ClearSprites;
+    R_PrecacheLevel = R_32b_PrecacheLevel;
+
+    R_FlatNumForName = R_32b_FlatNumForName;
+    R_TextureNumForName = R_32b_TextureNumForName;
+    R_CheckTextureNumForName = R_32b_CheckTextureNumForName;
+}
+
+void RP_Init()
+{
+    void R_32b_InitData(void);
+
+    R_32b_InitInterface();
+    R_32b_InitData();
 }
