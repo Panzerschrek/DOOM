@@ -106,6 +106,7 @@ static void R_32b_InitPalette()
 	g_textures_palette[i].components[0] = playpal[j+2];
 	g_textures_palette[i].components[1] = playpal[j+1];
 	g_textures_palette[i].components[2] = playpal[j+0];
+	g_textures_palette[i].components[3] = 255;
     }
 
 }

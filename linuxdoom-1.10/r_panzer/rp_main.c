@@ -14,9 +14,29 @@
 static float		g_view_matrix[16];
 static fixed_t		g_view_pos[3];
 
-seg_t*			g_cur_seg;
-side_t*			g_cur_side;
+static seg_t*		g_cur_seg;
+static side_t*		g_cur_side;
+static wall_texture_t*	g_cur_wall_texture;
+static boolean		g_cur_wall_texture_transparent;
+static int		g_cur_column_light;
 
+
+// uses g_cur_column_light
+// g_cur_column_light = 256 means original pixel color
+static inline pixel_t LightPixel(pixel_t p)
+{
+   int c[3];
+   c[0] = (p.components[0] * g_cur_column_light) >> 8;
+   if( c[0] > 255 ) c[0] = 255; p.components[0] = c[0];
+
+   c[1] = (p.components[1] * g_cur_column_light) >> 8;
+   if( c[1] > 255 ) c[1] = 255; p.components[1] = c[1];
+
+   c[2] = (p.components[2] * g_cur_column_light) >> 8;
+   if( c[2] > 255 ) c[2] = 255; p.components[2] = c[2];
+
+   return p;
+}
 
 static int PositiveMod( int x, int y )
 {
@@ -116,7 +136,7 @@ void RP_BuildViewMatrix(player_t *player)
     RP_MatMul( tmp_mat[1], projection_matrix, g_view_matrix );
 }
 
-void PR_DrawWallPart(int texture_num, fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
+void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 {
     float	vertices[4][3];
     float	vertices_proj[4][3];
@@ -154,58 +174,64 @@ void PR_DrawWallPart(int texture_num, fixed_t top_tex_offset, fixed_t z_min, fix
     pixel_t* framebuffer = VP_GetFramebuffer();
 
     int dx = screen_pos[2][0] - screen_pos[0][0];
-    int right_side, left_side;
-    if ( dx < 0 )
-    {
-    	dx = -dx;
-    	left_side = 2;
-	right_side = 0;
-    }
-    else if ( dx > 0 )
-    {
-	left_side = 0;
-	right_side = 2;
-    }
-    else return;
+    if ( dx <= 0 ) return;
 
-    fixed_t top_dy =    ((screen_pos[right_side+1][1] - screen_pos[left_side+1][1]) << FRACBITS) / dx;
-    fixed_t bottom_dy = ((screen_pos[right_side  ][1] - screen_pos[left_side  ][1]) << FRACBITS) / dx;
+    fixed_t top_dy =    ((screen_pos[3][1] - screen_pos[1][1]) << FRACBITS) / dx;
+    fixed_t bottom_dy = ((screen_pos[2][1] - screen_pos[0][1]) << FRACBITS) / dx;
 
-    fixed_t top_y =    screen_pos[left_side+1][1] << FRACBITS;
-    fixed_t bottom_y = screen_pos[left_side  ][1] << FRACBITS;
+    fixed_t top_y =    screen_pos[1][1] << FRACBITS;
+    fixed_t bottom_y = screen_pos[0][1] << FRACBITS;
 
-    wall_texture_t* texture = GetWallTexture(texture_num);
+    fixed_t tex_width =  g_cur_wall_texture ->width  << FRACBITS;
+    fixed_t tex_height = g_cur_wall_texture ->height << FRACBITS;
+
     fixed_t u = g_cur_side->textureoffset + g_cur_seg->offset;
     fixed_t tc_u_step = GetSegLength(g_cur_seg) / dx;
 
-    int x = screen_pos[left_side][0];
     pixel_t* dst;
-    while( x < screen_pos[right_side][0])
+    pixel_t* src;
+    pixel_t pixel;
+    int x = screen_pos[0][0];
+    g_cur_column_light = g_cur_side->sector->lightlevel * 4 / 3; // light, wits some overbrighting
+    while( x < screen_pos[2][0])
     {
-    	u %= (texture->width << FRACBITS );
+	if( u >= tex_width) u %= tex_width;
 
-    	int y = top_y >> FRACBITS;
-    	int y_end = bottom_y >> FRACBITS;
-    	dst = framebuffer + x + y * SCREENWIDTH;
+	int y = top_y >> FRACBITS;
+	int y_end = bottom_y >> FRACBITS;
 
-    	fixed_t v = top_tex_offset + g_cur_side->rowoffset;
-    	fixed_t v_step;
-    	if( y != y_end ) v_step = (z_max - z_min) / (y_end - y);
+	dst = framebuffer + x + y * SCREENWIDTH;
+	src = g_cur_wall_texture->mip[0] + (u>>FRACBITS) * g_cur_wall_texture->height;
 
-    	while( y < y_end)
-    	{
-    		v %= (texture->height << FRACBITS );
-    		*dst = texture->mip[0][ (v>>FRACBITS) + (u>>FRACBITS) * texture->height ];
-    		y++;
-    		dst += SCREENWIDTH;
-    		v += v_step;
-    	}
+	fixed_t v = top_tex_offset + g_cur_side->rowoffset;
+	fixed_t v_step;
+	if( y != y_end ) v_step = (z_max - z_min) / (y_end - y);
+
+	if( g_cur_wall_texture_transparent)
+	    while( y < y_end) // draw alpha-tested (TODO - alpha - blend)
+	    {
+		if (v >= tex_height) v %= tex_height;
+		pixel = src[ (v>>FRACBITS) ];
+		if( pixel.components[3] > 128 ) *dst = LightPixel(pixel);
+		y++;
+		dst += SCREENWIDTH;
+		v += v_step;
+	    }
+	else
+	    while( y < y_end) // draw solid
+	    {
+		if (v >= tex_height) v %= tex_height;
+		*dst = LightPixel(src[ (v>>FRACBITS) ]);
+		y++;
+		dst += SCREENWIDTH;
+		v += v_step;
+	    }
 
     	top_y    += top_dy;
     	bottom_y += bottom_dy;
     	x++;
     	u += tc_u_step;
-    }
+    } // for x
 }
 
 void PR_DrawWall()
@@ -215,6 +241,7 @@ void PR_DrawWall()
     fixed_t	vec_to_seg[2];
     fixed_t	normal_angle;
     fixed_t	dot_product;
+    fixed_t	h;
 
     if(g_cur_seg->frontsector == g_cur_seg->backsector) return;
 
@@ -232,46 +259,88 @@ void PR_DrawWall()
 
     if(g_cur_seg->frontsector && g_cur_seg->backsector)
     {
-	if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
-	    v_offset =
-		PositiveMod(
-		    g_cur_seg->frontsector->floorheight - g_cur_seg->backsector->floorheight,
-		    GetWallTexture(g_cur_side->bottomtexture)->height << FRACBITS);
-	else v_offset = 0;
-
+	// bottom texture
 	if (g_cur_seg->backsector->floorheight > g_cur_seg->frontsector->floorheight)
+	{
+	    g_cur_wall_texture = GetWallTexture(texturetranslation[g_cur_side->bottomtexture]);
+	    g_cur_wall_texture_transparent = false;
+
+	    if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
+		v_offset =
+		    PositiveMod(
+			g_cur_seg->frontsector->floorheight - g_cur_seg->backsector->floorheight,
+			g_cur_wall_texture->height << FRACBITS);
+	    else v_offset = 0;
+
 	    PR_DrawWallPart(
-		texturetranslation[g_cur_side->bottomtexture],
 		v_offset,
 		g_cur_seg->frontsector->floorheight,
-		g_cur_seg->backsector->floorheight );
+		g_cur_seg->backsector->floorheight);
+	}
 
-	if (g_cur_seg->linedef->flags & ML_DONTPEGTOP)
-	    v_offset = 0;
-    	else
-	    v_offset =
-		PositiveMod(
-		    g_cur_seg->backsector->ceilingheight - g_cur_seg->frontsector->ceilingheight,
-		    GetWallTexture(g_cur_side->toptexture)->height * FRACUNIT );
-
+	// top texture
 	if (g_cur_seg->backsector->ceilingheight < g_cur_seg->frontsector->ceilingheight)
+	{
+	    g_cur_wall_texture = GetWallTexture(texturetranslation[g_cur_side->toptexture]);
+	    g_cur_wall_texture_transparent = false;
+
+	    if (g_cur_seg->linedef->flags & ML_DONTPEGTOP)
+		v_offset = 0;
+	    else
+		v_offset =
+		    PositiveMod(
+			g_cur_seg->backsector->ceilingheight - g_cur_seg->frontsector->ceilingheight,
+			g_cur_wall_texture->height * FRACUNIT );
+
 	    PR_DrawWallPart(
-		texturetranslation[g_cur_side->toptexture],
 		v_offset,
 		g_cur_seg->backsector->ceilingheight,
-		g_cur_seg->frontsector->ceilingheight );
+		g_cur_seg->frontsector->ceilingheight);
+	}
+
+	// middle texture
+	if( g_cur_seg->sidedef->midtexture)
+	{
+	    g_cur_wall_texture = GetWallTexture(texturetranslation[g_cur_side->midtexture]);
+	    g_cur_wall_texture_transparent = true;
+
+	    if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
+	    {
+		h = g_cur_seg->frontsector->floorheight > g_cur_seg->backsector->floorheight
+		    ? g_cur_seg->frontsector->floorheight
+		    : g_cur_seg->backsector->floorheight;
+
+		PR_DrawWallPart(
+		    0,
+		    h,
+		    h + (g_cur_wall_texture->height << FRACBITS));
+	    }
+	    else
+	    {
+		h = g_cur_seg->frontsector->ceilingheight < g_cur_seg->backsector->ceilingheight
+		    ? g_cur_seg->frontsector->ceilingheight
+		    : g_cur_seg->backsector->ceilingheight;
+
+		PR_DrawWallPart(
+		    0,
+		    h - (g_cur_wall_texture->height << FRACBITS),
+		    h );
+	    }
+	}
     }
     else if (g_cur_seg->frontsector)
     {
+    	g_cur_wall_texture = GetWallTexture(texturetranslation[g_cur_side->midtexture]);
+    	g_cur_wall_texture_transparent = false;
+
 	if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
 	    v_offset =
 		PositiveMod(
 		    g_cur_seg->frontsector->floorheight - g_cur_seg->frontsector->ceilingheight,
-		    GetWallTexture(g_cur_seg->sidedef->midtexture)->height * FRACUNIT );
+		    g_cur_wall_texture->height * FRACUNIT );
 	else v_offset = 0;
 
 	PR_DrawWallPart(
-	    texturetranslation[g_cur_side->midtexture],
 	    v_offset,
 	    g_cur_seg->frontsector->floorheight,
 	    g_cur_seg->frontsector->ceilingheight );
