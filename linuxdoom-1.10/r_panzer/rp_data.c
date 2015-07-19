@@ -446,3 +446,21 @@ int R_32b_TextureNumForName(char* name)
     }
     return i;
 }
+
+wall_texture_t* GetWallTexture(int num)
+{
+    wall_texture_t* tex = &g_wall_textures[num];
+    if (!tex->raw_data)
+	R_32b_LoadWallTexture(num);
+
+    return tex;
+}
+
+flat_texture_t* GetFlatTexture(int num)
+{
+    flat_texture_t* tex = &g_flat_textures[num];
+    if (!tex->raw_data)
+	R_32b_LoadFlatTexture(num);
+
+    return tex;
+}

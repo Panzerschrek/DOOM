@@ -247,6 +247,7 @@
 		<Unit filename="linuxdoom-1.10\r_panzer\rp_data.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="linuxdoom-1.10\r_panzer\rp_data.h" />
 		<Unit filename="linuxdoom-1.10\r_panzer\rp_defs.h" />
 		<Unit filename="linuxdoom-1.10\r_panzer\rp_main.c">
 			<Option compilerVar="CC" />
