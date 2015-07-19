@@ -10,6 +10,7 @@ typedef union pixel_u
 } pixel_t;
 
 /*
+512 x 512
 256 x 256
 128 x 128
  64 x  64
@@ -20,10 +21,10 @@ typedef union pixel_u
   2 x   2
   1 x   1
 */
-#define RP_MAX_WALL_MIPS 9
+#define RP_MAX_WALL_MIPS		10
 
-#define RP_FLAT_TEXTURE_SIZE_LOG2		6
-#define RP_FLAT_TEXTURE_SIZE			64
+#define RP_FLAT_TEXTURE_SIZE_LOG2	6
+#define RP_FLAT_TEXTURE_SIZE		64
 
 typedef struct wall_texture_s
 {
@@ -36,13 +37,18 @@ typedef struct wall_texture_s
     pixel_t*	raw_data;
     // pointers to pixels of mip in allocated memory. mip[0] = raw_data
     pixel_t*	mip[ RP_MAX_WALL_MIPS ];
-} wall_textue_t;
+    int		max_mip;
+
+    boolean used;
+} wall_texture_t;
 
 typedef struct flat_texture_s
 {
     // same as in wall_texture_t
     pixel_t*	raw_data;
     pixel_t*	mip[ RP_FLAT_TEXTURE_SIZE_LOG2 + 1 ];
+
+    boolean used;
 } flat_texture_t;
 
 #endif//__RP_DEFS__

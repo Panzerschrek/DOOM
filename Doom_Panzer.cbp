@@ -236,11 +236,17 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="linuxdoom-1.10\r_draw.h" />
+		<Unit filename="linuxdoom-1.10\r_interf.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="linuxdoom-1.10\r_local.h" />
 		<Unit filename="linuxdoom-1.10\r_main.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="linuxdoom-1.10\r_main.h" />
+		<Unit filename="linuxdoom-1.10\r_panzer\rp_data.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="linuxdoom-1.10\r_panzer\rp_defs.h" />
 		<Unit filename="linuxdoom-1.10\r_panzer\rp_main.c">
 			<Option compilerVar="CC" />
