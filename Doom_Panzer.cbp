@@ -26,6 +26,7 @@
 				<Option type="1" />
 				<Option compiler="mingw_qt_53" />
 				<Compiler>
+					<Add option="-march=pentium4" />
 					<Add option="-O2" />
 				</Compiler>
 				<Linker>
