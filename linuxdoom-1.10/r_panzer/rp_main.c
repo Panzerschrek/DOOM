@@ -11,8 +11,10 @@
 #include "../tables.h"
 #include "../v_video.h"
 
+// special value for inv_z and u/z interpolations
+#define PR_SEG_PART_BITS 5
 
-#define RP_Z_NEAR_FIXED (4 * 65536)
+#define RP_Z_NEAR_FIXED (8 * 65536)
 
 #define RP_HALF_FOV_X ANG45
 
@@ -40,6 +42,7 @@ static struct
     vertex_t	v[2];
     fixed_t	screen_x[2];
     float	screen_z[2];
+    fixed_t	inv_z[2];
 
     fixed_t	tc_u_offset;
     fixed_t	length;
@@ -109,6 +112,9 @@ static void ProjectCurSeg()
     g_cur_seg_data.screen_x[1] = FloatToFixed((proj_x[1] + 1.0f ) * ((float) SCREENWIDTH) * 0.5f );
     g_cur_seg_data.screen_z[0] = proj_z[0];
     g_cur_seg_data.screen_z[1] = proj_z[1];
+
+    g_cur_seg_data.inv_z[0] = FloatToFixed(1.0f / proj_z[0]);
+    g_cur_seg_data.inv_z[1] = FloatToFixed(1.0f / proj_z[1]);
 }
 
 // returns true if segment fully clipped
@@ -305,8 +311,17 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
     fixed_t tex_width  = g_cur_wall_texture ->width  << FRACBITS;
     fixed_t tex_height = g_cur_wall_texture ->height << FRACBITS;
 
-    fixed_t tc_u_step = FixedDiv(g_cur_seg_data.length, dx);
-    fixed_t u = g_cur_side->textureoffset + g_cur_seg_data.tc_u_offset + FixedMul(ddx, tc_u_step);
+    fixed_t vert_u[2];
+    vert_u[0] = PositiveMod(g_cur_side->textureoffset + g_cur_seg_data.tc_u_offset, tex_width);
+    vert_u[1] = vert_u[0] + g_cur_seg_data.length;
+    fixed_t u_div_z[2];
+    u_div_z[0] = FixedMul(vert_u[0], g_cur_seg_data.inv_z[0]);
+    u_div_z[1] = FixedMul(vert_u[1], g_cur_seg_data.inv_z[1]);
+
+    // interpolate value in range [0; 1 ^ PR_SEG_PART_BITS ]
+    // becouse direct interpolation of u/z and 1/z can be inaccurate
+    fixed_t part_step = FixedDiv(FRACUNIT << PR_SEG_PART_BITS, dx);
+    fixed_t part = FixedMul(part_step, ddx);
 
     pixel_t* dst;
     pixel_t* dst_end;
@@ -315,6 +330,11 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
     g_cur_column_light = g_cur_side->sector->lightlevel * 258;
     while (x < x_end)
     {
+	fixed_t part_f16 = part >> PR_SEG_PART_BITS;
+	fixed_t one_minus_part_f16 = FRACUNIT - (part>>PR_SEG_PART_BITS);
+	fixed_t cur_u_div_z = FixedMul(part_f16, u_div_z[1]) + FixedMul(one_minus_part_f16, u_div_z[0]);
+	fixed_t inv_z = FixedMul(part_f16, g_cur_seg_data.inv_z[1]) + FixedMul(one_minus_part_f16, g_cur_seg_data.inv_z[0]);
+	fixed_t u = FixedDiv(cur_u_div_z, inv_z);
 	if( u >= tex_width) u %= tex_width;
 
 	int y_begin = FixedRoundToInt(top_y   );
@@ -359,7 +379,7 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 	top_y    += top_dy;
 	bottom_y += bottom_dy;
 	x++;
-	u += tc_u_step;
+	part += part_step;
     } // for x
 }
 
