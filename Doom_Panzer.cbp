@@ -26,6 +26,7 @@
 				<Option type="1" />
 				<Option compiler="mingw_qt_53" />
 				<Compiler>
+					<Add option="-march=pentium4" />
 					<Add option="-O2" />
 				</Compiler>
 				<Linker>
@@ -236,11 +237,27 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="linuxdoom-1.10\r_draw.h" />
+		<Unit filename="linuxdoom-1.10\r_interf.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="linuxdoom-1.10\r_local.h" />
 		<Unit filename="linuxdoom-1.10\r_main.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="linuxdoom-1.10\r_main.h" />
+		<Unit filename="linuxdoom-1.10\r_panzer\rp_data.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="linuxdoom-1.10\r_panzer\rp_data.h" />
+		<Unit filename="linuxdoom-1.10\r_panzer\rp_defs.h" />
+		<Unit filename="linuxdoom-1.10\r_panzer\rp_main.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="linuxdoom-1.10\r_panzer\rp_main.h" />
+		<Unit filename="linuxdoom-1.10\r_panzer\rp_video.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="linuxdoom-1.10\r_panzer\rp_video.h" />
 		<Unit filename="linuxdoom-1.10\r_plane.c">
 			<Option compilerVar="CC" />
 		</Unit>

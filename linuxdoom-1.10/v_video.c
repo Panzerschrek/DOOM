@@ -43,7 +43,70 @@ rcsid[] = "$Id: v_video.c,v 1.5 1997/02/03 22:45:13 b1 Exp $";
 // Each screen is [SCREENWIDTH*SCREENHEIGHT];
 byte*				screens[5];
 
+// API pointers
 
+void
+(*V_DrawPatch)
+( int		x,
+  int		y,
+  patch_t*	patch);
+
+void
+(*V_DrawPatchCol)
+( int		x,
+  int		height,
+  patch_t*	patch,
+  int		col );
+
+void
+(*V_DrawPatchScaled)
+( int		x,
+  int		y,
+  int		width,
+  int		height,
+  patch_t*	patch );
+
+void
+(*V_DrawPatchScaledFlipped)
+( int		x,
+  int		y,
+  int		width,
+  int		height,
+  patch_t*	patch );
+
+
+void
+(*V_DrawBlock)
+( int		x,
+  int		y,
+  int		width,
+  int		height,
+  byte*		src );
+
+void
+(*V_FillRectByTexture)
+( int		x,
+  int		y,
+  int		width,
+  int		height,
+  int		tex_width,
+  int		tex_height,
+  int		tex_scale,
+  byte*		tex_data );
+
+void
+(*V_DrawPixel)
+( int x,
+  int y,
+  int color_index );
+
+void
+(*V_FillRect)
+( int x,
+  int y,
+  int width,
+  int height,
+  int color_index );
 
 // Now where did these came from?
 byte gammatable[5][256] =
@@ -131,12 +194,13 @@ byte gammatable[5][256] =
 };
 
 
-
 int	usegamma;
 
 
-void
-V_FillRectByTexture
+// implimentation of 8b draw functions
+
+static void
+V_8b_FillRectByTexture
 ( int		x,
   int		y,
   int		width,
@@ -165,8 +229,8 @@ V_FillRectByTexture
     }
 }
 
-void
-V_DrawPixel
+static void
+V_8b_DrawPixel
 ( int x,
   int y,
   int color_index )
@@ -174,8 +238,8 @@ V_DrawPixel
     screens[0][ x + y * SCREENWIDTH ] = color_index;
 }
 
-void
-V_FillRect
+static void
+V_8b_FillRect
 ( int x,
   int y,
   int width,
@@ -200,8 +264,8 @@ V_FillRect
 // V_DrawPatch
 // Masks a column based masked pic to the screen.
 //
-void
-V_DrawPatch
+static void
+V_8b_DrawPatch
 ( int		x,
   int		y,
   patch_t*	patch )
@@ -261,8 +325,8 @@ V_DrawPatch
 //
 // V_DrawPatchCol
 //
-void
-V_DrawPatchCol
+static void
+V_8b_DrawPatchCol
 ( int		x,
   int		height,
   patch_t*	patch,
@@ -308,7 +372,7 @@ V_DrawPatchCol
 }
 
 
-void
+static void
 V_DrawPatchScaledInternal
 ( int		x,
   int		y,
@@ -395,8 +459,8 @@ V_DrawPatchScaledInternal
     }
 }
 
-void
-V_DrawPatchScaled
+static void
+V_8b_DrawPatchScaled
 ( int		x,
   int		y,
   int		width,
@@ -406,8 +470,8 @@ V_DrawPatchScaled
     V_DrawPatchScaledInternal(x, y, width, height, patch, false);
 }
 
-void
-V_DrawPatchScaledFlipped
+static void
+V_8b_DrawPatchScaledFlipped
 ( int		x,
   int		y,
   int		width,
@@ -422,8 +486,10 @@ V_DrawPatchScaledFlipped
 // Masks a column based masked pic to the screen.
 // Flips horizontally, e.g. to mirror face.
 //
-void
-V_DrawPatchFlipped
+//UNUSED
+#if 0
+static void
+V_8b_DrawPatchFlipped
 ( int		x,
   int		y,
   patch_t*	patch )
@@ -476,14 +542,15 @@ V_DrawPatchFlipped
 	}
     }
 }
+#endif
 
 
 //
 // V_DrawBlock
 // Draw a linear block of pixels into the view buffer.
 //
-void
-V_DrawBlock
+static void
+V_8b_DrawBlock
 ( int		x,
   int		y,
   int		width,
@@ -512,7 +579,17 @@ V_DrawBlock
     }
 }
 
-
+static void V_8b_InitAPI()
+{
+    V_DrawPatch			= V_8b_DrawPatch;
+    V_DrawPatchCol		= V_8b_DrawPatchCol;
+    V_DrawPatchScaled		= V_8b_DrawPatchScaled;
+    V_DrawPatchScaledFlipped	= V_8b_DrawPatchScaledFlipped;
+    V_DrawBlock			= V_8b_DrawBlock;
+    V_FillRectByTexture		= V_8b_FillRectByTexture;
+    V_DrawPixel			= V_8b_DrawPixel;
+    V_FillRect			= V_8b_FillRect;
+}
 
 //
 // V_Init
@@ -521,6 +598,8 @@ void V_Init (void)
 {
     int		i;
     byte*	base;
+
+    V_8b_InitAPI();
 
     // correct screen size, if it incorrect
     if( SCREENWIDTH < ID_SCREENWIDTH ) SCREENWIDTH = ID_SCREENWIDTH;

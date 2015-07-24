@@ -656,7 +656,7 @@ int		setdetail;
 
 
 void
-R_SetViewSize
+R_8b_SetViewSize
 ( int		blocks,
   int		detail )
 {
@@ -769,10 +769,35 @@ void R_ExecuteSetViewSize (void)
 extern int	detailLevel;
 extern int	screenblocks;
 
+void R_8b_InitInterface()
+{
+    void R_8b_SetViewSize (int blocks,int detail);
+    void R_8b_RenderPlayerView (player_t* player);
+    void R_8b_InitData (void);
+    void R_8b_InitSprites (char** namelist);
+    void R_8b_ClearSprites(void);
+    void R_8b_PrecacheLevel(void);
+    int R_8b_FlatNumForName(char* name);
+    int R_8b_TextureNumForName(char* name);
+    int R_8b_CheckTextureNumForName(char* name);
 
+    R_SetViewSize = R_8b_SetViewSize;
+    R_RenderPlayerView = R_8b_RenderPlayerView;
+
+    R_InitData = R_8b_InitData;
+    R_InitSprites = R_8b_InitSprites;
+    R_ClearSprites = R_8b_ClearSprites;
+    R_PrecacheLevel = R_8b_PrecacheLevel;
+
+    R_FlatNumForName = R_8b_FlatNumForName;
+    R_TextureNumForName = R_8b_TextureNumForName;
+    R_CheckTextureNumForName = R_8b_CheckTextureNumForName;
+}
 
 void R_Init (void)
 {
+    R_8b_InitInterface();
+
     R_InitData ();
     printf ("\nR_InitData");
     R_InitPointToAngle ();
@@ -868,7 +893,7 @@ void R_SetupFrame (player_t* player)
 //
 // R_RenderView
 //
-void R_RenderPlayerView (player_t* player)
+void R_8b_RenderPlayerView (player_t* player)
 {
     R_SetupFrame (player);
 

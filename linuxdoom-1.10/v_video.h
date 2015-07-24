@@ -55,22 +55,22 @@ extern	int	usegamma;
 void V_Init (void);
 
 
-void
-V_DrawPatch
+extern void
+(*V_DrawPatch)
 ( int		x,
   int		y,
   patch_t*	patch);
 
-void
-V_DrawPatchCol
+extern void
+(*V_DrawPatchCol)
 ( int		x,
   int		height,
   patch_t*	patch,
   int		col );
 
 
-void
-V_DrawPatchScaled
+extern void
+(*V_DrawPatchScaled)
 ( int		x,
   int		y,
   int		width,
@@ -78,8 +78,8 @@ V_DrawPatchScaled
   patch_t*	patch );
 
 
-void
-V_DrawPatchScaledFlipped
+extern void
+(*V_DrawPatchScaledFlipped)
 ( int		x,
   int		y,
   int		width,
@@ -88,8 +88,8 @@ V_DrawPatchScaledFlipped
 
 
 // Draw a linear block of pixels into the view buffer.
-void
-V_DrawBlock
+extern void
+(*V_DrawBlock)
 ( int		x,
   int		y,
   int		width,
@@ -97,8 +97,8 @@ V_DrawBlock
   byte*		src );
 
 
-void
-V_FillRectByTexture
+extern void
+(*V_FillRectByTexture)
 ( int		x,
   int		y,
   int		width,
@@ -109,15 +109,15 @@ V_FillRectByTexture
   byte*		tex_data );
 
 
-void
-V_DrawPixel
+extern void
+(*V_DrawPixel)
 ( int x,
   int y,
   int color_index );
 
 
-void
-V_FillRect
+extern void
+(*V_FillRect)
 ( int x,
   int y,
   int width,

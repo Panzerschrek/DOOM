@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -90,7 +90,7 @@ extern lighttable_t*	fixedcolormap;
 // Blocky/low detail mode.
 //B remove this?
 //  0 = high, 1 = low
-extern	int		detailshift;	
+extern	int		detailshift;
 
 
 //
@@ -156,13 +156,13 @@ R_AddPointToBox
 //
 
 // Called by G_Drawer.
-void R_RenderPlayerView (player_t *player);
+extern void (*R_RenderPlayerView) (player_t *player);
 
 // Called by startup code.
 void R_Init (void);
 
 // Called by M_Responder.
-void R_SetViewSize (int blocks, int detail);
+extern void (*R_SetViewSize) (int blocks, int detail);
 
 #endif
 //-----------------------------------------------------------------------------

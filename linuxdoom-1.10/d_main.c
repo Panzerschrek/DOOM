@@ -72,8 +72,13 @@ static const char rcsid[] = "$Id: d_main.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 
 #include "d_main.h"
 
+#include "r_panzer/rp_video.h"
+#include "r_panzer/rp_main.h"
+
 // m_menu.c
 extern int menuscale;
+// i_video.c
+extern int v_32bit;
 
 
 //PANZER - now, we can different resolutions
@@ -247,7 +252,7 @@ void D_Display (void)
     if (gamestate != wipegamestate)
     {
 	wipe = true;
-	wipe_StartScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
+	//wipe_StartScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
     }
     else
 	wipe = false;
@@ -289,9 +294,13 @@ void D_Display (void)
     // draw the view directly
     if (gamestate == GS_LEVEL && gametic)
     {
-	R_RenderPlayerView (&players[displayplayer]);
-	if (automapactive) AM_Drawer();
-	else R_FillBackScreen();
+	if (automapactive)
+	    AM_Drawer();
+	else
+	{
+	    R_RenderPlayerView(&players[displayplayer]);
+	    if(!v_32bit) R_FillBackScreen();
+	}
 	ST_Drawer (viewheight == SCREENHEIGHT, redrawsbar );
     }
 
@@ -333,10 +342,10 @@ void D_Display (void)
     }
 
     // wipe update
-    wipe_EndScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
+    //wipe_EndScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
 
     wipestart = I_GetTime () - 1;
-
+#if 0
     do
     {
 	do
@@ -351,6 +360,7 @@ void D_Display (void)
 	M_Drawer ();                            // menu is drawn even on top of wipes
 	I_FinishUpdate ();                      // page flip or blit buffer
     } while (!done);
+#endif
 }
 
 
@@ -1012,7 +1022,8 @@ void D_DoomMain (void)
 
     // init subsystems
     printf ("V_Init: allocate screens.\n");
-    V_Init ();
+    if (v_32bit) VP_Init();
+    else V_Init ();
 
     printf ("Z_Init: Init zone memory allocation daemon. \n");
     Z_Init ();
@@ -1092,7 +1103,7 @@ void D_DoomMain (void)
     M_Init ();
 
     printf ("R_Init: Init DOOM refresh daemon - ");
-    R_Init ();
+    (v_32bit ? RP_Init : R_Init)();
 
     printf ("\nP_Init: Init Playloop state.\n");
     P_Init ();

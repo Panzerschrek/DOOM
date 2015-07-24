@@ -296,7 +296,7 @@ int		newvissprite;
 // R_InitSprites
 // Called at program start.
 //
-void R_InitSprites (char** namelist)
+void R_8b_InitSprites (char** namelist)
 {
     int		i;
 
@@ -314,7 +314,7 @@ void R_InitSprites (char** namelist)
 // R_ClearSprites
 // Called at frame start.
 //
-void R_ClearSprites (void)
+void R_8b_ClearSprites (void)
 {
     vissprite_p = vissprites;
 }
