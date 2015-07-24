@@ -120,6 +120,7 @@ void I_Quit (void)
 void I_WaitVBL(int count)
 {
      // UNUSED - we do not need sleep
+     SDL_Delay( 1000 * count / TICRATE );
      count = 0;
 }
 
