@@ -58,6 +58,17 @@ static inline pixel_t LightPixel(pixel_t p)
    return p;
 }
 
+static int IntLog2Floor(int x)
+{
+    int i = -1;
+    while( x > 0)
+    {
+	x>>= 1;
+	i++;
+    }
+    return i >= 0 ? i : 0;
+}
+
 static int PositiveMod( int x, int y )
 {
 	int div= x/y;
@@ -311,15 +322,30 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
     fixed_t top_y =    screen_y[1] + FixedMul(ddx, top_dy   );
     fixed_t bottom_y = screen_y[0] + FixedMul(ddx, bottom_dy);
 
-    fixed_t tex_width  = g_cur_wall_texture ->width  << FRACBITS;
-    fixed_t tex_height = g_cur_wall_texture ->height << FRACBITS;
+    fixed_t tex_width [RP_MAX_WALL_MIPS];
+    fixed_t tex_height[RP_MAX_WALL_MIPS];
+    fixed_t mip_tc_u_scaler[RP_MAX_WALL_MIPS];
+    fixed_t mip_tc_v_scaler[RP_MAX_WALL_MIPS];
+    for( i = 0; i <= g_cur_wall_texture->max_mip; i++ )
+    {
+	tex_width [i] = (g_cur_wall_texture->width  >> i) << FRACBITS;
+	tex_height[i] = (g_cur_wall_texture->height >> i) << FRACBITS;
+	mip_tc_u_scaler[i] = FixedDiv(tex_width [i], tex_width [0]);
+	mip_tc_v_scaler[i] = FixedDiv(tex_height[i], tex_height[0]);
+    }
 
     fixed_t vert_u[2];
-    vert_u[0] = PositiveMod(g_cur_side->textureoffset + g_cur_seg_data.tc_u_offset, tex_width);
+    vert_u[0] = PositiveMod(g_cur_side->textureoffset + g_cur_seg_data.tc_u_offset, tex_width[0]);
     vert_u[1] = vert_u[0] + g_cur_seg_data.length;
     fixed_t u_div_z[2];
     u_div_z[0] = FixedDiv(vert_u[0], g_cur_seg_data.z[0]);
     u_div_z[1] = FixedDiv(vert_u[1], g_cur_seg_data.z[1]);
+
+    // for calculation of u mip
+    fixed_t u_div_z_step;
+    fixed_t inv_z_step;
+    u_div_z_step = FixedDiv(u_div_z[1] - u_div_z[0], dx);
+    inv_z_step = FixedDiv(g_cur_seg_data.inv_z[1] - g_cur_seg_data.inv_z[0], dx);
 
     // interpolate value in range [0; 1 ^ PR_SEG_PART_BITS ]
     // becouse direct interpolation of u/z and 1/z can be inaccurate
@@ -337,7 +363,9 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 	fixed_t cur_u_div_z = FixedMul(part, u_div_z[1]) + FixedMul(one_minus_part, u_div_z[0]);
 	fixed_t inv_z = FixedDiv(part, g_cur_seg_data.z[1]) + FixedDiv(one_minus_part, g_cur_seg_data.z[0]);
 	fixed_t u = FixedDiv(cur_u_div_z, inv_z);
-	if( u >= tex_width) u %= tex_width;
+
+	fixed_t du_dx = FixedDiv(u_div_z_step - FixedMul(u, inv_z_step), inv_z);
+	int u_mip = IntLog2Floor(FixedRoundToInt(du_dx));
 
 	int y_begin = FixedRoundToInt(top_y   );
 	if (y_begin < 0 ) y_begin = 0;
@@ -352,17 +380,28 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 
 	dst = framebuffer + x + y * SCREENWIDTH;
 	dst_end = framebuffer + x + y_end * SCREENWIDTH;
-	src = g_cur_wall_texture->mip[0] + (u>>FRACBITS) * g_cur_wall_texture->height;
 
 	fixed_t v_step;
 	v_step = FixedDiv(z_max - z_min, bottom_y - top_y);
-
 	fixed_t v = top_tex_offset + g_cur_side->rowoffset + FixedMul(ddy, v_step);
+
+	int v_mip = IntLog2Floor(FixedRoundToInt(v_step));
+
+	int mip = u_mip > v_mip ? u_mip : v_mip;
+	if (mip > g_cur_wall_texture->max_mip) mip = g_cur_wall_texture->max_mip;
+
+	u = FixedMul(mip_tc_u_scaler[mip], u);
+	v = FixedMul(mip_tc_v_scaler[mip], v);
+	v_step = FixedMul(v_step, mip_tc_v_scaler[mip]);
+	if( u >= tex_width [mip]) u %= tex_width [mip];
+	fixed_t cur_mip_tex_heigth = tex_height[mip];
+
+	src = g_cur_wall_texture->mip[mip] + (u>>FRACBITS) * (g_cur_wall_texture->height >> mip);
 
 	if( g_cur_wall_texture_transparent)
 	    while (dst < dst_end) // draw alpha-tested (TODO - alpha - blend)
 	    {
-		if (v >= tex_height) v %= tex_height;
+		if (v >= cur_mip_tex_heigth) v %= cur_mip_tex_heigth;
 		pixel = src[ (v>>FRACBITS) ];
 		if( pixel.components[3] >= 128 ) *dst = LightPixel(pixel);
 		dst += SCREENWIDTH;
@@ -371,8 +410,9 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 	else
 	    while (dst < dst_end) // draw solid
 	    {
-		if (v >= tex_height) v %= tex_height;
+		if (v >= cur_mip_tex_heigth) v %= cur_mip_tex_heigth;
 		*dst = LightPixel(src[ (v>>FRACBITS) ]);
+		//dst->components[0] = dst->components[1] = dst->components[2] = 32 * mip + 32;
 		dst += SCREENWIDTH;
 		v += v_step;
 	    }

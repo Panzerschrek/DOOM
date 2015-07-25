@@ -244,7 +244,7 @@ static void R_32b_LoadWallTexture(int texture_num)
     for( i = 0, x = tex->width, y = tex->height; x > 0 && y > 0; x>>= 1, y>>= 1, i++ )
 	pixel_count += x * y;
     tex->max_mip = i - 1;
-    if (tex->max_mip > RP_MAX_WALL_MIPS ) tex->max_mip = RP_MAX_WALL_MIPS;
+    if (tex->max_mip >= RP_MAX_WALL_MIPS ) tex->max_mip = RP_MAX_WALL_MIPS - 1;
 
     // allocate data
     tex->raw_data = tex->mip[0] = malloc(sizeof(pixel_t) * pixel_count);
