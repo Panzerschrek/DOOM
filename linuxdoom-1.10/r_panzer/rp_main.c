@@ -3,6 +3,7 @@
 #include "rp_main.h"
 #include "rp_video.h"
 #include "rp_data.h"
+#include "rp_plane.h"
 
 #include "../m_fixed.h"
 #include "../p_setup.h"
@@ -17,15 +18,6 @@
 #define RP_Z_NEAR_FIXED (8 * 65536)
 
 #define RP_HALF_FOV_X ANG45
-
-// plane equation
-// for point on plane n[0] * x + n[1] * y + dist = 0
-// for point in front of plane n[0] * x + n[1] * y + dist > 0
-typedef struct clip_plane_s
-{
-    fixed_t n[2];
-    fixed_t dist;
-} clip_plane_t;
 
 static float		g_view_matrix[16];
 static fixed_t		g_view_pos[3];
@@ -551,99 +543,103 @@ void PR_DrawWall()
     }
 }
 
-#if 0
-void PR_DrawSubsectorFlat(subsector_t* sub, fixed_t height)
+void PR_DrawSubsectorFlat(int subsector_num, fixed_t height)
 {
-    int			line_seg;
-    int			i, j;
-    seg_t*		seg;
+    int			i;
+    full_subsector_t*	full_subsector;
+    vertex_t*		full_subsector_vertices;
 
-    short left_border [MAX_SCREENWIDTH];
-    short right_border[MAX_SCREENWIDTH];
-    int y_max = 0, y_min = SCREENHEIGHT;
-    for(i = 0; i < SCREENHEIGHT; i++ )
+    full_subsector = R_32b_GetFullSubsectors() + subsector_num;
+    full_subsector_vertices = R_32b_GetFullSubsectorsVertices() + full_subsector->first_vertex;
+
+    fixed_t vertices_proj[64][2];
+
+    int plane_x_min[ MAX_SCREENHEIGHT ];
+    int plane_x_max[ MAX_SCREENHEIGHT ];
+    int y_min = SCREENHEIGHT, y_max = 0;
+
+    for( i = 0; i < full_subsector->numvertices; i++)
     {
-    	left_border[i] = SCREENWIDTH;
-    	right_border[i] = 0;
+    	float f_vertex[3];
+
+    	f_vertex[0] = FixedToFloat(full_subsector_vertices[i].x);
+    	f_vertex[1] = FixedToFloat(full_subsector_vertices[i].y);
+    	f_vertex[2] = FixedToFloat(height);
+
+	float proj[3];
+    	RP_VecMatMul(f_vertex, g_view_matrix, proj);
+    	if (proj[2] <= 0.0f) return;
+
+    	proj[0] /= proj[2];
+    	proj[1] /= proj[2];
+
+    	vertices_proj[i][0] = FloatToFixed((proj[0] + 1.0f ) * ((float)SCREENWIDTH ) * 0.5f );
+    	vertices_proj[i][1] = FloatToFixed((proj[1] + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
+
+    	if( vertices_proj[i][0] < 0 ) return;
+    	else if(vertices_proj[i][0] >= SCREENWIDTH  * FRACUNIT) return;
     }
 
-int color_index = ((int)sub) & 255;
+    int color_index = subsector_num & 255;
 
-    for( seg = segs + sub->firstline, i = 0; i< sub->numlines; seg++, i++ )
+    for( i = 0; i < full_subsector->numvertices; i++ )
     {
-    	int v_ind;
-    	/*int fineangle = (seg->angle >> ANGLETOFINESHIFT) & FINEMASK;
-    	if( FixedMul(finesine  [fineangle], seg->v1->x - seg->v2->x) +
-	    FixedMul(finecosine[fineangle], seg->v1->y - seg->v2->y) >= 0)
-	    v_ind = 0;
-    	else v_ind = 1;*/
-    	v_ind = 1;
+    	int cur_i = i;
+    	int next_i = cur_i + 1;
+    	if ( next_i == full_subsector->numvertices ) next_i = 0;
 
-	float vertices[2][3];
-	int   screen_vertices[2][2];
+    	fixed_t dy = vertices_proj[next_i][1] - vertices_proj[cur_i][1];
+    	if (dy == 0 ) continue;
 
-    	vertices[0][0] = FixedToFloat( seg->v1->x );
-    	vertices[0][1] = FixedToFloat( seg->v1->y );
-    	vertices[0][2] = FixedToFloat(height);
-
-    	vertices[1][0] = FixedToFloat( seg->v2->x );
-    	vertices[1][1] = FixedToFloat( seg->v2->y );
-    	vertices[1][2] = FixedToFloat(height);
-
-    	for( j = 0; j < 2; j++ )
+    	int* side;
+    	if( dy < 0 )
     	{
-    		float vertex_proj[3];
-    		RP_VecMatMul( vertices[j], g_view_matrix, vertex_proj );
-		if (vertex_proj[2] < 0.0f ) return;
-		vertex_proj[0] /= vertex_proj[2];
-		vertex_proj[1] /= vertex_proj[2];
+	    dy = -dy;
+	    int tmp = next_i;
+	    next_i = cur_i;
+	    cur_i = tmp;
+	    side = plane_x_max;
+    	}
+    	else side = plane_x_min;
 
-		screen_vertices[j][0] = (int)((vertex_proj[0] + 1.0f ) * ((float)  SCREENWIDTH) * 0.5f );
-		screen_vertices[j][1] = (int)((vertex_proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f );
-		if (screen_vertices[j][0] < 0 || screen_vertices[j][0] >=  SCREENWIDTH) return;
-		if (screen_vertices[j][1] < 0 || screen_vertices[j][1] >= SCREENHEIGHT) return;
+	fixed_t x_step = FixedDiv(vertices_proj[next_i][0] - vertices_proj[cur_i][0], dy);
+	fixed_t x = vertices_proj[cur_i][0];
 
-		if(screen_vertices[j][1] < y_min ) y_min = screen_vertices[j][1];
-		if(screen_vertices[j][1] > y_max) y_max = screen_vertices[j][1];
+    	int y_begin = FixedRoundToInt(vertices_proj[cur_i ][1]);
+    	if( y_begin < 0 ) y_begin = 0;
+    	int y_end   = FixedRoundToInt(vertices_proj[next_i][1]);
+    	if( y_end > SCREENHEIGHT) y_end = SCREENHEIGHT;
+    	int y = y_begin;
+
+    	x += FixedMul(x_step, FRACUNIT/2 + (y_begin << FRACBITS) - vertices_proj[cur_i ][1]);
+
+    	while( y < y_end)
+    	{
+	    int i_x = x>>FRACBITS;
+	    if (i_x >= 0 && i_x < SCREENWIDTH)
+	    {
+		//V_DrawPixel(i_x, y, color_index);
+		side[y] = i_x;
+	    }
+	    x+= x_step;
+	    y++;
     	}
 
-    	int dy = screen_vertices[1][1] - screen_vertices[0][1];
-    	if (dy == 0) continue;
-    	//int y_step = dy > 0 ? 1 : -1;
-    	v_ind = dy > 0 ? 0 : 1;
-    	if (dy < 0 ) dy = -dy;
-    	int y;
-	fixed_t x = screen_vertices[v_ind][0] << FRACBITS;
-	fixed_t x_step = ((screen_vertices[v_ind^1][0] - screen_vertices[v_ind][0]) << FRACBITS) / dy;
-	int dir = v_ind ^ (dy > 0 ? 1 : 0);
-	for ( y = screen_vertices[v_ind][1]; y <= screen_vertices[v_ind^1][1]; y++, x += x_step )
-	{
-		V_DrawPixel( x >> FRACBITS, y, dir * 64 + 128 );
-	}
-
-	x = screen_vertices[v_ind][0] << FRACBITS;
-	if (!dir)
-	{
-	    for ( y = screen_vertices[v_ind][1]; y <= screen_vertices[v_ind^1][1]; y ++, x += x_step )
-		left_border[y] = x >>FRACBITS;
-	}
-	else
-	{
-	    for ( y = screen_vertices[v_ind][1]; y <= screen_vertices[v_ind^1][1]; y ++, x += x_step )
-		right_border[y] = x >>FRACBITS;
-	}
+    	if( y_begin < y_min) y_min = y_begin;
+    	if( y_end > y_max) y_max = y_end;
     }
-
 
     int y;
     for( y = y_min; y < y_max; y++ )
     {
+    	int x_begin = plane_x_min[y];
+    	if (x_begin < 0 ) x_begin = 0;
+    	int x_end = plane_x_max[y];
+    	if( x_end > SCREENWIDTH) x_end = SCREENWIDTH;
     	int x;
-    	for( x = left_border[y]; x < right_border[y]; x++ )
-    	    V_DrawPixel( x, y, color_index );
+    	for( x = x_begin; x < x_end; x++ ) V_DrawPixel(x, y, color_index);
     }
 }
-#endif
 
 void RP_Subsector(int num)
 {
@@ -657,8 +653,8 @@ void RP_Subsector(int num)
     	g_cur_seg = &segs[ line_seg ];
 	PR_DrawWall();
     }
-    //PR_DrawSubsectorFlat( sub, sub->sector->floorheight );
-    //PR_DrawSubsectorFlat( sub, sub->sector->ceilingheight );
+    //PR_DrawSubsectorFlat( num, sub->sector->floorheight );
+    PR_DrawSubsectorFlat( num, sub->sector->ceilingheight );
 }
 //
 // RenderBSPNode

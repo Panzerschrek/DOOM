@@ -254,6 +254,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="linuxdoom-1.10\r_panzer\rp_main.h" />
+		<Unit filename="linuxdoom-1.10\r_panzer\rp_plane.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="linuxdoom-1.10\r_panzer\rp_plane.h" />
 		<Unit filename="linuxdoom-1.10\r_panzer\rp_video.c">
 			<Option compilerVar="CC" />
 		</Unit>

@@ -8,6 +8,7 @@
 #include "../p_setup.h"
 #include "../r_defs.h"
 #include "rp_defs.h"
+#include "rp_plane.h"
 
 typedef struct wall_texture_patch_s
 {
@@ -394,6 +395,8 @@ void R_32b_PrecacheLevel()
 {
     R_32b_PrecacheWallsTextures();
     R_32b_PrecacheFlatsTextures();
+
+    R_32b_BuildFullSubsectors();
 }
 
 void R_32b_InitData ()
