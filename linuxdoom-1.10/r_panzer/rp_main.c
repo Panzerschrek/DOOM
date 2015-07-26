@@ -41,6 +41,13 @@ static struct
     fixed_t	length;
 } g_cur_seg_data;
 
+
+// input - in range [0;255]
+static void SetLightLevel(int level)
+{
+    g_cur_column_light = level * 258;
+}
+
 // uses g_cur_column_light
 static inline pixel_t LightPixel(pixel_t p)
 {
@@ -333,7 +340,7 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
     pixel_t* dst_end;
     pixel_t* src;
     pixel_t pixel;
-    g_cur_column_light = g_cur_side->sector->lightlevel * 258;
+    SetLightLevel(g_cur_side->sector->lightlevel);
     while (x < x_end)
     {
 	fixed_t one_minus_part = (FRACUNIT<<PR_SEG_PART_BITS) - part;
@@ -528,14 +535,18 @@ void PR_DrawWall()
     }
 }
 
-void PR_DrawSubsectorFlat(int subsector_num, fixed_t height)
+void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 {
     int			i;
+    subsector_t*	subsector;
     full_subsector_t*	full_subsector;
     vertex_t*		full_subsector_vertices;
 
+    subsector = &subsectors[subsector_num];
     full_subsector = R_32b_GetFullSubsectors() + subsector_num;
     full_subsector_vertices = R_32b_GetFullSubsectorsVertices() + full_subsector->first_vertex;
+
+    fixed_t height = is_floor ? subsector->sector->floorheight : subsector->sector->ceilingheight;
 
     fixed_t vertices_proj[64][2];
 
@@ -543,69 +554,71 @@ void PR_DrawSubsectorFlat(int subsector_num, fixed_t height)
     int plane_x_max[ MAX_SCREENHEIGHT ];
     int y_min = SCREENHEIGHT, y_max = 0;
 
-    for( i = 0; i < full_subsector->numvertices; i++)
-    {
-    	float f_vertex[3];
+    vertex_t clipped_polygon[ 64 ];
+    int clipped_polygon_vertex_count = full_subsector->numvertices;
+    for( i = 0; i < full_subsector->numvertices; i++ )
+	clipped_polygon[i] = full_subsector_vertices[i];
 
-    	f_vertex[0] = FixedToFloat(full_subsector_vertices[i].x);
-    	f_vertex[1] = FixedToFloat(full_subsector_vertices[i].y);
-    	f_vertex[2] = FixedToFloat(height);
+    for( i = 0; i < 3; i++ )
+	clipped_polygon_vertex_count = R_32b_ClipPolygon( clipped_polygon, clipped_polygon_vertex_count, &g_clip_planes[i] );
+    if ( clipped_polygon_vertex_count == 0 ) return;
+
+    for( i = 0; i < clipped_polygon_vertex_count; i++)
+    {
+	float f_vertex[3];
+
+	f_vertex[0] = FixedToFloat(clipped_polygon[i].x);
+	f_vertex[1] = FixedToFloat(clipped_polygon[i].y);
+	f_vertex[2] = FixedToFloat(height);
 
 	float proj[3];
-    	RP_VecMatMul(f_vertex, g_view_matrix, proj);
-    	if (proj[2] <= 0.0f) return;
+	RP_VecMatMul(f_vertex, g_view_matrix, proj);
+	if (proj[2] <= 0.0f) return;
 
-    	proj[0] /= proj[2];
-    	proj[1] /= proj[2];
+	proj[0] /= proj[2];
+	proj[1] /= proj[2];
 
-    	vertices_proj[i][0] = FloatToFixed((proj[0] + 1.0f ) * ((float)SCREENWIDTH ) * 0.5f );
-    	vertices_proj[i][1] = FloatToFixed((proj[1] + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
-
-    	if( vertices_proj[i][0] < 0 ) return;
-    	else if(vertices_proj[i][0] >= SCREENWIDTH  * FRACUNIT) return;
+	vertices_proj[i][0] = FloatToFixed((proj[0] + 1.0f ) * ((float)SCREENWIDTH ) * 0.5f );
+	vertices_proj[i][1] = FloatToFixed((proj[1] + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
     }
 
     int color_index = subsector_num & 255;
 
-    for( i = 0; i < full_subsector->numvertices; i++ )
+    for( i = 0; i < clipped_polygon_vertex_count; i++ )
     {
-    	int cur_i = i;
-    	int next_i = cur_i + 1;
-    	if ( next_i == full_subsector->numvertices ) next_i = 0;
+	int cur_i = i;
+	int next_i = cur_i + 1;
+	if ( next_i == clipped_polygon_vertex_count ) next_i = 0;
 
-    	fixed_t dy = vertices_proj[next_i][1] - vertices_proj[cur_i][1];
-    	if (dy == 0 ) continue;
+	fixed_t dy = vertices_proj[next_i][1] - vertices_proj[cur_i][1];
+	if (dy == 0) continue;
 
-    	int* side;
-    	if( dy < 0 )
-    	{
+	int* side;
+	if( dy < 0 )
+	{
 	    dy = -dy;
 	    int tmp = next_i;
 	    next_i = cur_i;
 	    cur_i = tmp;
-	    side = plane_x_max;
-    	}
-    	else side = plane_x_min;
+	    side = is_floor ? plane_x_min : plane_x_max;
+	}
+	else side = is_floor ? plane_x_max : plane_x_min;
 
 	fixed_t x_step = FixedDiv(vertices_proj[next_i][0] - vertices_proj[cur_i][0], dy);
 	fixed_t x = vertices_proj[cur_i][0];
 
-    	int y_begin = FixedRoundToInt(vertices_proj[cur_i ][1]);
-    	if( y_begin < 0 ) y_begin = 0;
-    	int y_end   = FixedRoundToInt(vertices_proj[next_i][1]);
-    	if( y_end > SCREENHEIGHT) y_end = SCREENHEIGHT;
-    	int y = y_begin;
+	int y_begin = FixedRoundToInt(vertices_proj[cur_i ][1]);
+	if( y_begin < 0 ) y_begin = 0;
+	int y_end   = FixedRoundToInt(vertices_proj[next_i][1]);
+	if( y_end > SCREENHEIGHT) y_end = SCREENHEIGHT;
+	int y = y_begin;
 
-    	x += FixedMul(x_step, FRACUNIT/2 + (y_begin << FRACBITS) - vertices_proj[cur_i ][1]);
+	x += FixedMul(x_step, FRACUNIT/2 + (y_begin << FRACBITS) - vertices_proj[cur_i ][1]);
 
-    	while( y < y_end)
-    	{
-	    int i_x = x>>FRACBITS;
-	    if (i_x >= 0 && i_x < SCREENWIDTH)
-	    {
-		//V_DrawPixel(i_x, y, color_index);
-		side[y] = i_x;
-	    }
+	while (y < y_end)
+	{
+	    //V_DrawPixel(i_x, y, color_index);
+	    side[y] = FixedRoundToInt(x);
 	    x+= x_step;
 	    y++;
     	}
@@ -614,15 +627,23 @@ void PR_DrawSubsectorFlat(int subsector_num, fixed_t height)
     	if( y_end > y_max) y_max = y_end;
     }
 
+    SetLightLevel(subsector->sector->lightlevel);
+
+    pixel_t* palette = VP_GetPaletteStorage();
+    flat_texture_t* texture = GetFlatTexture( flattranslation[is_floor ? subsector->sector->floorpic : subsector->sector->ceilingpic] );
     int y;
     for( y = y_min; y < y_max; y++ )
     {
-    	int x_begin = plane_x_min[y];
-    	if (x_begin < 0 ) x_begin = 0;
-    	int x_end = plane_x_max[y];
-    	if( x_end > SCREENWIDTH) x_end = SCREENWIDTH;
-    	int x;
-    	for( x = x_begin; x < x_end; x++ ) V_DrawPixel(x, y, color_index);
+	int x_begin = plane_x_min[y];
+	if (x_begin < 0 ) x_begin = 0;
+	int x_end = plane_x_max[y];
+	if( x_end > SCREENWIDTH) x_end = SCREENWIDTH;
+	int x;
+	pixel_t* dst = VP_GetFramebuffer() + x_begin + y * SCREENWIDTH;
+	pixel_t* src = texture->mip[0] + (y&RP_FLAT_TEXTURE_SIZE_MINUS_1) * RP_FLAT_TEXTURE_SIZE;
+	for( x = x_begin; x < x_end; x++, dst++ )
+	    *dst = LightPixel(src[x & RP_FLAT_TEXTURE_SIZE_MINUS_1]);
+	   //  *dst = palette[color_index];
     }
 }
 
@@ -638,8 +659,8 @@ void RP_Subsector(int num)
     	g_cur_seg = &segs[ line_seg ];
 	PR_DrawWall();
     }
-    //PR_DrawSubsectorFlat( num, sub->sector->floorheight );
-    PR_DrawSubsectorFlat( num, sub->sector->ceilingheight );
+    if (g_view_pos[2] > sub->sector->floorheight  ) PR_DrawSubsectorFlat( num, true  );
+    if (g_view_pos[2] < sub->sector->ceilingheight) PR_DrawSubsectorFlat( num, false );
 }
 //
 // RenderBSPNode
@@ -676,9 +697,12 @@ void RP_RenderBSPNode (int bspnum)
 
 void R_32b_RenderPlayerView (player_t *player)
 {
-    //V_FillRect( SCREENWIDTH / 2 - 2, SCREENHEIGHT / 2 - 2, 4, 4, 32 );
-
-    V_FillRect( 0, 0, SCREENWIDTH, SCREENHEIGHT, 0 );
+    pixel_t* framebuffer = VP_GetFramebuffer();
+    int y, x;
+    pixel_t colors[2] = { VP_GetPaletteStorage()[2], VP_GetPaletteStorage()[34] };
+    for( y = 0; y < SCREENHEIGHT; y++ )
+	for( x = 0; x < SCREENWIDTH; x++, framebuffer++ )
+	    *framebuffer = colors[ ((x>>1) ^ (y>>1)) & 1 ];
 
     RP_BuildViewMatrix(player);
     RP_BuildClipPlanes(player);

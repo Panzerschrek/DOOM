@@ -63,12 +63,12 @@ static void AddSubsector(int subsector_num)
     int new_vertex_count = g_out_subsectors_vertex_count + g_cur_subsector_vertex_count;
     if (new_vertex_count > g_out_subsectors_vertices_capacity)
     {
-    	g_out_subsectors_vertices_capacity = g_out_subsectors_vertices_capacity * 3 / 2;
-    	vertex_t* new_vertices = malloc(g_out_subsectors_vertices_capacity * sizeof(vertex_t));
+	g_out_subsectors_vertices_capacity = g_out_subsectors_vertices_capacity * 3 / 2;
+	vertex_t* new_vertices = malloc(g_out_subsectors_vertices_capacity * sizeof(vertex_t));
 
-    	memcpy(new_vertices, g_out_subsectors_vertices, g_out_subsectors_vertex_count);
-    	free(g_out_subsectors_vertices);
-    	g_out_subsectors_vertices = new_vertices;
+	memcpy(new_vertices, g_out_subsectors_vertices, g_out_subsectors_vertex_count);
+	free(g_out_subsectors_vertices);
+	g_out_subsectors_vertices = new_vertices;
     }
 
     g_out_subsectors[subsector_num].first_vertex = g_out_subsectors_vertex_count;
@@ -80,9 +80,8 @@ static void AddSubsector(int subsector_num)
     g_out_subsectors_vertex_count = new_vertex_count;
 }
 
-
 // returns new vertex count
-static int ClipPolygon(vertex_t* vertices, int vertex_count, clip_plane_t* plane)
+int R_32b_ClipPolygon(vertex_t* vertices, int vertex_count, clip_plane_t* plane)
 {
     int			i, next_i, j;
     static fixed_t	dot[ RP_MAX_SUBSECTOR_VERTICES ];
@@ -106,7 +105,7 @@ static int ClipPolygon(vertex_t* vertices, int vertex_count, clip_plane_t* plane
     // 0 edge - where first vertex clipped and second vertex passed
     // 1 edge - where second vertex clipped and first vertex passed
     // dot < 0 means clipped
-    int splitted_edges[2];
+    int splitted_edges[2] = {0, 0 }; // handle -W-maybe-uninitialized
     for( i = 0; i < vertex_count; i++ )
     {
 	next_i = i + 1;
@@ -139,21 +138,22 @@ static int ClipPolygon(vertex_t* vertices, int vertex_count, clip_plane_t* plane
     }
     else if (vertices_clipped > 2)
     {
-    	vertex_t tmp_vertices[ RP_MAX_SUBSECTOR_VERTICES ];
-    	for( i = 0; i < vertex_count; i++ ) tmp_vertices[i] = vertices[i];
+	// TODO - handle make this case more optimal
+	vertex_t tmp_vertices[ RP_MAX_SUBSECTOR_VERTICES ];
+	for( i = 0; i < vertex_count; i++ ) tmp_vertices[i] = vertices[i];
 
-    	for( i = 0, j = splitted_edges[0] + 1; i < vertex_count - vertices_clipped; i++, j++ )
+	for( i = 0, j = splitted_edges[0] + 1; i < vertex_count - vertices_clipped; i++, j++ )
 	    vertices[i] = tmp_vertices[j % vertex_count];
 	vertices[i  ] = new_vertices[1];
 	vertices[i+1] = new_vertices[0];
     }
     else // clip 1 vertex
     {
-    	int clipped_vertex = splitted_edges[0];
-    	for( i = vertex_count; i > clipped_vertex; i-- )
+	int clipped_vertex = splitted_edges[0];
+	for( i = vertex_count; i > clipped_vertex; i-- )
 	    vertices[i] = vertices[i-1];
-	vertices[clipped_vertex  ] = new_vertices[0];
-	vertices[clipped_vertex+1] = new_vertices[1];
+	vertices[clipped_vertex  ] = new_vertices[1];
+	vertices[clipped_vertex+1] = new_vertices[0];
 
     }
     return vertex_count + 2 - vertices_clipped;
@@ -161,17 +161,15 @@ static int ClipPolygon(vertex_t* vertices, int vertex_count, clip_plane_t* plane
 
 static void BuildSubsector(int subsector_num, fixed_t* bbox)
 {
-    const int		c_bbox_add_eps = FRACUNIT * 4;
+    const int		c_bbox_add_eps = FRACUNIT / 4;
     int			i;
     subsector_t*	subsector;
     seg_t*		seg;
-    node_t*		parent_node;
     clip_plane_t	seg_clip_plane;
     fixed_t		bb_min[2];
     fixed_t		bb_max[2];
 
     subsector = &subsectors[ subsector_num ];
-    parent_node = g_cur_subsector_parent_nodes_stack[ g_cur_subsector_parent_nodes_count - 1 ];
 
     bb_min[0] = bbox[BOXLEFT];
     bb_max[0] = bbox[BOXRIGHT];
@@ -192,7 +190,7 @@ static void BuildSubsector(int subsector_num, fixed_t* bbox)
     for( i = 0; i < g_cur_subsector_parent_nodes_count; i++ )
     {
 	g_cur_subsector_vertex_count =
-	    ClipPolygon(
+	    R_32b_ClipPolygon(
 		g_cur_subsector_vertices,
 		g_cur_subsector_vertex_count,
 		&g_nodes_clip_planes[i]);
@@ -200,18 +198,17 @@ static void BuildSubsector(int subsector_num, fixed_t* bbox)
 
     for( i = 0; i < subsector->numlines; i++ )
     {
-	seg = &segs[subsector->firstline];
+	seg = &segs[subsector->firstline + i];
 	NormalizeVec( seg->v2->y - seg->v1->y, seg->v1->x - seg->v2->x, seg_clip_plane.n );
 	seg_clip_plane.dist = - (FixedMul(seg->v1->x, seg_clip_plane.n[0]) + FixedMul(seg->v1->y, seg_clip_plane.n[1]));
 
 	g_cur_subsector_vertex_count =
-	    ClipPolygon(
+	    R_32b_ClipPolygon(
 		g_cur_subsector_vertices,
 		g_cur_subsector_vertex_count,
 		&seg_clip_plane);
     }
 
-	if (g_cur_subsector_vertex_count == 0 ) printf( "wtf " );
     AddSubsector(subsector_num);
 }
 

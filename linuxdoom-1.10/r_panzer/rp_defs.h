@@ -43,6 +43,7 @@ typedef struct full_subsector_s
 
 #define RP_FLAT_TEXTURE_SIZE_LOG2	6
 #define RP_FLAT_TEXTURE_SIZE		64
+#define RP_FLAT_TEXTURE_SIZE_MINUS_1	(RP_FLAT_TEXTURE_SIZE-1)
 
 typedef struct wall_texture_s
 {
