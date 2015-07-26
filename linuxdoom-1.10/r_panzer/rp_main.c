@@ -14,6 +14,8 @@
 
 // special value for inv_z and u/z interpolations
 #define PR_SEG_PART_BITS 4
+// magic constant for butifulizing of texture mapping on slope walls
+#define PR_SEG_U_MIP_SCALER 2
 
 #define RP_Z_NEAR_FIXED (8 * 65536)
 
@@ -348,8 +350,8 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 	fixed_t inv_z = FixedDiv(part, g_cur_seg_data.z[1]) + FixedDiv(one_minus_part, g_cur_seg_data.z[0]);
 	fixed_t u = FixedDiv(cur_u_div_z, inv_z);
 
-	fixed_t du_dx = FixedDiv(u_div_z_step - FixedMul(u, inv_z_step), inv_z);
-	int u_mip = IntLog2Floor(FixedRoundToInt(du_dx));
+	fixed_t du_dx = FixedDiv(u_div_z_step - FixedMul(u, inv_z_step), inv_z >> PR_SEG_PART_BITS);
+	int u_mip = IntLog2Floor((du_dx / PR_SEG_U_MIP_SCALER) >> FRACBITS);
 
 	int y_begin = FixedRoundToInt(top_y   );
 	if (y_begin < 0 ) y_begin = 0;
@@ -369,7 +371,7 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 	v_step = FixedDiv(z_max - z_min, bottom_y - top_y);
 	fixed_t v = top_tex_offset + g_cur_side->rowoffset + FixedMul(ddy, v_step);
 
-	int v_mip = IntLog2Floor(FixedRoundToInt(v_step));
+	int v_mip = IntLog2Floor(v_step >> FRACBITS);
 
 	int mip = u_mip > v_mip ? u_mip : v_mip;
 	if (mip > g_cur_wall_texture->max_mip) mip = g_cur_wall_texture->max_mip;
