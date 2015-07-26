@@ -68,21 +68,6 @@ static int PositiveMod( int x, int y )
 	return x - div * y;
 }
 
-static float FixedToFloat(fixed_t f)
-{
-    return ((float)f) / ((float)FRACUNIT);
-}
-
-static fixed_t FloatToFixed(float f)
-{
-    return (fixed_t)(f * ((float)FRACUNIT));
-}
-
-static int FixedRoundToInt(fixed_t f)
-{
-    return (f + FRACUNIT/2)>>FRACBITS;
-}
-
 static fixed_t GetSegLength(seg_t* seg)
 {
     // TODO - remove sqrt and type convertions
