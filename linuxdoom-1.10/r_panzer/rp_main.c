@@ -17,12 +17,15 @@
 // magic constant for butifulizing of texture mapping on slope walls
 #define PR_SEG_U_MIP_SCALER 2
 
+#define PR_FLAT_PART_BITS 4
+
 #define RP_Z_NEAR_FIXED (8 * 65536)
 
 #define RP_HALF_FOV_X ANG45
 
 static float		g_view_matrix[16];
 static fixed_t		g_view_pos[3];
+static int		g_view_angle; // angle number in sin/cos/tan tables
 static clip_plane_t	g_clip_planes[3]; // 0 - near, 1 - left, 2 - right
 
 static seg_t*		g_cur_seg;
@@ -212,9 +215,12 @@ void RP_BuildViewMatrix(player_t *player)
     float		tmp_mat[2][16];
     int			angle_num;
 
+    angle_num = ((ANG90 - player->mo->angle) >> ANGLETOFINESHIFT ) & FINEMASK;
+
     g_view_pos[0] = player->mo->x;
     g_view_pos[1] = player->mo->y;
     g_view_pos[2] = player->viewz;
+    g_view_angle = (player->mo->angle >> ANGLETOFINESHIFT ) & FINEMASK;;
 
     RP_MatIdentity(translate_matrix);
     translate_matrix[12] = - FixedToFloat(player->mo->x);
@@ -222,7 +228,6 @@ void RP_BuildViewMatrix(player_t *player)
     translate_matrix[14] = - FixedToFloat(player->viewz);
 
     RP_MatIdentity(rotate_matrix);
-    angle_num = ((ANG90 - player->mo->angle) >> ANGLETOFINESHIFT ) & FINEMASK;
     rotate_matrix[0] =  FixedToFloat(finecosine[ angle_num ]);
     rotate_matrix[4] = -FixedToFloat(finesine  [ angle_num ]);
     rotate_matrix[1] =  FixedToFloat(finesine  [ angle_num ]);
@@ -550,11 +555,12 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 
     fixed_t height = is_floor ? subsector->sector->floorheight : subsector->sector->ceilingheight;
 
-    fixed_t vertices_proj[64][2];
+    fixed_t vertices_proj[64][3];
 
     int plane_x_min[ MAX_SCREENHEIGHT ];
     int plane_x_max[ MAX_SCREENHEIGHT ];
-    int y_min = SCREENHEIGHT, y_max = 0;
+    int y_min = 32767, y_max = -32767;
+    int top_vertex_index = 0, bottom_vertex_index = 0;
 
     vertex_t clipped_polygon[ 64 ];
     int clipped_polygon_vertex_count = full_subsector->numvertices;
@@ -582,6 +588,7 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 
 	vertices_proj[i][0] = FloatToFixed((proj[0] + 1.0f ) * ((float)SCREENWIDTH ) * 0.5f );
 	vertices_proj[i][1] = FloatToFixed((proj[1] + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
+	vertices_proj[i][2] = FloatToFixed(proj[2]);
     }
 
     int color_index = subsector_num & 255;
@@ -625,27 +632,67 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	    y++;
     	}
 
-    	if( y_begin < y_min) y_min = y_begin;
-    	if( y_end > y_max) y_max = y_end;
+	if( y_begin < y_min)
+    	{
+	    y_min = y_begin;
+	    top_vertex_index = cur_i;
+	}
+	if( y_end > y_max)
+	{
+	    y_max = y_end;
+	    bottom_vertex_index = next_i;
+	}
     }
 
     SetLightLevel(subsector->sector->lightlevel);
 
     pixel_t* palette = VP_GetPaletteStorage();
     flat_texture_t* texture = GetFlatTexture( flattranslation[is_floor ? subsector->sector->floorpic : subsector->sector->ceilingpic] );
+
     int y;
-    for( y = y_min; y < y_max; y++ )
+
+    fixed_t part_step =
+	FixedDiv(
+	    FRACUNIT << PR_FLAT_PART_BITS,
+	    vertices_proj[bottom_vertex_index][1] - vertices_proj[top_vertex_index][1]);
+    fixed_t ddy = (y_min<<FRACBITS) + FRACUNIT/2 - vertices_proj[top_vertex_index][1];
+    fixed_t part = FixedMul(ddy, part_step);
+
+    fixed_t uv_start[2];
+    fixed_t uv_dir[2];
+    fixed_t uv_per_dir[2];
+    uv_start[0] = g_view_pos[0];
+    uv_start[1] = g_view_pos[1];
+    uv_dir[0] = finecosine[g_view_angle];
+    uv_dir[1] = finesine  [g_view_angle];
+    uv_per_dir[0] =  uv_dir[1];
+    uv_per_dir[1] =  -uv_dir[0];
+
+    fixed_t uv_line_step_on_z1 = (2 << FRACBITS) / SCREENWIDTH;
+    for( y = y_min; y < y_max; y++, part+= part_step )
     {
+	fixed_t inv_z_scaled = // PR_FLAT_PART_BITS / z
+	    FixedDiv(part, vertices_proj[bottom_vertex_index][2]) +
+	    FixedDiv((FRACUNIT<<PR_FLAT_PART_BITS) - part, vertices_proj[top_vertex_index][2]);
+	fixed_t z = FixedDiv(FRACUNIT<<PR_FLAT_PART_BITS, inv_z_scaled);
+
 	int x_begin = plane_x_min[y];
 	if (x_begin < 0 ) x_begin = 0;
 	int x_end = plane_x_max[y];
 	if( x_end > SCREENWIDTH) x_end = SCREENWIDTH;
 	int x;
 	pixel_t* dst = VP_GetFramebuffer() + x_begin + y * SCREENWIDTH;
-	pixel_t* src = texture->mip[0] + (y&RP_FLAT_TEXTURE_SIZE_MINUS_1) * RP_FLAT_TEXTURE_SIZE;
-	for( x = x_begin; x < x_end; x++, dst++ )
-	    *dst = LightPixel(src[x & RP_FLAT_TEXTURE_SIZE_MINUS_1]);
-	   //  *dst = palette[color_index];
+
+	fixed_t line_duv_scaler = FixedMul(uv_line_step_on_z1, z);
+	fixed_t u = FixedMul(z, uv_dir[0]) + uv_start[0];
+	fixed_t v = FixedMul(z, uv_dir[1]) + uv_start[1];
+	fixed_t du_dx = FixedMul(uv_per_dir[0], line_duv_scaler);
+	fixed_t dv_dx = FixedMul(uv_per_dir[1], line_duv_scaler);
+
+	u += (x_begin - SCREENWIDTH / 2) * du_dx;
+	v += (x_begin - SCREENWIDTH / 2) * dv_dx;
+	for( x = x_begin; x < x_end; x++, dst++, u += du_dx, v += dv_dx )
+	    *dst = texture->mip[0][ ((u>>FRACBITS)&RP_FLAT_TEXTURE_SIZE_MINUS_1) + ((v>>FRACBITS)&RP_FLAT_TEXTURE_SIZE_MINUS_1) * RP_FLAT_TEXTURE_SIZE ];
     }
 }
 
