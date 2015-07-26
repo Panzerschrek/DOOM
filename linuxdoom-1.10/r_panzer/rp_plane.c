@@ -20,6 +20,8 @@ static int			g_cur_subsector_vertex_count;
 static node_t*			g_cur_subsector_parent_nodes_stack[ RP_MAX_BSP_TREE_DEPTH ];
 static clip_plane_t		g_nodes_clip_planes[ RP_MAX_BSP_TREE_DEPTH ];
 static int			g_cur_subsector_parent_nodes_count;
+static fixed_t			g_level_bbox_min[2];
+static fixed_t			g_level_bbox_max[2];
 
 // extern bsp strustures
 extern subsector_t*	subsectors;
@@ -159,33 +161,25 @@ int R_32b_ClipPolygon(vertex_t* vertices, int vertex_count, clip_plane_t* plane)
     return vertex_count + 2 - vertices_clipped;
 }
 
-static void BuildSubsector(int subsector_num, fixed_t* bbox)
+static void BuildSubsector(int subsector_num)
 {
-    const int		c_bbox_add_eps = FRACUNIT / 4;
     int			i;
     subsector_t*	subsector;
     seg_t*		seg;
     clip_plane_t	seg_clip_plane;
-    fixed_t		bb_min[2];
-    fixed_t		bb_max[2];
 
     subsector = &subsectors[ subsector_num ];
 
-    bb_min[0] = bbox[BOXLEFT];
-    bb_max[0] = bbox[BOXRIGHT];
-
-    bb_min[1] = bbox[BOXBOTTOM];
-    bb_max[1] = bbox[BOXTOP];
-
+    // TODO - use smaller bounding box, like sector bounding box, for example
     g_cur_subsector_vertex_count = 4;
-    g_cur_subsector_vertices[0].x = bb_min[0] - c_bbox_add_eps;
-    g_cur_subsector_vertices[0].y = bb_min[1] - c_bbox_add_eps;
-    g_cur_subsector_vertices[1].x = bb_min[0] - c_bbox_add_eps;
-    g_cur_subsector_vertices[1].y = bb_max[1] + c_bbox_add_eps;
-    g_cur_subsector_vertices[2].x = bb_max[0] + c_bbox_add_eps;
-    g_cur_subsector_vertices[2].y = bb_max[1] + c_bbox_add_eps;
-    g_cur_subsector_vertices[3].x = bb_max[0] + c_bbox_add_eps;
-    g_cur_subsector_vertices[3].y = bb_min[1] - c_bbox_add_eps;
+    g_cur_subsector_vertices[0].x = g_level_bbox_min[0];
+    g_cur_subsector_vertices[0].y = g_level_bbox_min[1];
+    g_cur_subsector_vertices[1].x = g_level_bbox_min[0];
+    g_cur_subsector_vertices[1].y = g_level_bbox_max[1];
+    g_cur_subsector_vertices[2].x = g_level_bbox_max[0];
+    g_cur_subsector_vertices[2].y = g_level_bbox_max[1];
+    g_cur_subsector_vertices[3].x = g_level_bbox_max[0];
+    g_cur_subsector_vertices[3].y = g_level_bbox_min[1];
 
     for( i = 0; i < g_cur_subsector_parent_nodes_count; i++ )
     {
@@ -212,14 +206,14 @@ static void BuildSubsector(int subsector_num, fixed_t* bbox)
     AddSubsector(subsector_num);
 }
 
-static void Node_r(int node_num, fixed_t* bbox)
+static void Node_r(int node_num)
 {
     clip_plane_t* 	clip_plane;
     node_t*		node;
 
     if (node_num & NF_SUBSECTOR)
     {
-	BuildSubsector(node_num&(~NF_SUBSECTOR), bbox);
+	BuildSubsector(node_num&(~NF_SUBSECTOR));
     }
     else
     {
@@ -231,12 +225,12 @@ static void Node_r(int node_num, fixed_t* bbox)
 
 	NormalizeVec(node->dy, -node->dx, clip_plane->n);
 	clip_plane->dist = - (FixedMul(node->x, clip_plane->n[0]) + FixedMul(node->y, clip_plane->n[1]));
-	Node_r(node->children[0], node->bbox[0]);
+	Node_r(node->children[0]);
 
 	clip_plane->n[0] = -clip_plane->n[0];
 	clip_plane->n[1] = -clip_plane->n[1];
 	clip_plane->dist = -clip_plane->dist;
-	Node_r(node->children[1], node->bbox[1]);
+	Node_r(node->children[1]);
 
 	g_cur_subsector_parent_nodes_count--;
     }
@@ -248,7 +242,28 @@ void R_32b_BuildFullSubsectors()
 
     g_cur_subsector_parent_nodes_count = 0;
 
-    Node_r(numnodes-1, NULL);
+    { // build bounding box of all level
+	const int c_bbox_add_eps = FRACUNIT;
+
+	node_t* root_node = &nodes[numnodes-1];
+
+	g_level_bbox_min[0] = root_node->bbox[0][BOXLEFT];
+	if (g_level_bbox_min[0] > root_node->bbox[1][BOXLEFT]) g_level_bbox_min[0] = root_node->bbox[1][BOXLEFT];
+	g_level_bbox_max[0] = root_node->bbox[0][BOXRIGHT];
+	if (g_level_bbox_max[0] < root_node->bbox[1][BOXRIGHT]) g_level_bbox_max[0] = root_node->bbox[1][BOXRIGHT];
+
+	g_level_bbox_min[1] = root_node->bbox[0][BOXBOTTOM];
+	if (g_level_bbox_min[1] > root_node->bbox[1][BOXBOTTOM]) g_level_bbox_min[1] = root_node->bbox[1][BOXBOTTOM];
+	g_level_bbox_max[1] = root_node->bbox[0][BOXTOP];
+	if (g_level_bbox_max[1] < root_node->bbox[1][BOXTOP]) g_level_bbox_max[1] = root_node->bbox[1][BOXTOP];
+
+	g_level_bbox_min[0] -= c_bbox_add_eps;
+	g_level_bbox_min[1] -= c_bbox_add_eps;
+	g_level_bbox_max[0] += c_bbox_add_eps;
+	g_level_bbox_max[1] += c_bbox_add_eps;
+    }
+
+    Node_r(numnodes-1);
 }
 
 vertex_t* R_32b_GetFullSubsectorsVertices()
