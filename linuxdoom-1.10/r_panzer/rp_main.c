@@ -1,3 +1,4 @@
+#include <limits.h>
 #include <math.h>
 
 #include "rp_main.h"
@@ -17,7 +18,7 @@
 // magic constant for butifulizing of texture mapping on slope walls
 #define PR_SEG_U_MIP_SCALER 2
 
-#define PR_FLAT_PART_BITS 4
+#define PR_FLAT_PART_BITS 12
 
 #define RP_Z_NEAR_FIXED (8 * 65536)
 
@@ -26,6 +27,7 @@
 static float		g_view_matrix[16];
 static fixed_t		g_view_pos[3];
 static int		g_view_angle; // angle number in sin/cos/tan tables
+static fixed_t		g_half_fov_tan;
 static clip_plane_t	g_clip_planes[3]; // 0 - near, 1 - left, 2 - right
 
 static seg_t*		g_cur_seg;
@@ -220,7 +222,8 @@ void RP_BuildViewMatrix(player_t *player)
     g_view_pos[0] = player->mo->x;
     g_view_pos[1] = player->mo->y;
     g_view_pos[2] = player->viewz;
-    g_view_angle = (player->mo->angle >> ANGLETOFINESHIFT ) & FINEMASK;;
+    g_view_angle = (player->mo->angle >> ANGLETOFINESHIFT ) & FINEMASK;
+    g_half_fov_tan = -finetangent[RP_HALF_FOV_X >> ANGLETOFINESHIFT];
 
     RP_MatIdentity(translate_matrix);
     translate_matrix[12] = - FixedToFloat(player->mo->x);
@@ -559,7 +562,7 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 
     int plane_x_min[ MAX_SCREENHEIGHT ];
     int plane_x_max[ MAX_SCREENHEIGHT ];
-    int y_min = 32767, y_max = -32767;
+    int y_min = INT_MAX, y_max = INT_MIN;
     int top_vertex_index = 0, bottom_vertex_index = 0;
 
     vertex_t clipped_polygon[ 64 ];
@@ -590,8 +593,6 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	vertices_proj[i][1] = FloatToFixed((proj[1] + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
 	vertices_proj[i][2] = FloatToFixed(proj[2]);
     }
-
-    int color_index = subsector_num & 255;
 
     for( i = 0; i < clipped_polygon_vertex_count; i++ )
     {
@@ -626,7 +627,6 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 
 	while (y < y_end)
 	{
-	    //V_DrawPixel(i_x, y, color_index);
 	    side[y] = FixedRoundToInt(x);
 	    x+= x_step;
 	    y++;
@@ -646,10 +646,7 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 
     SetLightLevel(subsector->sector->lightlevel);
 
-    pixel_t* palette = VP_GetPaletteStorage();
     flat_texture_t* texture = GetFlatTexture( flattranslation[is_floor ? subsector->sector->floorpic : subsector->sector->ceilingpic] );
-
-    int y;
 
     fixed_t part_step =
 	FixedDiv(
@@ -662,16 +659,21 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
     fixed_t uv_dir[2];
     fixed_t uv_per_dir[2];
     uv_start[0] = g_view_pos[0];
-    uv_start[1] = g_view_pos[1];
-    uv_dir[0] = finecosine[g_view_angle];
-    uv_dir[1] = finesine  [g_view_angle];
-    uv_per_dir[0] =  uv_dir[1];
-    uv_per_dir[1] =  -uv_dir[0];
+    uv_start[1] = -g_view_pos[1];
+    uv_dir[0] =  finecosine[g_view_angle];
+    uv_dir[1] =  -finesine [g_view_angle];
+    uv_per_dir[0] = -uv_dir[1];
+    uv_per_dir[1] =  uv_dir[0];
 
-    fixed_t uv_line_step_on_z1 = (2 << FRACBITS) / SCREENWIDTH;
+    // TODO - optimize this
+    fixed_t uv_line_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
+    int y;
     for( y = y_min; y < y_max; y++, part+= part_step )
     {
-	fixed_t inv_z_scaled = // PR_FLAT_PART_BITS / z
+	pixel_t* src = texture->mip[0];
+	pixel_t pixel;
+
+	fixed_t inv_z_scaled = // (1<<PR_FLAT_PART_BITS) / z
 	    FixedDiv(part, vertices_proj[bottom_vertex_index][2]) +
 	    FixedDiv((FRACUNIT<<PR_FLAT_PART_BITS) - part, vertices_proj[top_vertex_index][2]);
 	fixed_t z = FixedDiv(FRACUNIT<<PR_FLAT_PART_BITS, inv_z_scaled);
@@ -692,7 +694,10 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	u += (x_begin - SCREENWIDTH / 2) * du_dx;
 	v += (x_begin - SCREENWIDTH / 2) * dv_dx;
 	for( x = x_begin; x < x_end; x++, dst++, u += du_dx, v += dv_dx )
-	    *dst = texture->mip[0][ ((u>>FRACBITS)&RP_FLAT_TEXTURE_SIZE_MINUS_1) + ((v>>FRACBITS)&RP_FLAT_TEXTURE_SIZE_MINUS_1) * RP_FLAT_TEXTURE_SIZE ];
+	{
+	    pixel = src[ ((u>>FRACBITS)&RP_FLAT_TEXTURE_SIZE_MINUS_1) + ((v>>FRACBITS)&RP_FLAT_TEXTURE_SIZE_MINUS_1) * RP_FLAT_TEXTURE_SIZE ];
+	    *dst = LightPixel(pixel);
+	}
     }
 }
 
