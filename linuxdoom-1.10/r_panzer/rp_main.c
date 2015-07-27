@@ -18,7 +18,7 @@
 // magic constant for butifulizing of texture mapping on slope walls
 #define PR_SEG_U_MIP_SCALER 2
 
-#define PR_FLAT_PART_BITS 12
+#define PR_FLAT_PART_BITS 14
 
 #define RP_Z_NEAR_FIXED (8 * 65536)
 
@@ -47,6 +47,13 @@ static struct
     fixed_t	tc_u_offset;
     fixed_t	length;
 } g_cur_seg_data;
+
+static struct
+{
+    // additional 3 vertices - for clipping by 3 planes
+    vertex_t	clipped_vertices[ RP_MAX_SUBSECTOR_VERTICES + 3 ];
+    int		vertex_count;
+} g_cur_subsector_data;
 
 
 // input - in range [0;255]
@@ -176,6 +183,30 @@ static boolean ClipCurSeg()
 	}
     }
     return false;
+}
+
+static void ClipCurSubsector(int subsector_num)
+{
+    int			i;
+    full_subsector_t*	full_subsector;
+    vertex_t*		full_subsector_vertices;
+
+    full_subsector = R_32b_GetFullSubsectors() + subsector_num;
+    full_subsector_vertices = R_32b_GetFullSubsectorsVertices() + full_subsector->first_vertex;
+
+    g_cur_subsector_data.vertex_count = full_subsector->numvertices;
+    for( i = 0; i < full_subsector->numvertices; i++ )
+	g_cur_subsector_data.clipped_vertices[i] = full_subsector_vertices[i];
+
+    for( i = 0; i < 3; i++ )
+    {
+	g_cur_subsector_data.vertex_count =
+	    R_32b_ClipPolygon(
+		g_cur_subsector_data.clipped_vertices,
+		g_cur_subsector_data.vertex_count,
+		&g_clip_planes[i]);
+	if (g_cur_subsector_data.vertex_count == 0 ) return;
+    }
 }
 
 void RP_MatMul(const float* mat0, const float* mat1, float* result)
@@ -549,42 +580,28 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 {
     int			i;
     subsector_t*	subsector;
-    full_subsector_t*	full_subsector;
-    vertex_t*		full_subsector_vertices;
 
     subsector = &subsectors[subsector_num];
-    full_subsector = R_32b_GetFullSubsectors() + subsector_num;
-    full_subsector_vertices = R_32b_GetFullSubsectorsVertices() + full_subsector->first_vertex;
 
     fixed_t height = is_floor ? subsector->sector->floorheight : subsector->sector->ceilingheight;
 
-    fixed_t vertices_proj[64][3];
+    fixed_t vertices_proj[RP_MAX_SUBSECTOR_VERTICES + 3][3];
 
     int plane_x_min[ MAX_SCREENHEIGHT ];
     int plane_x_max[ MAX_SCREENHEIGHT ];
     int y_min = INT_MAX, y_max = INT_MIN;
     int top_vertex_index = 0, bottom_vertex_index = 0;
 
-    vertex_t clipped_polygon[ 64 ];
-    int clipped_polygon_vertex_count = full_subsector->numvertices;
-    for( i = 0; i < full_subsector->numvertices; i++ )
-	clipped_polygon[i] = full_subsector_vertices[i];
-
-    for( i = 0; i < 3; i++ )
-	clipped_polygon_vertex_count = R_32b_ClipPolygon( clipped_polygon, clipped_polygon_vertex_count, &g_clip_planes[i] );
-    if ( clipped_polygon_vertex_count == 0 ) return;
-
-    for( i = 0; i < clipped_polygon_vertex_count; i++)
+    for( i = 0; i < g_cur_subsector_data.vertex_count; i++)
     {
 	float f_vertex[3];
 
-	f_vertex[0] = FixedToFloat(clipped_polygon[i].x);
-	f_vertex[1] = FixedToFloat(clipped_polygon[i].y);
+	f_vertex[0] = FixedToFloat(g_cur_subsector_data.clipped_vertices[i].x);
+	f_vertex[1] = FixedToFloat(g_cur_subsector_data.clipped_vertices[i].y);
 	f_vertex[2] = FixedToFloat(height);
 
 	float proj[3];
 	RP_VecMatMul(f_vertex, g_view_matrix, proj);
-	if (proj[2] <= 0.0f) return;
 
 	proj[0] /= proj[2];
 	proj[1] /= proj[2];
@@ -594,11 +611,11 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	vertices_proj[i][2] = FloatToFixed(proj[2]);
     }
 
-    for( i = 0; i < clipped_polygon_vertex_count; i++ )
+    for( i = 0; i < g_cur_subsector_data.vertex_count; i++ )
     {
 	int cur_i = i;
 	int next_i = cur_i + 1;
-	if ( next_i == clipped_polygon_vertex_count ) next_i = 0;
+	if ( next_i == g_cur_subsector_data.vertex_count ) next_i = 0;
 
 	fixed_t dy = vertices_proj[next_i][1] - vertices_proj[cur_i][1];
 	if (dy == 0) continue;
@@ -632,12 +649,12 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	    y++;
     	}
 
-	if( y_begin < y_min)
-    	{
+	if (y_min == INT_MAX || vertices_proj[cur_i ][1] < vertices_proj[top_vertex_index][1])
+	{
 	    y_min = y_begin;
 	    top_vertex_index = cur_i;
 	}
-	if( y_end > y_max)
+	if (y_max == INT_MIN || vertices_proj[next_i][1] > vertices_proj[bottom_vertex_index][1])
 	{
 	    y_max = y_end;
 	    bottom_vertex_index = next_i;
@@ -691,8 +708,9 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	fixed_t du_dx = FixedMul(uv_per_dir[0], line_duv_scaler);
 	fixed_t dv_dx = FixedMul(uv_per_dir[1], line_duv_scaler);
 
-	u += (x_begin - SCREENWIDTH / 2) * du_dx;
-	v += (x_begin - SCREENWIDTH / 2) * dv_dx;
+	fixed_t center_offset = (x_begin<<FRACBITS) - (SCREENWIDTH<<FRACBITS)/2 + FRACUNIT/2;
+	u += FixedMul(center_offset, du_dx);
+	v += FixedMul(center_offset, dv_dx);
 	for( x = x_begin; x < x_end; x++, dst++, u += du_dx, v += dv_dx )
 	{
 	    pixel = src[ ((u>>FRACBITS)&RP_FLAT_TEXTURE_SIZE_MINUS_1) + ((v>>FRACBITS)&RP_FLAT_TEXTURE_SIZE_MINUS_1) * RP_FLAT_TEXTURE_SIZE ];
@@ -705,6 +723,7 @@ void RP_Subsector(int num)
 {
     subsector_t*	sub;
     int			line_seg;
+    boolean		subsector_clipped;
 
     sub = &subsectors[num];
 
@@ -713,8 +732,21 @@ void RP_Subsector(int num)
     	g_cur_seg = &segs[ line_seg ];
 	PR_DrawWall();
     }
-    if (g_view_pos[2] > sub->sector->floorheight  ) PR_DrawSubsectorFlat( num, true  );
-    if (g_view_pos[2] < sub->sector->ceilingheight) PR_DrawSubsectorFlat( num, false );
+    subsector_clipped = false;
+
+    if (g_view_pos[2] > sub->sector->floorheight  )
+    {
+	ClipCurSubsector(num);
+	subsector_clipped = true;
+	if (g_cur_subsector_data.vertex_count > 0)
+	    PR_DrawSubsectorFlat( num, true  );
+    }
+    if (g_view_pos[2] < sub->sector->ceilingheight)
+    {
+	if (!subsector_clipped) ClipCurSubsector(num);
+	if (g_cur_subsector_data.vertex_count > 0)
+	    PR_DrawSubsectorFlat( num, false );
+    }
 }
 //
 // RenderBSPNode

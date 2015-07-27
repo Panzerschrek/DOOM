@@ -5,7 +5,6 @@
 #include <math.h>
 #include <stdlib.h>
 
-#define RP_MAX_SUBSECTOR_VERTICES 64
 #define RP_MAX_BSP_TREE_DEPTH 128
 
 
@@ -20,8 +19,6 @@ static int			g_cur_subsector_vertex_count;
 static node_t*			g_cur_subsector_parent_nodes_stack[ RP_MAX_BSP_TREE_DEPTH ];
 static clip_plane_t		g_nodes_clip_planes[ RP_MAX_BSP_TREE_DEPTH ];
 static int			g_cur_subsector_parent_nodes_count;
-static fixed_t			g_level_bbox_min[2];
-static fixed_t			g_level_bbox_max[2];
 
 // extern bsp strustures
 extern subsector_t*	subsectors;
@@ -32,6 +29,10 @@ extern int		numnodes;
 
 extern seg_t*		segs;
 extern int		numsegs;
+
+// blockmap
+extern fixed_t		bmaporgx;
+extern fixed_t		bmaporgy;
 
 
 static void NormalizeVec(fixed_t x, fixed_t y, fixed_t* out)
@@ -163,23 +164,33 @@ int R_32b_ClipPolygon(vertex_t* vertices, int vertex_count, clip_plane_t* plane)
 
 static void BuildSubsector(int subsector_num)
 {
+    const fixed_t		c_bbox_eps = FRACUNIT;
+
     int			i;
     subsector_t*	subsector;
+    sector_t*		sector;
     seg_t*		seg;
     clip_plane_t	seg_clip_plane;
+    fixed_t		bbox_min[2];
+    fixed_t		bbox_max[2];
 
     subsector = &subsectors[ subsector_num ];
+    sector = subsector->sector;
 
-    // TODO - use smaller bounding box, like sector bounding box, for example
+    bbox_min[0] = ((sector->blockbox[BOXLEFT]   ) << (7+FRACBITS)) + bmaporgx - c_bbox_eps;
+    bbox_max[0] = ((sector->blockbox[BOXRIGHT]+1) << (7+FRACBITS)) + bmaporgx + c_bbox_eps;
+    bbox_min[1] = ((sector->blockbox[BOXBOTTOM] ) << (7+FRACBITS)) + bmaporgy - c_bbox_eps;
+    bbox_max[1] = ((sector->blockbox[BOXTOP]  +1) << (7+FRACBITS)) + bmaporgy + c_bbox_eps;
+
     g_cur_subsector_vertex_count = 4;
-    g_cur_subsector_vertices[0].x = g_level_bbox_min[0];
-    g_cur_subsector_vertices[0].y = g_level_bbox_min[1];
-    g_cur_subsector_vertices[1].x = g_level_bbox_min[0];
-    g_cur_subsector_vertices[1].y = g_level_bbox_max[1];
-    g_cur_subsector_vertices[2].x = g_level_bbox_max[0];
-    g_cur_subsector_vertices[2].y = g_level_bbox_max[1];
-    g_cur_subsector_vertices[3].x = g_level_bbox_max[0];
-    g_cur_subsector_vertices[3].y = g_level_bbox_min[1];
+    g_cur_subsector_vertices[0].x = bbox_min[0];
+    g_cur_subsector_vertices[0].y = bbox_min[1];
+    g_cur_subsector_vertices[1].x = bbox_min[0];
+    g_cur_subsector_vertices[1].y = bbox_max[1];
+    g_cur_subsector_vertices[2].x = bbox_max[0];
+    g_cur_subsector_vertices[2].y = bbox_max[1];
+    g_cur_subsector_vertices[3].x = bbox_max[0];
+    g_cur_subsector_vertices[3].y = bbox_min[1];
 
     for( i = 0; i < g_cur_subsector_parent_nodes_count; i++ )
     {
@@ -239,30 +250,7 @@ static void Node_r(int node_num)
 void R_32b_BuildFullSubsectors()
 {
     PrepareOutBuffer();
-
     g_cur_subsector_parent_nodes_count = 0;
-
-    { // build bounding box of all level
-	const int c_bbox_add_eps = FRACUNIT;
-
-	node_t* root_node = &nodes[numnodes-1];
-
-	g_level_bbox_min[0] = root_node->bbox[0][BOXLEFT];
-	if (g_level_bbox_min[0] > root_node->bbox[1][BOXLEFT]) g_level_bbox_min[0] = root_node->bbox[1][BOXLEFT];
-	g_level_bbox_max[0] = root_node->bbox[0][BOXRIGHT];
-	if (g_level_bbox_max[0] < root_node->bbox[1][BOXRIGHT]) g_level_bbox_max[0] = root_node->bbox[1][BOXRIGHT];
-
-	g_level_bbox_min[1] = root_node->bbox[0][BOXBOTTOM];
-	if (g_level_bbox_min[1] > root_node->bbox[1][BOXBOTTOM]) g_level_bbox_min[1] = root_node->bbox[1][BOXBOTTOM];
-	g_level_bbox_max[1] = root_node->bbox[0][BOXTOP];
-	if (g_level_bbox_max[1] < root_node->bbox[1][BOXTOP]) g_level_bbox_max[1] = root_node->bbox[1][BOXTOP];
-
-	g_level_bbox_min[0] -= c_bbox_add_eps;
-	g_level_bbox_min[1] -= c_bbox_add_eps;
-	g_level_bbox_max[0] += c_bbox_add_eps;
-	g_level_bbox_max[1] += c_bbox_add_eps;
-    }
-
     Node_r(numnodes-1);
 }
 

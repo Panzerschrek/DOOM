@@ -4,6 +4,8 @@
 #include "../doomtype.h"
 #include "../r_defs.h"
 
+#define RP_MAX_SUBSECTOR_VERTICES 64
+
 typedef union pixel_u
 {
     byte components[4];
