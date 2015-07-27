@@ -687,9 +687,6 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
     int y;
     for( y = y_min; y < y_max; y++, part+= part_step )
     {
-	pixel_t* src = texture->mip[0];
-	pixel_t pixel;
-
 	fixed_t inv_z_scaled = // (1<<PR_FLAT_PART_BITS) / z
 	    FixedDiv(part, vertices_proj[bottom_vertex_index][2]) +
 	    FixedDiv((FRACUNIT<<PR_FLAT_PART_BITS) - part, vertices_proj[top_vertex_index][2]);
@@ -711,9 +708,24 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	fixed_t center_offset = (x_begin<<FRACBITS) - (SCREENWIDTH<<FRACBITS)/2 + FRACUNIT/2;
 	u += FixedMul(center_offset, du_dx);
 	v += FixedMul(center_offset, dv_dx);
+
+	// TODO - add mip for du/dy dv/dy too
+	// mip = log(sqrt(du *du + dv * dv)) = log(du *du + dv * dv) / 2
+	// add small shift fot prevention of overflow
+	int mip = IntLog2Floor((
+	    FixedMul(du_dx>>2, du_dx>>2) +
+	    FixedMul(dv_dx>>2, dv_dx>>2) ) >> (FRACBITS-4) ) >> 1;
+	if (mip > RP_FLAT_TEXTURE_SIZE_LOG2) mip = RP_FLAT_TEXTURE_SIZE_LOG2;
+	int texel_fetch_shift = RP_FLAT_TEXTURE_SIZE_LOG2 - mip;
+	int texel_fetch_mask = (1<<texel_fetch_shift) - 1;
+	u>>=mip; v>>=mip;
+	du_dx>>=mip; dv_dx>>=mip;
+
+	pixel_t pixel;
+	pixel_t* src = texture->mip[mip];
 	for( x = x_begin; x < x_end; x++, dst++, u += du_dx, v += dv_dx )
 	{
-	    pixel = src[ ((u>>FRACBITS)&RP_FLAT_TEXTURE_SIZE_MINUS_1) + ((v>>FRACBITS)&RP_FLAT_TEXTURE_SIZE_MINUS_1) * RP_FLAT_TEXTURE_SIZE ];
+	    pixel = src[ ((u>>FRACBITS)&texel_fetch_mask) + (((v>>FRACBITS)&texel_fetch_mask) << texel_fetch_shift) ];
 	    *dst = LightPixel(pixel);
 	}
     }
