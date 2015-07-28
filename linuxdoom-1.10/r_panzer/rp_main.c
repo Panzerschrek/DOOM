@@ -15,8 +15,10 @@
 
 // special value for inv_z and u/z interpolations
 #define PR_SEG_PART_BITS 4
-// magic constant for butifulizing of texture mapping on slope walls
+
+// magic constanst for beautifulizing of texture mapping on slope walls and floors
 #define PR_SEG_U_MIP_SCALER 2
+#define PR_FLAT_MIP_SCALER 4
 
 #define PR_FLAT_PART_BITS 14
 
@@ -662,15 +664,17 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
     }
 
     SetLightLevel(subsector->sector->lightlevel);
-
     flat_texture_t* texture = GetFlatTexture( flattranslation[is_floor ? subsector->sector->floorpic : subsector->sector->ceilingpic] );
 
-    fixed_t part_step =
-	FixedDiv(
-	    FRACUNIT << PR_FLAT_PART_BITS,
-	    vertices_proj[bottom_vertex_index][1] - vertices_proj[top_vertex_index][1]);
+    fixed_t dy = vertices_proj[bottom_vertex_index][1] - vertices_proj[top_vertex_index][1];
+    fixed_t part_step = FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, dy);
     fixed_t ddy = (y_min<<FRACBITS) + FRACUNIT/2 - vertices_proj[top_vertex_index][1];
     fixed_t part = FixedMul(ddy, part_step);
+
+    fixed_t inv_z_scaled_step = FixedDiv( // value is negative
+        FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, vertices_proj[top_vertex_index   ][2]) -
+        FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, vertices_proj[bottom_vertex_index][2]), dy );
+    inv_z_scaled_step = abs(inv_z_scaled_step);
 
     fixed_t uv_start[2];
     fixed_t uv_dir[2];
@@ -692,6 +696,9 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	    FixedDiv((FRACUNIT<<PR_FLAT_PART_BITS) - part, vertices_proj[top_vertex_index][2]);
 	fixed_t z = FixedDiv(FRACUNIT<<PR_FLAT_PART_BITS, inv_z_scaled);
 
+	int y_mip =
+	    IntLog2Floor((FixedMul(FixedDiv(inv_z_scaled_step, inv_z_scaled), z) / PR_FLAT_MIP_SCALER) >> FRACBITS);
+
 	int x_begin = plane_x_min[y];
 	if (x_begin < 0 ) x_begin = 0;
 	int x_end = plane_x_max[y];
@@ -709,12 +716,13 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	u += FixedMul(center_offset, du_dx);
 	v += FixedMul(center_offset, dv_dx);
 
-	// TODO - add mip for du/dy dv/dy too
 	// mip = log(sqrt(du *du + dv * dv)) = log(du *du + dv * dv) / 2
-	// add small shift fot prevention of overflow
-	int mip = IntLog2Floor((
+	// add small shift for prevention of overflow
+	int x_mip = IntLog2Floor((
 	    FixedMul(du_dx>>2, du_dx>>2) +
 	    FixedMul(dv_dx>>2, dv_dx>>2) ) >> (FRACBITS-4) ) >> 1;
+
+	int mip = y_mip > x_mip ? y_mip : x_mip;
 	if (mip > RP_FLAT_TEXTURE_SIZE_LOG2) mip = RP_FLAT_TEXTURE_SIZE_LOG2;
 	int texel_fetch_shift = RP_FLAT_TEXTURE_SIZE_LOG2 - mip;
 	int texel_fetch_mask = (1<<texel_fetch_shift) - 1;
@@ -727,6 +735,8 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	{
 	    pixel = src[ ((u>>FRACBITS)&texel_fetch_mask) + (((v>>FRACBITS)&texel_fetch_mask) << texel_fetch_shift) ];
 	    *dst = LightPixel(pixel);
+	    //pixel.components[0]= pixel.components[1] = pixel.components[2] = 32 + 32 * mip;
+	    //*dst = pixel;
 	}
     }
 }
