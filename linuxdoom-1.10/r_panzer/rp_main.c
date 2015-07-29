@@ -9,6 +9,7 @@
 #include "../m_fixed.h"
 #include "../p_setup.h"
 #include "../r_main.h"
+#include "../r_sky.h"
 #include "../r_things.h"
 #include "../tables.h"
 #include "../v_video.h"
@@ -67,6 +68,7 @@ static struct
 
 static struct
 {
+    //TODO - remove static limit
     int		x_min[ MAX_SCREENHEIGHT ];
     int		x_max[ MAX_SCREENHEIGHT ];
     int		y_min;
@@ -75,6 +77,9 @@ static struct
     int		top_vertex_index;
     int		bottom_vertex_index;
 } g_cur_screen_polygon;
+
+//TODO - remove static limit
+static int	g_y_to_sky_u_table[ MAX_SCREENHEIGHT ];
 
 
 extern int	skyflatnum;
@@ -298,10 +303,59 @@ static void PreparePolygon(screen_vertex_t* vertices, int vertex_count, boolean 
     }
 }
 
+void RP_PrepareSky(player_t* player)
+{
+    int		x;
+    fixed_t 	sign, cur_x_tan;
+    fixed_t	tan_scaler;
+    int		tan_num, angle_num, final_angle_num;
+    int		pixel_num;
+    int		sky_tex_pixels;
+
+    sky_tex_pixels = ID_SKY_TEXTURE_REPEATS * GetSkyTexture()->width;
+
+    tan_scaler = -FixedDiv(FRACUNIT, finetangent[RP_HALF_FOV_X >> ANGLETOFINESHIFT]);
+
+    for (x = 0; x < SCREENWIDTH; x++)
+    {
+	cur_x_tan = FixedDiv((x<<FRACBITS) - (SCREENWIDTH<<FRACBITS)/2, (SCREENWIDTH<<FRACBITS)/2);
+	cur_x_tan = FixedMul(cur_x_tan, tan_scaler);
+
+	if (cur_x_tan > 0)
+	    sign = 1;
+	else
+	{
+		sign = -1;
+		cur_x_tan = -cur_x_tan;
+	}
+
+	// TODO - tantoangle can not tangent > 1 and angle > 45deg
+	// handle this case
+
+	tan_num = cur_x_tan >> (FRACBITS - SLOPEBITS);
+	angle_num = sign * (tantoangle[tan_num]>>ANGLETOFINESHIFT);
+
+	final_angle_num = ((player->mo->angle>>ANGLETOFINESHIFT) - angle_num) & FINEMASK;
+	pixel_num = (final_angle_num * sky_tex_pixels / FINEANGLES) % GetSkyTexture()->width;
+
+	g_y_to_sky_u_table[x] = pixel_num;
+    }
+}
+
 void RP_DrawSkyPolygon()
 {
-    int		y;
-    int		x, x_begin, x_end;
+    int			y;
+    int			x, x_begin, x_end;
+    sky_texture_t*	texture;
+    pixel_t*		framebuffer;
+    pixel_t*		dst;
+    pixel_t*		src;
+
+    texture = GetSkyTexture();
+    framebuffer = VP_GetFramebuffer();
+    src = texture->data;
+
+    // TODO - adopt for fov and aspect ratio
 
     for (y = g_cur_screen_polygon.y_min; y < g_cur_screen_polygon.y_max; y++)
     {
@@ -311,7 +365,11 @@ void RP_DrawSkyPolygon()
 	x_end = g_cur_screen_polygon.x_max[y];
 	if (x_end > SCREENWIDTH) x_end = SCREENWIDTH;
 
-	for (x = x_begin; x < x_end; x++) V_DrawPixel(x, y, 192);
+	dst = framebuffer + x_begin + y * SCREENWIDTH;
+	src = texture->data + ((y * ID_SCREENHEIGHT / SCREENHEIGHT) % texture->height) * texture->width;
+
+	for (x = x_begin; x < x_end; x++, dst++)
+	    *dst = src[ g_y_to_sky_u_table[x] ];
     }
 }
 
@@ -899,6 +957,7 @@ void R_32b_RenderPlayerView (player_t *player)
 
     RP_BuildViewMatrix(player);
     RP_BuildClipPlanes(player);
+    RP_PrepareSky(player);
 
     RP_RenderBSPNode(numnodes-1);
 }

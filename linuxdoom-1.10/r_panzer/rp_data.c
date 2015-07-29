@@ -7,6 +7,7 @@
 #include "../i_system.h"
 #include "../p_setup.h"
 #include "../r_defs.h"
+#include "rp_data.h"
 #include "rp_defs.h"
 #include "rp_plane.h"
 
@@ -34,6 +35,8 @@ static flat_texture_t*	g_flat_textures;
 static int		g_flat_textures_count;
 static int		g_first_flat; // lump number
 
+static sky_texture_t	g_sky_texture;
+
 static pixel_t		g_textures_palette[256];
 
 // game uses this directly.
@@ -45,6 +48,8 @@ extern int		numsides;
 
 extern sector_t*	sectors;
 extern int		numsectors;
+
+extern int		skytexture;
 
 
 static void BuildFlatMip(const pixel_t* in_texture, pixel_t* out_texture, int src_width, int src_height)
@@ -91,6 +96,22 @@ static void BuildWallMip(const pixel_t* in_texture, pixel_t* out_texture, int sr
 		    >> 2;
 	}
     }
+}
+
+static void BuildSkyTextue(wall_texture_t* src_wall_texture)
+{
+    int x, y;
+
+    if (!g_sky_texture.data)
+	free(g_sky_texture.data);
+
+    g_sky_texture.width  = src_wall_texture->width ;
+    g_sky_texture.height = src_wall_texture->height;
+    g_sky_texture.data = malloc(sizeof(pixel_t) * g_sky_texture.width * g_sky_texture.height);
+
+    for (y = 0; y < g_sky_texture.height; y++)
+	for(x = 0; x < g_sky_texture.width; x++)
+	    g_sky_texture.data[ x + y * g_sky_texture.width ] = src_wall_texture->mip[0][ y + x * g_sky_texture.height ];
 }
 
 static void R_32b_InitPalette()
@@ -219,6 +240,11 @@ static void RP_InitFlatsTextures()
 
     for ( i = 0; i < g_flat_textures_count; i++ )
 	flattranslation[i] = i;
+}
+
+static void PR_InitSkyTexture()
+{
+    g_sky_texture.data = NULL;
 }
 
 static void R_32b_LoadWallTexture(int texture_num)
@@ -396,6 +422,8 @@ void R_32b_PrecacheLevel()
     R_32b_PrecacheWallsTextures();
     R_32b_PrecacheFlatsTextures();
 
+    BuildSkyTextue(GetWallTexture(skytexture));
+
     R_32b_BuildFullSubsectors();
 }
 
@@ -404,6 +432,7 @@ void R_32b_InitData ()
     R_32b_InitPalette();
     RP_InitWallsTextures();
     RP_InitFlatsTextures();
+    PR_InitSkyTexture();
 }
 
 int R_32b_FlatNumForName(char* name)
@@ -467,4 +496,9 @@ flat_texture_t* GetFlatTexture(int num)
 	R_32b_LoadFlatTexture(num);
 
     return tex;
+}
+
+sky_texture_t* GetSkyTexture()
+{
+    return &g_sky_texture;
 }

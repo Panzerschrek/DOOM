@@ -72,4 +72,12 @@ typedef struct flat_texture_s
     boolean used;
 } flat_texture_t;
 
+typedef struct sky_texture_s
+{
+    int		width;
+    int		height;
+
+    pixel_t*	data;
+} sky_texture_t;
+
 #endif//__RP_DEFS__
