@@ -26,6 +26,14 @@
 
 #define RP_HALF_FOV_X ANG45
 
+
+typedef struct screen_vertex_s
+{
+    fixed_t	x;
+    fixed_t	y;
+    fixed_t	z;
+} screen_vertex_t;
+
 static float		g_view_matrix[16];
 static fixed_t		g_view_pos[3];
 static int		g_view_angle; // angle number in sin/cos/tan tables
@@ -56,6 +64,21 @@ static struct
     vertex_t	clipped_vertices[ RP_MAX_SUBSECTOR_VERTICES + 3 ];
     int		vertex_count;
 } g_cur_subsector_data;
+
+static struct
+{
+    int		x_min[ MAX_SCREENHEIGHT ];
+    int		x_max[ MAX_SCREENHEIGHT ];
+    int		y_min;
+    int		y_max;
+
+    int		top_vertex_index;
+    int		bottom_vertex_index;
+} g_cur_screen_polygon;
+
+
+extern int	skyflatnum;
+extern int	skytexture;
 
 
 // input - in range [0;255]
@@ -211,6 +234,87 @@ static void ClipCurSubsector(int subsector_num)
     }
 }
 
+static void PreparePolygon(screen_vertex_t* vertices, int vertex_count, boolean direction)
+{
+    int		i, cur_i, next_i;
+    int		tmp;
+    int*	side;
+    int 	y_begin;
+    int		y_end;
+    int		y;
+    fixed_t	x, x_step;
+    fixed_t	dy;
+
+    g_cur_screen_polygon.y_min = INT_MAX;
+    g_cur_screen_polygon.y_max = INT_MIN;
+
+    for( i = 0; i < vertex_count; i++ )
+    {
+	cur_i = i;
+	next_i = cur_i + 1;
+	if (next_i == vertex_count) next_i = 0;
+
+	dy = vertices[next_i].y - vertices[cur_i].y;
+	if (dy == 0) continue;
+
+	if( dy < 0 )
+	{
+	    dy = -dy;
+	    tmp = next_i;
+	    next_i = cur_i;
+	    cur_i = tmp;
+	    side = direction ? g_cur_screen_polygon.x_min : g_cur_screen_polygon.x_max;
+	}
+	else side = direction ? g_cur_screen_polygon.x_max : g_cur_screen_polygon.x_min;
+
+	x_step = FixedDiv(vertices[next_i].x - vertices[cur_i].x, dy);
+	x = vertices[cur_i].x;
+
+	y_begin = FixedRoundToInt(vertices[cur_i ].y);
+	if( y_begin < 0 ) y_begin = 0;
+	y_end   = FixedRoundToInt(vertices[next_i].y);
+	if( y_end > SCREENHEIGHT) y_end = SCREENHEIGHT;
+	y = y_begin;
+
+	x += FixedMul(x_step, FRACUNIT/2 + (y_begin << FRACBITS) - vertices[cur_i ].y);
+
+	while (y < y_end)
+	{
+	    side[y] = FixedRoundToInt(x);
+	    x+= x_step;
+	    y++;
+	}
+
+	if (g_cur_screen_polygon.y_min == INT_MAX || vertices[cur_i ].y < vertices[g_cur_screen_polygon.top_vertex_index].y)
+	{
+	    g_cur_screen_polygon.y_min = y_begin;
+	    g_cur_screen_polygon.top_vertex_index = cur_i;
+	}
+	if (g_cur_screen_polygon.y_max == INT_MIN || vertices[next_i].y > vertices[g_cur_screen_polygon.bottom_vertex_index].y)
+	{
+	    g_cur_screen_polygon.y_max = y_end;
+	    g_cur_screen_polygon.bottom_vertex_index = next_i;
+	}
+    }
+}
+
+void RP_DrawSkyPolygon()
+{
+    int		y;
+    int		x, x_begin, x_end;
+
+    for (y = g_cur_screen_polygon.y_min; y < g_cur_screen_polygon.y_max; y++)
+    {
+	x_begin = g_cur_screen_polygon.x_min[y];
+	if (x_begin < 0) x_begin = 0;
+
+	x_end = g_cur_screen_polygon.x_max[y];
+	if (x_end > SCREENWIDTH) x_end = SCREENWIDTH;
+
+	for (x = x_begin; x < x_end; x++) V_DrawPixel(x, y, 192);
+    }
+}
+
 void RP_MatMul(const float* mat0, const float* mat1, float* result)
 {
     int i, j, k;
@@ -312,7 +416,7 @@ void RP_BuildClipPlanes(player_t *player)
     g_clip_planes[0].dist -= RP_Z_NEAR_FIXED;
 }
 
-void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
+void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boolean draw_as_sky)
 {
     float	vertex_z[4];
     fixed_t	screen_y[4];
@@ -328,6 +432,24 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
 	screen_space_y /= g_cur_seg_data.screen_z[i>>1];
 	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
+    }
+
+    if (draw_as_sky)
+    {
+    	screen_vertex_t sky_polygon_vertices[4];
+
+	sky_polygon_vertices[0].x = g_cur_seg_data.screen_x[0];
+	sky_polygon_vertices[0].y = screen_y[0];
+	sky_polygon_vertices[1].x = g_cur_seg_data.screen_x[0];
+	sky_polygon_vertices[1].y = screen_y[1];
+	sky_polygon_vertices[2].x = g_cur_seg_data.screen_x[1];
+	sky_polygon_vertices[2].y = screen_y[3];
+	sky_polygon_vertices[3].x = g_cur_seg_data.screen_x[1];
+	sky_polygon_vertices[3].y = screen_y[2];
+
+	PreparePolygon(sky_polygon_vertices, 4, true);
+	RP_DrawSkyPolygon();
+    	return;
     }
 
     pixel_t* framebuffer = VP_GetFramebuffer();
@@ -477,8 +599,11 @@ void PR_DrawWall()
     dot_product = FixedMul(seg_normal[0], vec_to_seg[0] ) + FixedMul(seg_normal[1], vec_to_seg[1] );
     if (dot_product <= 0 ) return;
 
-    if(g_cur_seg->frontsector && g_cur_seg->backsector)
+    if(g_cur_seg->frontsector && g_cur_seg->backsector && (g_cur_seg->linedef->flags & ML_TWOSIDED))
     {
+	boolean bottom_is_sky = g_cur_seg->frontsector->floorpic   == skyflatnum && g_cur_seg->backsector->floorpic   == skyflatnum;
+	boolean    top_is_sky = g_cur_seg->frontsector->ceilingpic == skyflatnum && g_cur_seg->backsector->ceilingpic == skyflatnum;
+
 	// bottom texture
 	if (g_cur_seg->backsector->floorheight > g_cur_seg->frontsector->floorheight)
 	{
@@ -497,7 +622,8 @@ void PR_DrawWall()
 	    PR_DrawWallPart(
 		v_offset,
 		g_cur_seg->frontsector->floorheight,
-		g_cur_seg->backsector->floorheight);
+		g_cur_seg->backsector->floorheight,
+		bottom_is_sky);
 	}
 
 	// top texture
@@ -520,7 +646,8 @@ void PR_DrawWall()
 	    PR_DrawWallPart(
 		v_offset,
 		g_cur_seg->backsector->ceilingheight,
-		g_cur_seg->frontsector->ceilingheight);
+		g_cur_seg->frontsector->ceilingheight,
+		top_is_sky);
 	}
 
 	// middle texture
@@ -541,7 +668,8 @@ void PR_DrawWall()
 		PR_DrawWallPart(
 		    0,
 		    h,
-		    h + (g_cur_wall_texture->height << FRACBITS));
+		    h + (g_cur_wall_texture->height << FRACBITS),
+		    false);
 	    }
 	    else
 	    {
@@ -552,7 +680,8 @@ void PR_DrawWall()
 		PR_DrawWallPart(
 		    0,
 		    h - (g_cur_wall_texture->height << FRACBITS),
-		    h );
+		    h,
+		    false);
 	    }
 	}
     }
@@ -574,7 +703,8 @@ void PR_DrawWall()
 	PR_DrawWallPart(
 	    v_offset,
 	    g_cur_seg->frontsector->floorheight,
-	    g_cur_seg->frontsector->ceilingheight );
+	    g_cur_seg->frontsector->ceilingheight,
+	    false);
     }
 }
 
@@ -586,13 +716,9 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
     subsector = &subsectors[subsector_num];
 
     fixed_t height = is_floor ? subsector->sector->floorheight : subsector->sector->ceilingheight;
+    int texture_num = flattranslation[is_floor ? subsector->sector->floorpic : subsector->sector->ceilingpic];
 
-    fixed_t vertices_proj[RP_MAX_SUBSECTOR_VERTICES + 3][3];
-
-    int plane_x_min[ MAX_SCREENHEIGHT ];
-    int plane_x_max[ MAX_SCREENHEIGHT ];
-    int y_min = INT_MAX, y_max = INT_MIN;
-    int top_vertex_index = 0, bottom_vertex_index = 0;
+    screen_vertex_t vertices_proj[RP_MAX_SUBSECTOR_VERTICES + 3];
 
     for( i = 0; i < g_cur_subsector_data.vertex_count; i++)
     {
@@ -608,72 +734,33 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	proj[0] /= proj[2];
 	proj[1] /= proj[2];
 
-	vertices_proj[i][0] = FloatToFixed((proj[0] + 1.0f ) * ((float)SCREENWIDTH ) * 0.5f );
-	vertices_proj[i][1] = FloatToFixed((proj[1] + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
-	vertices_proj[i][2] = FloatToFixed(proj[2]);
+	vertices_proj[i].x = FloatToFixed((proj[0] + 1.0f ) * ((float)SCREENWIDTH ) * 0.5f );
+	vertices_proj[i].y = FloatToFixed((proj[1] + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
+	vertices_proj[i].z = FloatToFixed(proj[2]);
     }
 
-    for( i = 0; i < g_cur_subsector_data.vertex_count; i++ )
+    PreparePolygon(vertices_proj, g_cur_subsector_data.vertex_count, is_floor);
+
+    if (texture_num == skyflatnum)
     {
-	int cur_i = i;
-	int next_i = cur_i + 1;
-	if ( next_i == g_cur_subsector_data.vertex_count ) next_i = 0;
-
-	fixed_t dy = vertices_proj[next_i][1] - vertices_proj[cur_i][1];
-	if (dy == 0) continue;
-
-	int* side;
-	if( dy < 0 )
-	{
-	    dy = -dy;
-	    int tmp = next_i;
-	    next_i = cur_i;
-	    cur_i = tmp;
-	    side = is_floor ? plane_x_min : plane_x_max;
-	}
-	else side = is_floor ? plane_x_max : plane_x_min;
-
-	fixed_t x_step = FixedDiv(vertices_proj[next_i][0] - vertices_proj[cur_i][0], dy);
-	fixed_t x = vertices_proj[cur_i][0];
-
-	int y_begin = FixedRoundToInt(vertices_proj[cur_i ][1]);
-	if( y_begin < 0 ) y_begin = 0;
-	int y_end   = FixedRoundToInt(vertices_proj[next_i][1]);
-	if( y_end > SCREENHEIGHT) y_end = SCREENHEIGHT;
-	int y = y_begin;
-
-	x += FixedMul(x_step, FRACUNIT/2 + (y_begin << FRACBITS) - vertices_proj[cur_i ][1]);
-
-	while (y < y_end)
-	{
-	    side[y] = FixedRoundToInt(x);
-	    x+= x_step;
-	    y++;
-    	}
-
-	if (y_min == INT_MAX || vertices_proj[cur_i ][1] < vertices_proj[top_vertex_index][1])
-	{
-	    y_min = y_begin;
-	    top_vertex_index = cur_i;
-	}
-	if (y_max == INT_MIN || vertices_proj[next_i][1] > vertices_proj[bottom_vertex_index][1])
-	{
-	    y_max = y_end;
-	    bottom_vertex_index = next_i;
-	}
+	RP_DrawSkyPolygon();
+	return;
     }
+
+    screen_vertex_t*    top_vertex = &vertices_proj[g_cur_screen_polygon.top_vertex_index   ];
+    screen_vertex_t* bottom_vertex = &vertices_proj[g_cur_screen_polygon.bottom_vertex_index];
 
     SetLightLevel(subsector->sector->lightlevel);
-    flat_texture_t* texture = GetFlatTexture( flattranslation[is_floor ? subsector->sector->floorpic : subsector->sector->ceilingpic] );
+    flat_texture_t* texture = GetFlatTexture(texture_num);
 
-    fixed_t dy = vertices_proj[bottom_vertex_index][1] - vertices_proj[top_vertex_index][1];
+    fixed_t dy = bottom_vertex->y - top_vertex->y;
     fixed_t part_step = FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, dy);
-    fixed_t ddy = (y_min<<FRACBITS) + FRACUNIT/2 - vertices_proj[top_vertex_index][1];
+    fixed_t ddy = (g_cur_screen_polygon.y_min<<FRACBITS) + FRACUNIT/2 - top_vertex->y;
     fixed_t part = FixedMul(ddy, part_step);
 
     fixed_t inv_z_scaled_step = FixedDiv( // value is negative
-        FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, vertices_proj[top_vertex_index   ][2]) -
-        FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, vertices_proj[bottom_vertex_index][2]), dy );
+        FixedDiv(FRACUNIT << PR_FLAT_PART_BITS,    top_vertex->z) -
+        FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, bottom_vertex->z), dy );
     inv_z_scaled_step = abs(inv_z_scaled_step);
 
     fixed_t uv_start[2];
@@ -689,19 +776,19 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
     // TODO - optimize this
     fixed_t uv_line_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
     int y;
-    for( y = y_min; y < y_max; y++, part+= part_step )
+    for( y = g_cur_screen_polygon.y_min; y < g_cur_screen_polygon.y_max; y++, part+= part_step )
     {
 	fixed_t inv_z_scaled = // (1<<PR_FLAT_PART_BITS) / z
-	    FixedDiv(part, vertices_proj[bottom_vertex_index][2]) +
-	    FixedDiv((FRACUNIT<<PR_FLAT_PART_BITS) - part, vertices_proj[top_vertex_index][2]);
+	    FixedDiv(part, bottom_vertex->z) +
+	    FixedDiv((FRACUNIT<<PR_FLAT_PART_BITS) - part, top_vertex->z);
 	fixed_t z = FixedDiv(FRACUNIT<<PR_FLAT_PART_BITS, inv_z_scaled);
 
 	int y_mip =
 	    IntLog2Floor((FixedMul(FixedDiv(inv_z_scaled_step, inv_z_scaled), z) / PR_FLAT_MIP_SCALER) >> FRACBITS);
 
-	int x_begin = plane_x_min[y];
+	int x_begin = g_cur_screen_polygon.x_min[y];
 	if (x_begin < 0 ) x_begin = 0;
-	int x_end = plane_x_max[y];
+	int x_end = g_cur_screen_polygon.x_max[y];
 	if( x_end > SCREENWIDTH) x_end = SCREENWIDTH;
 	int x;
 	pixel_t* dst = VP_GetFramebuffer() + x_begin + y * SCREENWIDTH;
@@ -735,8 +822,6 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	{
 	    pixel = src[ ((u>>FRACBITS)&texel_fetch_mask) + (((v>>FRACBITS)&texel_fetch_mask) << texel_fetch_shift) ];
 	    *dst = LightPixel(pixel);
-	    //pixel.components[0]= pixel.components[1] = pixel.components[2] = 32 + 32 * mip;
-	    //*dst = pixel;
 	}
     }
 }
