@@ -332,8 +332,16 @@ void RP_PrepareSky(player_t* player)
 	// TODO - tantoangle can not tangent > 1 and angle > 45deg
 	// handle this case
 
-	tan_num = cur_x_tan >> (FRACBITS - SLOPEBITS);
-	angle_num = sign * (tantoangle[tan_num]>>ANGLETOFINESHIFT);
+	if (cur_x_tan <= FRACUNIT)
+	{
+	    tan_num = cur_x_tan >> (FRACBITS - SLOPEBITS);
+	    angle_num = sign * (tantoangle[tan_num]>>ANGLETOFINESHIFT);
+	}
+	else
+	{
+	    tan_num = FixedDiv(FRACUNIT, cur_x_tan) >> (FRACBITS - SLOPEBITS);
+	    angle_num = sign * ( ANG45 - (tantoangle[tan_num]>>ANGLETOFINESHIFT));
+	}
 
 	final_angle_num = ((player->mo->angle>>ANGLETOFINESHIFT) - angle_num) & FINEMASK;
 	pixel_num = (final_angle_num * sky_tex_pixels / FINEANGLES) % GetSkyTexture()->width;
