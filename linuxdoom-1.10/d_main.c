@@ -632,6 +632,7 @@ void IdentifyVersion (void)
     if (M_CheckParm ("-shdev"))
     {
 	gamemode = shareware;
+	gamemission = doom;
 	devparm = true;
 	D_AddFile (DEVDATA"doom1.wad");
 	D_AddFile (DEVMAPS"data_se/texture1.lmp");
@@ -643,6 +644,7 @@ void IdentifyVersion (void)
     if (M_CheckParm ("-regdev"))
     {
 	gamemode = registered;
+	gamemission = doom;
 	devparm = true;
 	D_AddFile (DEVDATA"doom.wad");
 	D_AddFile (DEVMAPS"data_se/texture1.lmp");
@@ -655,6 +657,7 @@ void IdentifyVersion (void)
     if (M_CheckParm ("-comdev"))
     {
 	gamemode = commercial;
+	gamemission = doom2;
 	devparm = true;
 	/* I don't bother
 	if(plutonia)
@@ -673,6 +676,7 @@ void IdentifyVersion (void)
     if ( CanOpenFile (doom2fwad) )
     {
 	gamemode = commercial;
+	gamemission = doom2;
 	// C'est ridicule!
 	// Let's handle languages in config files, okay?
 	language = french;
@@ -684,6 +688,7 @@ void IdentifyVersion (void)
     if ( CanOpenFile (doom2wad) )
     {
 	gamemode = commercial;
+	gamemission = doom2;
 	D_AddFile (doom2wad);
 	return;
     }
@@ -691,6 +696,7 @@ void IdentifyVersion (void)
     if ( CanOpenFile (plutoniawad) )
     {
       gamemode = commercial;
+      gamemission = pack_plut;
       D_AddFile (plutoniawad);
       return;
     }
@@ -698,6 +704,7 @@ void IdentifyVersion (void)
     if ( CanOpenFile (tntwad) )
     {
       gamemode = commercial;
+      gamemission = pack_tnt;
       D_AddFile (tntwad);
       return;
     }
@@ -705,6 +712,7 @@ void IdentifyVersion (void)
     if ( CanOpenFile (doomuwad) )
     {
       gamemode = retail;
+      gamemission = doom;
       D_AddFile (doomuwad);
       return;
     }
@@ -712,6 +720,7 @@ void IdentifyVersion (void)
     if ( CanOpenFile (doomwad) )
     {
       gamemode = registered;
+      gamemission = doom;
       D_AddFile (doomwad);
       return;
     }
@@ -719,6 +728,7 @@ void IdentifyVersion (void)
     if ( CanOpenFile (doom1wad) )
     {
       gamemode = shareware;
+      gamemission = doom;
       D_AddFile (doom1wad);
       return;
     }
