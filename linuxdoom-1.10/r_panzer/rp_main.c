@@ -679,10 +679,13 @@ void PR_DrawWall()
 	    g_cur_wall_texture_transparent = false;
 
 	    if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
+	    {
+		fixed_t top = g_cur_seg->frontsector->ceilingheight > g_cur_seg->backsector->ceilingheight ? g_cur_seg->frontsector->ceilingheight : g_cur_seg->backsector->ceilingheight;
 		v_offset =
 		    PositiveMod(
-			g_cur_seg->frontsector->floorheight - g_cur_seg->backsector->floorheight,
+			-g_cur_seg->backsector->floorheight + top,
 			g_cur_wall_texture->height << FRACBITS);
+	    }
 	    else v_offset = 0;
 
 	    PR_DrawWallPart(
