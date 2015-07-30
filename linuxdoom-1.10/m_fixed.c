@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -84,4 +84,19 @@ FixedDiv2
     if (c >= 2147483648.0 || c < -2147483648.0)
 	I_Error("FixedDiv: divide by zero");
     return (fixed_t) c;
+}
+
+float FixedToFloat(fixed_t f)
+{
+    return ((float)f) / ((float)FRACUNIT);
+}
+
+fixed_t FloatToFixed(float f)
+{
+    return (fixed_t)(f * ((float)FRACUNIT));
+}
+
+int FixedRoundToInt(fixed_t f)
+{
+    return (f + FRACUNIT/2)>>FRACBITS;
 }

@@ -2,12 +2,32 @@
 #define __RP_DEFS__
 
 #include "../doomtype.h"
+#include "../r_defs.h"
+
+#define RP_MAX_SUBSECTOR_VERTICES 64
 
 typedef union pixel_u
 {
     byte components[4];
     unsigned int p;
 } pixel_t;
+
+// plane equation
+// for point on plane n[0] * x + n[1] * y + dist = 0
+// for point in front of plane n[0] * x + n[1] * y + dist > 0
+typedef struct clip_plane_s
+{
+    fixed_t n[2];
+    fixed_t dist;
+} clip_plane_t;
+
+// subsector for rendering
+// contains all vertices of subsector
+typedef struct full_subsector_s
+{
+    int		first_vertex;
+    int		numvertices;
+} full_subsector_t;
 
 /*
 512 x 512
@@ -25,6 +45,7 @@ typedef union pixel_u
 
 #define RP_FLAT_TEXTURE_SIZE_LOG2	6
 #define RP_FLAT_TEXTURE_SIZE		64
+#define RP_FLAT_TEXTURE_SIZE_MINUS_1	(RP_FLAT_TEXTURE_SIZE-1)
 
 typedef struct wall_texture_s
 {
@@ -50,5 +71,13 @@ typedef struct flat_texture_s
 
     boolean used;
 } flat_texture_t;
+
+typedef struct sky_texture_s
+{
+    int		width;
+    int		height;
+
+    pixel_t*	data;
+} sky_texture_t;
 
 #endif//__RP_DEFS__

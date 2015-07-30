@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -40,6 +40,12 @@ typedef int fixed_t;
 fixed_t FixedMul	(fixed_t a, fixed_t b);
 fixed_t FixedDiv	(fixed_t a, fixed_t b);
 fixed_t FixedDiv2	(fixed_t a, fixed_t b);
+
+
+// PANZER - some additional functions
+float	FixedToFloat	(fixed_t f);
+fixed_t	FloatToFixed	(float f);
+int	FixedRoundToInt	(fixed_t f);
 
 
 
