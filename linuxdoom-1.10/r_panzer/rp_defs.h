@@ -80,4 +80,8 @@ typedef struct sky_texture_s
     pixel_t*	data;
 } sky_texture_t;
 
+
+// sprite has some format, but different pixels order
+typedef wall_texture_t sprite_picture_t;
+
 #endif//__RP_DEFS__

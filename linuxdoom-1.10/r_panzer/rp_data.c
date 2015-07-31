@@ -35,6 +35,10 @@ static flat_texture_t*	g_flat_textures;
 static int		g_flat_textures_count;
 static int		g_first_flat; // lump number
 
+
+static sprite_picture_t*	g_sprites_pictures;
+static int			g_sprites_pictures_count;
+
 static sky_texture_t	g_sky_texture;
 
 static pixel_t		g_textures_palette[256];
@@ -50,6 +54,9 @@ extern sector_t*	sectors;
 extern int		numsectors;
 
 extern int		skytexture;
+
+extern int		firstspritelump;
+extern int		numspritelumps;
 
 
 static void BuildFlatMip(const pixel_t* in_texture, pixel_t* out_texture, int src_width, int src_height)
@@ -247,6 +254,20 @@ static void PR_InitSkyTexture()
     g_sky_texture.data = NULL;
 }
 
+static void RP_InitSpritesPictures()
+{
+    int	i;
+
+    extern void R_InitSpriteLumps(void);
+
+    R_InitSpriteLumps();
+    g_sprites_pictures_count = numspritelumps;
+    g_sprites_pictures = Z_Malloc(g_sprites_pictures_count * sizeof(sprite_picture_t), PU_STATIC, 0);
+
+    for (i = 0; i < g_sprites_pictures_count; i++)
+        g_sprites_pictures[i].raw_data = NULL;
+}
+
 static void R_32b_LoadWallTexture(int texture_num)
 {
     wall_texture_t*		tex;
@@ -360,6 +381,55 @@ static void R_32b_LoadFlatTexture(int flatnum)
     }
 }
 
+static void R_32b_LoadSpritePicture(int num)
+{
+    sprite_picture_t*	sprite;
+    patch_t*		patch;
+    column_t*		column;
+    byte*		src;
+    pixel_t*		dst;
+    int			pixel_count;
+    int			i, x, y, count;
+
+    sprite = &g_sprites_pictures[num];
+
+    // TODO - select right tag for Z_Malloc
+    patch = W_CacheLumpNum(num + firstspritelump, PU_CACHE);
+
+    // TODO - how about patch->->topoffset and patch->leftoffset ?
+    sprite->width  = patch->width ;
+    sprite->height = patch->height;
+
+    pixel_count = 0;
+    for( i = 0, x = sprite->width, y = sprite->height; x > 0 && y > 0; x>>= 1, y>>= 1, i++ )
+	pixel_count += x * y;
+    sprite->max_mip = i - 1;
+    if (sprite->max_mip >= RP_MAX_WALL_MIPS ) sprite->max_mip = RP_MAX_WALL_MIPS - 1;
+
+    sprite->raw_data = malloc(pixel_count * sizeof(pixel_t));
+    sprite->mip[0] = sprite->raw_data;
+    memset(sprite->raw_data, 0, pixel_count * sizeof(pixel_t));
+
+    for (x = 0; x < sprite->width; x++)
+    {
+	column = (column_t *)((byte *)patch + LONG(patch->columnofs[x]));
+
+	while (column->topdelta != 0xff)
+	{
+	    src = (byte *)column + 3;
+	    dst = sprite->mip[0] + x + column->topdelta * sprite->width;
+	    count = column->length;
+
+	    while (count--)
+	    {
+		*dst = g_textures_palette[*src++];
+		dst += sprite->width;
+	    }
+	    column = (column_t *)( (byte *)column + column->length + 4 );
+	}
+    }
+}
+
 void R_32b_PrecacheWallsTextures()
 {
     int		i;
@@ -433,6 +503,8 @@ void R_32b_InitData ()
     RP_InitWallsTextures();
     RP_InitFlatsTextures();
     PR_InitSkyTexture();
+
+    RP_InitSpritesPictures();
 }
 
 int R_32b_FlatNumForName(char* name)
@@ -496,6 +568,14 @@ flat_texture_t* GetFlatTexture(int num)
 	R_32b_LoadFlatTexture(num);
 
     return tex;
+}
+
+sprite_picture_t* GetSpritePicture(int num)
+{
+    sprite_picture_t* s = &g_sprites_pictures[num];
+    if (!s->raw_data)
+        R_32b_LoadSpritePicture(num);
+    return s;
 }
 
 sky_texture_t* GetSkyTexture()

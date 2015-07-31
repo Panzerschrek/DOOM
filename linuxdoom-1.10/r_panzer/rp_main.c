@@ -679,13 +679,10 @@ void PR_DrawWall()
 	    g_cur_wall_texture_transparent = false;
 
 	    if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
-	    {
-		fixed_t top = g_cur_seg->frontsector->ceilingheight > g_cur_seg->backsector->ceilingheight ? g_cur_seg->frontsector->ceilingheight : g_cur_seg->backsector->ceilingheight;
 		v_offset =
 		    PositiveMod(
-			-g_cur_seg->backsector->floorheight + top,
+			g_cur_seg->frontsector->ceilingheight - g_cur_seg->backsector->floorheight,
 			g_cur_wall_texture->height << FRACBITS);
-	    }
 	    else v_offset = 0;
 
 	    PR_DrawWallPart(
@@ -923,6 +920,49 @@ void RP_Subsector(int num)
 	if (g_cur_subsector_data.vertex_count > 0)
 	    PR_DrawSubsectorFlat( num, false );
     }
+
+    extern spritedef_t* sprites;
+    mobj_t* mob = sub->sector->thinglist;
+    SetLightLevel(sub->sector->lightlevel);
+    while(mob)
+    {
+	spritedef_t* sprdef = &sprites[mob->sprite];
+	if (mob->frame >= sprdef->numframes) goto next_mob;
+	spriteframe_t* frame = &sprdef->spriteframes[mob->frame];
+	sprite_picture_t* sprite = GetSpritePicture(frame->lump[0]);
+
+	float pos[3];
+	float proj[3];
+	pos[0] = FixedToFloat(mob->x);
+	pos[1] = FixedToFloat(mob->y);
+	pos[2] = FixedToFloat(mob->z + FRACUNIT * sprite->height);
+	RP_VecMatMul(pos, g_view_matrix, proj);
+
+	if (proj[2] < 0) goto next_mob;
+	proj[0] /= proj[2];
+	proj[1] /= proj[2];
+
+	int sx = (int)((proj[0] + 1.0f ) * ((float) SCREENWIDTH ) * 0.5f );
+	int sy = (int)((proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f );
+
+	if (sx < 0 ) goto next_mob;
+	if (sy + sprite->height >= SCREENHEIGHT) goto next_mob;
+	if (sy < 0 ) goto next_mob;
+	if (sx + sprite->width  >= SCREENWIDTH ) goto next_mob;
+
+	pixel_t* fb = VP_GetFramebuffer();
+	int x, y;
+	for( y = 0; y < sprite->height; y++ )
+	for( x = 0; x < sprite->width ; x++)
+	{
+	    pixel_t pixel = sprite->mip[0][ x + y * sprite->width ];
+	    if (pixel.components[3] >= 128)
+		fb[ x + sx + (y+sy) * SCREENWIDTH ] = LightPixel(pixel);
+	}
+
+	next_mob:
+	mob = mob->snext;
+    }
 }
 //
 // RenderBSPNode
@@ -975,7 +1015,12 @@ void R_32b_RenderPlayerView (player_t *player)
 
 // PANZER - STUBS
 void R_32b_SetViewSize(int blocks,int detail){}
-void R_32b_InitSprites (char** namelist){}
+void R_32b_InitSprites (char** namelist)
+{
+    extern void R_8b_InitSprites(char** namelist);
+    R_8b_InitSprites(namelist);
+}
+
 void R_32b_ClearSprites(){}
 
 void R_32b_InitInterface()
