@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <math.h>
 
 #include "../doomdata.h"
 #include "../z_zone.h"
@@ -38,6 +39,9 @@ static int		g_first_flat; // lump number
 
 static sprite_picture_t*	g_sprites_pictures;
 static int			g_sprites_pictures_count;
+
+// values in range [0; 65536]
+static int			g_lighting_gamma_table[256];
 
 static sky_texture_t	g_sky_texture;
 
@@ -268,6 +272,21 @@ static void RP_InitSpritesPictures()
         g_sprites_pictures[i].raw_data = NULL;
 }
 
+static void RP_InitLightingGammaTable()
+{
+    int i;
+    // TODO - make 1, when fake contrast will added
+    const float gamma = 1.5f;
+
+    for( i = 0; i < 256; i++ )
+    {
+	float k = pow(((float)(i+1)) / 256.0f, gamma) * 65536.0f;
+	if (k > 65536.0f) k = 65536.0f;
+
+	g_lighting_gamma_table[i] = (int)k;
+    }
+}
+
 static void R_32b_LoadWallTexture(int texture_num)
 {
     wall_texture_t*		tex;
@@ -319,7 +338,7 @@ static void R_32b_LoadWallTexture(int texture_num)
 
 	    while (patch_column->topdelta != 0xff)
 	    {
-	    	src = (byte*)patch_column + 3;
+		src = (byte*)patch_column + 3;
 
 		y = patch_column->topdelta + y0;
 		column_pixel_count = patch_column->length;
@@ -505,6 +524,8 @@ void R_32b_InitData ()
     PR_InitSkyTexture();
 
     RP_InitSpritesPictures();
+
+    RP_InitLightingGammaTable();
 }
 
 int R_32b_FlatNumForName(char* name)
@@ -581,4 +602,9 @@ sprite_picture_t* GetSpritePicture(int num)
 sky_texture_t* GetSkyTexture()
 {
     return &g_sky_texture;
+}
+
+int* GetLightingGammaTable()
+{
+    return g_lighting_gamma_table;
 }

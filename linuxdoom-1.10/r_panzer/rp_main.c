@@ -50,7 +50,7 @@ static seg_t*		g_cur_seg;
 static side_t*		g_cur_side;
 static wall_texture_t*	g_cur_wall_texture;
 static boolean		g_cur_wall_texture_transparent;
-static int		g_cur_column_light; // in range [0; 255 * 258]
+static int		g_cur_column_light; // in range [0; 65536]
 
 static struct
 {
@@ -92,9 +92,11 @@ extern int	skytexture;
 
 
 // input - in range [0;255]
-static void SetLightLevel(int level)
+static void SetLightLevel(int level, fixed_t z)
 {
-    g_cur_column_light = level * 258;
+    // TODO - invent magic for cool fake contrast, like in vanila
+    (void)z;
+    g_cur_column_light = GetLightingGammaTable()[level];
 }
 
 // uses g_cur_column_light
@@ -530,6 +532,14 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boole
     	return;
     }
 
+    // some magic. correct just a bit light level, deend on orientation
+    // correction value - [0.8; 1.0]
+    int light_level = g_cur_side->sector->lightlevel;
+    {
+       fixed_t seg_cos_abs = abs(finecosine[ (g_cur_seg->angle >> ANGLETOFINESHIFT) & FINEMASK ]);
+       light_level = (light_level * (seg_cos_abs + 4 * FRACUNIT)) / (FRACUNIT * 5);
+    }
+
     pixel_t* framebuffer = VP_GetFramebuffer();
 
     fixed_t dx = g_cur_seg_data.screen_x[1] - g_cur_seg_data.screen_x[0];
@@ -583,13 +593,14 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boole
     pixel_t* dst_end;
     pixel_t* src;
     pixel_t pixel;
-    SetLightLevel(g_cur_side->sector->lightlevel);
     while (x < x_end)
     {
 	fixed_t one_minus_part = (FRACUNIT<<PR_SEG_PART_BITS) - part;
 	fixed_t cur_u_div_z = FixedMul(part, u_div_z[1]) + FixedMul(one_minus_part, u_div_z[0]);
 	fixed_t inv_z = FixedDiv(part, g_cur_seg_data.z[1]) + FixedDiv(one_minus_part, g_cur_seg_data.z[0]);
 	fixed_t u = FixedDiv(cur_u_div_z, inv_z);
+
+	SetLightLevel(light_level, FixedDiv((FRACUNIT<<PR_SEG_PART_BITS), inv_z));
 
 	fixed_t du_dx = FixedDiv(u_div_z_step - FixedMul(u, inv_z_step), inv_z >> PR_SEG_PART_BITS);
 	int u_mip = IntLog2Floor((du_dx / PR_SEG_U_MIP_SCALER) >> FRACBITS);
@@ -828,7 +839,6 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
     screen_vertex_t*    top_vertex = &vertices_proj[g_cur_screen_polygon.top_vertex_index   ];
     screen_vertex_t* bottom_vertex = &vertices_proj[g_cur_screen_polygon.bottom_vertex_index];
 
-    SetLightLevel(subsector->sector->lightlevel);
     flat_texture_t* texture = GetFlatTexture(texture_num);
 
     fixed_t dy = bottom_vertex->y - top_vertex->y;
@@ -860,6 +870,8 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	    FixedDiv(part, bottom_vertex->z) +
 	    FixedDiv((FRACUNIT<<PR_FLAT_PART_BITS) - part, top_vertex->z);
 	fixed_t z = FixedDiv(FRACUNIT<<PR_FLAT_PART_BITS, inv_z_scaled);
+
+	SetLightLevel(subsector->sector->lightlevel, z);
 
 	int y_mip =
 	    IntLog2Floor((FixedMul(FixedDiv(inv_z_scaled_step, inv_z_scaled), z) / PR_FLAT_MIP_SCALER) >> FRACBITS);
@@ -908,7 +920,6 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 {
     extern spritedef_t* sprites;
     mobj_t* mob = sub->sector->thinglist;
-    SetLightLevel(sub->sector->lightlevel);
     while(mob)
     {
     	if(mob->subsector != sub) goto next_mob;
@@ -950,6 +961,8 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	fixed_t z = FloatToFixed(proj[2]);
 	fixed_t sx = FloatToFixed((proj[0] + 1.0f ) * ((float) SCREENWIDTH ) * 0.5f );
 	fixed_t sy = FloatToFixed((proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f );
+
+	SetLightLevel((mob->frame & FF_FULLBRIGHT) ? 255 : sub->sector->lightlevel, z);
 
 	fixed_t u_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
 
