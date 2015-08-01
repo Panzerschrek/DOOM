@@ -16,3 +16,9 @@ screenshots/*
 *.7z
 *.tar.gz
 *.rar
+
+*.ncb
+*.suo
+*.pdb
+*.ilk
+*.user
