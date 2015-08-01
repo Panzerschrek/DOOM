@@ -24,6 +24,7 @@
 #define PR_FLAT_PART_BITS 14
 
 #define RP_Z_NEAR_FIXED (8 * 65536)
+#define RP_Z_NEAR_FLOAT 8.0f
 
 #define RP_HALF_FOV_X ANG45
 
@@ -892,6 +893,104 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
     }
 }
 
+void RP_DrawSubsectorSprites(subsector_t* sub)
+{
+    extern spritedef_t* sprites;
+    mobj_t* mob = sub->sector->thinglist;
+    SetLightLevel(sub->sector->lightlevel);
+    while(mob)
+    {
+    	if(mob->subsector != sub) goto next_mob;
+
+	spritedef_t* sprdef = &sprites[mob->sprite];
+	spriteframe_t* frame = &sprdef->spriteframes[mob->frame & FF_FRAMEMASK];
+	sprite_picture_t* sprite;
+	int angle_num;
+
+	{ // TODO - make it easier
+	    fixed_t dir_to_mob[2];
+	    dir_to_mob[0] = mob->x - g_view_pos[0];
+	    dir_to_mob[1] = mob->y - g_view_pos[1];
+
+	    fixed_t mob_dir[2];
+	    angle_num = (mob->angle >> ANGLETOFINESHIFT) & FINEMASK;
+	    mob_dir[0] = finecosine[angle_num];
+	    mob_dir[1] = finesine  [angle_num];
+
+	    fixed_t dot   = FixedMul(dir_to_mob[0], mob_dir[0]) + FixedMul(dir_to_mob[1], mob_dir[1]);
+	    fixed_t cross = FixedMul(dir_to_mob[1], mob_dir[0]) - FixedMul(dir_to_mob[0], mob_dir[1]);
+	    float pi = 3.1415926535f;
+	    float angle = atan2(FixedToFloat(cross), FixedToFloat(dot)) + pi*3.0f;
+	    angle_num = ((int)((8.0f*(angle + pi/8.0f)) / (2.0f * pi))) & 7;
+	    sprite = GetSpritePicture(frame->lump[angle_num]);
+	}
+
+	float pos[3];
+	float proj[3];
+	pos[0] = FixedToFloat(mob->x);
+	pos[1] = FixedToFloat(mob->y);
+	pos[2] = FixedToFloat(mob->z + FRACUNIT * sprite->height);
+	RP_VecMatMul(pos, g_view_matrix, proj);
+
+	if (proj[2] < RP_Z_NEAR_FLOAT) goto next_mob;
+	proj[0] /= proj[2];
+	proj[1] /= proj[2];
+
+	fixed_t z = FloatToFixed(proj[2]);
+	fixed_t sx = FloatToFixed((proj[0] + 1.0f ) * ((float) SCREENWIDTH ) * 0.5f );
+	fixed_t sy = FloatToFixed((proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f );
+
+	fixed_t u_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
+
+	fixed_t u_step = FixedMul(u_step_on_z1, z);
+	fixed_t v_step = u_step;
+	fixed_t u, v;
+	fixed_t u_begin, v_begin;
+
+	fixed_t sprite_width = sprite->width << FRACBITS;
+	fixed_t sprite_height = sprite->height << FRACBITS;
+
+        fixed_t x_begin_f = sx - FixedDiv(sprite_width/2, u_step);
+        fixed_t y_begin_f = sy;
+	int x_begin = FixedRoundToInt(x_begin_f);
+	int y_begin = FixedRoundToInt(y_begin_f);
+
+	if (x_begin < 0) x_begin = 0;
+	if (y_begin < 0) y_begin = 0;
+
+	u_begin = FixedMul((x_begin<<FRACBITS) - x_begin_f + FRACUNIT/2, u_step);
+	v_begin = FixedMul((y_begin<<FRACBITS) - y_begin_f + FRACUNIT/2, v_step);
+
+	int x, y;
+	pixel_t* fb = VP_GetFramebuffer();
+	for( y = y_begin, v = v_begin; y < SCREENHEIGHT && v < sprite_height; y++, v += v_step)
+	{
+	    pixel_t* src;
+	    pixel_t* dst;
+	    pixel_t pixel;
+	    src = sprite->mip[0] + (v>>FRACBITS) * sprite->width;
+	    dst = fb + x_begin + y * SCREENWIDTH;
+	    if (frame->flip[angle_num])
+		for( x = x_begin, u = u_begin; x < SCREENWIDTH && u < sprite_width; x++, u += u_step, dst++)
+		{
+		    pixel = src[ (sprite->width - 1) - (u >> FRACBITS) ];
+		    if (pixel.components[3] >= 128)
+			*dst = LightPixel(pixel);
+		}
+	    else
+		for( x = x_begin, u = u_begin; x < SCREENWIDTH && u < sprite_width; x++, u += u_step, dst++)
+		{
+		    pixel = src[ u >> FRACBITS ];
+		    if (pixel.components[3] >= 128)
+			*dst = LightPixel(pixel);
+		}
+	}
+
+	next_mob:
+	mob = mob->snext;
+    }
+}
+
 void RP_Subsector(int num)
 {
     subsector_t*	sub;
@@ -921,48 +1020,7 @@ void RP_Subsector(int num)
 	    PR_DrawSubsectorFlat( num, false );
     }
 
-    extern spritedef_t* sprites;
-    mobj_t* mob = sub->sector->thinglist;
-    SetLightLevel(sub->sector->lightlevel);
-    while(mob)
-    {
-	spritedef_t* sprdef = &sprites[mob->sprite];
-	if (mob->frame >= sprdef->numframes) goto next_mob;
-	spriteframe_t* frame = &sprdef->spriteframes[mob->frame];
-	sprite_picture_t* sprite = GetSpritePicture(frame->lump[0]);
-
-	float pos[3];
-	float proj[3];
-	pos[0] = FixedToFloat(mob->x);
-	pos[1] = FixedToFloat(mob->y);
-	pos[2] = FixedToFloat(mob->z + FRACUNIT * sprite->height);
-	RP_VecMatMul(pos, g_view_matrix, proj);
-
-	if (proj[2] < 0) goto next_mob;
-	proj[0] /= proj[2];
-	proj[1] /= proj[2];
-
-	int sx = (int)((proj[0] + 1.0f ) * ((float) SCREENWIDTH ) * 0.5f );
-	int sy = (int)((proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f );
-
-	if (sx < 0 ) goto next_mob;
-	if (sy + sprite->height >= SCREENHEIGHT) goto next_mob;
-	if (sy < 0 ) goto next_mob;
-	if (sx + sprite->width  >= SCREENWIDTH ) goto next_mob;
-
-	pixel_t* fb = VP_GetFramebuffer();
-	int x, y;
-	for( y = 0; y < sprite->height; y++ )
-	for( x = 0; x < sprite->width ; x++)
-	{
-	    pixel_t pixel = sprite->mip[0][ x + y * sprite->width ];
-	    if (pixel.components[3] >= 128)
-		fb[ x + sx + (y+sy) * SCREENWIDTH ] = LightPixel(pixel);
-	}
-
-	next_mob:
-	mob = mob->snext;
-    }
+    RP_DrawSubsectorSprites(sub);
 }
 //
 // RenderBSPNode
