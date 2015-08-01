@@ -84,6 +84,8 @@ extern int SCREENHEIGHT;
 // screen resolution of base game
 #define ID_SCREENWIDTH 320
 #define ID_SCREENHEIGHT 200
+// for aspect ratio correction
+#define ID_CORRECT_SCREENHEIGHT 240
 
 
 

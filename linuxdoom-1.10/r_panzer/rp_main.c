@@ -40,6 +40,10 @@ static float		g_view_matrix[16];
 static fixed_t		g_view_pos[3];
 static int		g_view_angle; // angle number in sin/cos/tan tables
 static fixed_t		g_half_fov_tan;
+
+static fixed_t		g_y_scaler; // aspect ratio correction
+static fixed_t		g_inv_y_scaler;
+
 static clip_plane_t	g_clip_planes[3]; // 0 - near, 1 - left, 2 - right
 
 static seg_t*		g_cur_seg;
@@ -359,6 +363,7 @@ void RP_DrawSkyPolygon()
     pixel_t*		framebuffer;
     pixel_t*		dst;
     pixel_t*		src;
+    int		v;
 
     texture = GetSkyTexture();
     framebuffer = VP_GetFramebuffer();
@@ -375,7 +380,9 @@ void RP_DrawSkyPolygon()
 	if (x_end > SCREENWIDTH) x_end = SCREENWIDTH;
 
 	dst = framebuffer + x_begin + y * SCREENWIDTH;
-	src = texture->data + ((y * ID_SCREENHEIGHT / SCREENHEIGHT) % texture->height) * texture->width;
+
+	v = FixedMulFloorToInt(((y<<FRACBITS) / SCREENHEIGHT) * ID_SCREENHEIGHT, g_inv_y_scaler);
+	src = texture->data + (v % texture->height) * texture->width;
 
 	for (x = x_begin; x < x_end; x++, dst++)
 	    *dst = src[ g_y_to_sky_u_table[x] ];
@@ -450,6 +457,10 @@ void RP_BuildViewMatrix(player_t *player)
     // TODO: Why minus tangent?
     projection_matrix[0] = FixedToFloat(-finetangent[RP_HALF_FOV_X >> ANGLETOFINESHIFT]);
     projection_matrix[5] = projection_matrix[0] * (((float)SCREENWIDTH) / ((float)SCREENHEIGHT));
+
+    g_y_scaler = (ID_CORRECT_SCREENHEIGHT << FRACBITS) / ID_SCREENHEIGHT;
+    g_inv_y_scaler = (ID_SCREENHEIGHT << FRACBITS) / ID_CORRECT_SCREENHEIGHT;
+    projection_matrix[5] = projection_matrix[5] * ((float)ID_CORRECT_SCREENHEIGHT)/ ((float)ID_SCREENHEIGHT);
 
     RP_MatMul( translate_matrix, rotate_matrix, tmp_mat[0] );
     RP_MatMul( tmp_mat[0], basis_change_matrix, tmp_mat[1] );
@@ -943,7 +954,7 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	fixed_t u_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
 
 	fixed_t u_step = FixedMul(u_step_on_z1, z);
-	fixed_t v_step = u_step;
+	fixed_t v_step = FixedMul(u_step, g_inv_y_scaler);
 	fixed_t u, v;
 	fixed_t u_begin, v_begin;
 
