@@ -904,6 +904,8 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	    FixedDiv((FRACUNIT<<PR_FLAT_PART_BITS) - part, top_vertex->z);
 	fixed_t z = FixedDiv(FRACUNIT<<PR_FLAT_PART_BITS, inv_z_scaled);
 
+	SetLightLevel(subsector->sector->lightlevel, z);
+
 	y_mip =
 	    IntLog2Floor((FixedMul(FixedDiv(inv_z_scaled_step, inv_z_scaled), z) / PR_FLAT_MIP_SCALER) >> FRACBITS);
 
