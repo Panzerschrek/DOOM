@@ -42,7 +42,7 @@ char* endmsg[NUM_QUITMESSAGES+1]=
   "you're trying to say you like dos\nbetter than me, right?",
   "don't leave yet -- there's a\ndemon around that corner!",
   "ya know, next time you come in here\ni'm gonna toast ya.",
-  "go ahead and leave. see if i care."
+  "go ahead and leave.\nsee if i care."
 
   // QuitDOOM II messages
   "you want to quit?\nthen, thou hast lost an eighth!",
