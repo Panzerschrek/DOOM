@@ -154,6 +154,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="linuxdoom-1.10\m_random.h" />
+		<Unit filename="linuxdoom-1.10\m_str.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="linuxdoom-1.10\m_str.h" />
 		<Unit filename="linuxdoom-1.10\m_swap.c">
 			<Option compilerVar="CC" />
 		</Unit>
