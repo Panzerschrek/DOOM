@@ -27,7 +27,9 @@
 				<Option compiler="mingw_qt_53" />
 				<Compiler>
 					<Add option="-march=pentium4" />
+					<Add option="-fomit-frame-pointer" />
 					<Add option="-O2" />
+					<Add option="-flto" />
 				</Compiler>
 				<Linker>
 					<Add option="-s" />

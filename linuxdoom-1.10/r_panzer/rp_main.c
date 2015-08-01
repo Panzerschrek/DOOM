@@ -24,6 +24,7 @@
 #define PR_FLAT_PART_BITS 14
 
 #define RP_Z_NEAR_FIXED (8 * 65536)
+#define RP_Z_NEAR_FLOAT 8.0f
 
 #define RP_HALF_FOV_X ANG45
 
@@ -39,6 +40,10 @@ static float		g_view_matrix[16];
 static fixed_t		g_view_pos[3];
 static int		g_view_angle; // angle number in sin/cos/tan tables
 static fixed_t		g_half_fov_tan;
+
+static fixed_t		g_y_scaler; // aspect ratio correction
+static fixed_t		g_inv_y_scaler;
+
 static clip_plane_t	g_clip_planes[3]; // 0 - near, 1 - left, 2 - right
 
 static seg_t*		g_cur_seg;
@@ -358,6 +363,7 @@ void RP_DrawSkyPolygon()
     pixel_t*		framebuffer;
     pixel_t*		dst;
     pixel_t*		src;
+    int		v;
 
     texture = GetSkyTexture();
     framebuffer = VP_GetFramebuffer();
@@ -374,7 +380,9 @@ void RP_DrawSkyPolygon()
 	if (x_end > SCREENWIDTH) x_end = SCREENWIDTH;
 
 	dst = framebuffer + x_begin + y * SCREENWIDTH;
-	src = texture->data + ((y * ID_SCREENHEIGHT / SCREENHEIGHT) % texture->height) * texture->width;
+
+	v = FixedMulFloorToInt(((y<<FRACBITS) / SCREENHEIGHT) * ID_SCREENHEIGHT, g_inv_y_scaler);
+	src = texture->data + (v % texture->height) * texture->width;
 
 	for (x = x_begin; x < x_end; x++, dst++)
 	    *dst = src[ g_y_to_sky_u_table[x] ];
@@ -449,6 +457,10 @@ void RP_BuildViewMatrix(player_t *player)
     // TODO: Why minus tangent?
     projection_matrix[0] = FixedToFloat(-finetangent[RP_HALF_FOV_X >> ANGLETOFINESHIFT]);
     projection_matrix[5] = projection_matrix[0] * (((float)SCREENWIDTH) / ((float)SCREENHEIGHT));
+
+    g_y_scaler = (ID_CORRECT_SCREENHEIGHT << FRACBITS) / ID_SCREENHEIGHT;
+    g_inv_y_scaler = (ID_SCREENHEIGHT << FRACBITS) / ID_CORRECT_SCREENHEIGHT;
+    projection_matrix[5] = projection_matrix[5] * ((float)ID_CORRECT_SCREENHEIGHT)/ ((float)ID_SCREENHEIGHT);
 
     RP_MatMul( translate_matrix, rotate_matrix, tmp_mat[0] );
     RP_MatMul( tmp_mat[0], basis_change_matrix, tmp_mat[1] );
@@ -681,7 +693,7 @@ void PR_DrawWall()
 	    if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
 		v_offset =
 		    PositiveMod(
-			g_cur_seg->frontsector->floorheight - g_cur_seg->backsector->floorheight,
+			g_cur_seg->frontsector->ceilingheight - g_cur_seg->backsector->floorheight,
 			g_cur_wall_texture->height << FRACBITS);
 	    else v_offset = 0;
 
@@ -892,6 +904,104 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
     }
 }
 
+void RP_DrawSubsectorSprites(subsector_t* sub)
+{
+    extern spritedef_t* sprites;
+    mobj_t* mob = sub->sector->thinglist;
+    SetLightLevel(sub->sector->lightlevel);
+    while(mob)
+    {
+    	if(mob->subsector != sub) goto next_mob;
+
+	spritedef_t* sprdef = &sprites[mob->sprite];
+	spriteframe_t* frame = &sprdef->spriteframes[mob->frame & FF_FRAMEMASK];
+	sprite_picture_t* sprite;
+	int angle_num;
+
+	{ // TODO - make it easier
+	    fixed_t dir_to_mob[2];
+	    dir_to_mob[0] = mob->x - g_view_pos[0];
+	    dir_to_mob[1] = mob->y - g_view_pos[1];
+
+	    fixed_t mob_dir[2];
+	    angle_num = (mob->angle >> ANGLETOFINESHIFT) & FINEMASK;
+	    mob_dir[0] = finecosine[angle_num];
+	    mob_dir[1] = finesine  [angle_num];
+
+	    fixed_t dot   = FixedMul(dir_to_mob[0], mob_dir[0]) + FixedMul(dir_to_mob[1], mob_dir[1]);
+	    fixed_t cross = FixedMul(dir_to_mob[1], mob_dir[0]) - FixedMul(dir_to_mob[0], mob_dir[1]);
+	    float pi = 3.1415926535f;
+	    float angle = atan2(FixedToFloat(cross), FixedToFloat(dot)) + pi*3.0f;
+	    angle_num = ((int)((8.0f*(angle + pi/8.0f)) / (2.0f * pi))) & 7;
+	    sprite = GetSpritePicture(frame->lump[angle_num]);
+	}
+
+	float pos[3];
+	float proj[3];
+	pos[0] = FixedToFloat(mob->x);
+	pos[1] = FixedToFloat(mob->y);
+	pos[2] = FixedToFloat(mob->z + FRACUNIT * sprite->height);
+	RP_VecMatMul(pos, g_view_matrix, proj);
+
+	if (proj[2] < RP_Z_NEAR_FLOAT) goto next_mob;
+	proj[0] /= proj[2];
+	proj[1] /= proj[2];
+
+	fixed_t z = FloatToFixed(proj[2]);
+	fixed_t sx = FloatToFixed((proj[0] + 1.0f ) * ((float) SCREENWIDTH ) * 0.5f );
+	fixed_t sy = FloatToFixed((proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f );
+
+	fixed_t u_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
+
+	fixed_t u_step = FixedMul(u_step_on_z1, z);
+	fixed_t v_step = FixedMul(u_step, g_inv_y_scaler);
+	fixed_t u, v;
+	fixed_t u_begin, v_begin;
+
+	fixed_t sprite_width = sprite->width << FRACBITS;
+	fixed_t sprite_height = sprite->height << FRACBITS;
+
+        fixed_t x_begin_f = sx - FixedDiv(sprite_width/2, u_step);
+        fixed_t y_begin_f = sy;
+	int x_begin = FixedRoundToInt(x_begin_f);
+	int y_begin = FixedRoundToInt(y_begin_f);
+
+	if (x_begin < 0) x_begin = 0;
+	if (y_begin < 0) y_begin = 0;
+
+	u_begin = FixedMul((x_begin<<FRACBITS) - x_begin_f + FRACUNIT/2, u_step);
+	v_begin = FixedMul((y_begin<<FRACBITS) - y_begin_f + FRACUNIT/2, v_step);
+
+	int x, y;
+	pixel_t* fb = VP_GetFramebuffer();
+	for( y = y_begin, v = v_begin; y < SCREENHEIGHT && v < sprite_height; y++, v += v_step)
+	{
+	    pixel_t* src;
+	    pixel_t* dst;
+	    pixel_t pixel;
+	    src = sprite->mip[0] + (v>>FRACBITS) * sprite->width;
+	    dst = fb + x_begin + y * SCREENWIDTH;
+	    if (frame->flip[angle_num])
+		for( x = x_begin, u = u_begin; x < SCREENWIDTH && u < sprite_width; x++, u += u_step, dst++)
+		{
+		    pixel = src[ (sprite->width - 1) - (u >> FRACBITS) ];
+		    if (pixel.components[3] >= 128)
+			*dst = LightPixel(pixel);
+		}
+	    else
+		for( x = x_begin, u = u_begin; x < SCREENWIDTH && u < sprite_width; x++, u += u_step, dst++)
+		{
+		    pixel = src[ u >> FRACBITS ];
+		    if (pixel.components[3] >= 128)
+			*dst = LightPixel(pixel);
+		}
+	}
+
+	next_mob:
+	mob = mob->snext;
+    }
+}
+
 void RP_Subsector(int num)
 {
     subsector_t*	sub;
@@ -920,6 +1030,8 @@ void RP_Subsector(int num)
 	if (g_cur_subsector_data.vertex_count > 0)
 	    PR_DrawSubsectorFlat( num, false );
     }
+
+    RP_DrawSubsectorSprites(sub);
 }
 //
 // RenderBSPNode
@@ -972,7 +1084,12 @@ void R_32b_RenderPlayerView (player_t *player)
 
 // PANZER - STUBS
 void R_32b_SetViewSize(int blocks,int detail){}
-void R_32b_InitSprites (char** namelist){}
+void R_32b_InitSprites (char** namelist)
+{
+    extern void R_8b_InitSprites(char** namelist);
+    R_8b_InitSprites(namelist);
+}
+
 void R_32b_ClearSprites(){}
 
 void R_32b_InitInterface()

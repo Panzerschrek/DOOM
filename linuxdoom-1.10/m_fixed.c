@@ -100,3 +100,8 @@ int FixedRoundToInt(fixed_t f)
 {
     return (f + FRACUNIT/2)>>FRACBITS;
 }
+
+int FixedMulFloorToInt(fixed_t a, fixed_t b)
+{
+     return ((long long) a * (long long) b) >> (FRACBITS*2);
+}

@@ -46,6 +46,7 @@ fixed_t FixedDiv2	(fixed_t a, fixed_t b);
 float	FixedToFloat	(fixed_t f);
 fixed_t	FloatToFixed	(float f);
 int	FixedRoundToInt	(fixed_t f);
+int	FixedMulFloorToInt(fixed_t a, fixed_t b);
 
 
 
