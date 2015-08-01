@@ -181,23 +181,31 @@ void I_MixMusic( int len )
     do
     {
 	float master_volume_f = (float)(current_music.master_volume * current_music.user_volume ) / 15.0f;
-	for( ; current_music.position < current_music.next_event_position && i < len; i++, current_music.position++ )
-	{
-	    float pos_f = (float) current_music.position;
-	    float val = 0;
-
-	    mus_note_t* note = current_music.first_playing_note;
-	    while( note )
+	if (master_volume_f > 0.0f)
+	    for( ; current_music.position < current_music.next_event_position && i < len; i++, current_music.position++ )
 	    {
-		val += ((float)note->volume) * sin( pos_f * notes_freq[ note->number ] );
-		note = note->next;
-	    }
+		float pos_f = (float) current_music.position;
+		float val = 0;
 
-	    // channel volume [0; 127]
-	    // note volume [0; 127]
-	    // result volume - [0; 16129]
-	    sdl_audio.music_mixbuffer[i*2  ] += (int)(val * master_volume_f);
-	    sdl_audio.music_mixbuffer[i*2+1] += (int)(val * master_volume_f);
+		mus_note_t* note = current_music.first_playing_note;
+		while( note )
+		{
+		    val += ((float)note->volume) * sin( pos_f * notes_freq[ note->number ] );
+		    note = note->next;
+		}
+		// channel volume [0; 127]
+		// note volume [0; 127]
+		// result volume - [0; 16129]
+		sdl_audio.music_mixbuffer[i*2  ] += (int)(val * master_volume_f);
+		sdl_audio.music_mixbuffer[i*2+1] += (int)(val * master_volume_f);
+	    }
+	else // music volume iz zero - just skip samples
+	{
+	    int samples_read = current_music.next_event_position - current_music.position;
+	    int samples_write = len - i;
+	    int samples_left = samples_read < samples_write ? samples_read : samples_write;
+	    current_music.position += samples_left;
+	    i += samples_left;
 	}
 
 	if( current_music.position == current_music.next_event_position )
