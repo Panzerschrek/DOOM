@@ -803,8 +803,8 @@ void M_QuickLoad(void)
 //
 void M_DrawReadThis1(void)
 {
-    inhelpscreens = true;
     patch_t* patch;
+    inhelpscreens = true;
     switch ( gamemode )
     {
       case commercial:
@@ -832,8 +832,8 @@ void M_DrawReadThis1(void)
 //
 void M_DrawReadThis2(void)
 {
-    inhelpscreens = true;
     patch_t* patch;
+    inhelpscreens = true;
     switch ( gamemode )
     {
       case retail:
@@ -1887,6 +1887,7 @@ void M_Drawer (void)
     short		max;
     char		string[40];
     int			start;
+    patch_t*		skull_patch;
 
     inhelpscreens = false;
 
@@ -1942,7 +1943,7 @@ void M_Drawer (void)
     }
 
     // DRAW SKULL
-    patch_t* skull_patch = W_CacheLumpName(skullName[whichSkull],PU_CACHE);
+    skull_patch = W_CacheLumpName(skullName[whichSkull],PU_CACHE);
     V_DrawPatchScaled(
 	(currentMenu->x + SKULLXOFF) * menuscale + x_offset,
 	(currentMenu->y - 5 + itemOn*LINEHEIGHT) * menuscale + y_offset,

@@ -61,13 +61,14 @@ static void PrepareOutBuffer()
 
 static void AddSubsector(int subsector_num)
 {
-    int 	i;
+    int			i;
+	vertex_t*	new_vertices;
 
     int new_vertex_count = g_out_subsectors_vertex_count + g_cur_subsector_vertex_count;
     if (new_vertex_count > g_out_subsectors_vertices_capacity)
     {
 	g_out_subsectors_vertices_capacity = g_out_subsectors_vertices_capacity * 3 / 2;
-	vertex_t* new_vertices = malloc(g_out_subsectors_vertices_capacity * sizeof(vertex_t));
+	new_vertices = malloc(g_out_subsectors_vertices_capacity * sizeof(vertex_t));
 
 	memcpy(new_vertices, g_out_subsectors_vertices, g_out_subsectors_vertex_count);
 	free(g_out_subsectors_vertices);
@@ -92,6 +93,12 @@ int R_32b_ClipPolygon(vertex_t* vertices, int vertex_count, clip_plane_t* plane)
     fixed_t		part;
     int			vertices_clipped;
 
+    // index of edge is index of it first vertex
+    // 0 edge - where first vertex clipped and second vertex passed
+    // 1 edge - where second vertex clipped and first vertex passed
+    // dot < 0 means clipped
+    int splitted_edges[2] = {0, 0 }; // handle -W-maybe-uninitialized
+
     vertices_clipped = 0;
     for( i = 0; i < vertex_count; i++ )
     {
@@ -104,11 +111,6 @@ int R_32b_ClipPolygon(vertex_t* vertices, int vertex_count, clip_plane_t* plane)
     if (vertices_clipped == 0) return vertex_count;
     else if(vertices_clipped == vertex_count) return 0;
 
-    // index of edge is index of it first vertex
-    // 0 edge - where first vertex clipped and second vertex passed
-    // 1 edge - where second vertex clipped and first vertex passed
-    // dot < 0 means clipped
-    int splitted_edges[2] = {0, 0 }; // handle -W-maybe-uninitialized
     for( i = 0; i < vertex_count; i++ )
     {
 	next_i = i + 1;

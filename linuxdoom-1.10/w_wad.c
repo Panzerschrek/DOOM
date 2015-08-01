@@ -33,6 +33,7 @@ rcsid[] = "$Id: w_wad.c,v 1.5 1997/02/03 16:47:57 b1 Exp $";
 #include <stdio.h>
 
 #include "doomtype.h"
+#include "m_str.h"
 #include "m_swap.h"
 #include "i_system.h"
 #include "z_zone.h"
@@ -57,14 +58,6 @@ int			numlumps;
 
 void**			lumpcache;
 
-
-#define strcmpi	strcasecmp
-
-// PANZER - remove it
-/*void strupr (char* s)
-{
-    while (*s) { *s = toupper(*s); s++; }
-}*/
 
 int filelength (FILE* handle)
 {
@@ -167,7 +160,7 @@ void W_AddFile (char *filename)
     printf (" adding %s\n",filename);
     startlump = numlumps;
 
-    if (strcmpi (filename+strlen(filename)-3 , "wad" ) )
+    if (id_strcasecmp (filename+strlen(filename)-3 , "wad" ) )
     {
 	// single lump file
 	fileinfo = &singleinfo;
@@ -365,7 +358,7 @@ int W_CheckNumForName (char* name)
     name8.s[8] = 0;
 
     // case insensitive
-    strupr (name8.s);
+    id_strupr (name8.s);
 
     v1 = name8.x[0];
     v2 = name8.x[1];

@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -23,6 +23,7 @@
 static const char
 rcsid[] = "$Id: p_ceilng.c,v 1.4 1997/02/03 16:47:53 b1 Exp $";
 
+#include <stdlib.h>
 
 #include "z_zone.h"
 #include "doomdef.h"
@@ -52,7 +53,7 @@ ceiling_t*	activeceilings[MAXCEILINGS];
 void T_MoveCeiling (ceiling_t* ceiling)
 {
     result_e	res;
-	
+
     switch(ceiling->direction)
     {
       case 0:
@@ -64,7 +65,7 @@ void T_MoveCeiling (ceiling_t* ceiling)
 			  ceiling->speed,
 			  ceiling->topheight,
 			  false,1,ceiling->direction);
-	
+
 	if (!(leveltime&7))
 	{
 	    switch(ceiling->type)
@@ -78,7 +79,7 @@ void T_MoveCeiling (ceiling_t* ceiling)
 		break;
 	    }
 	}
-	
+
 	if (res == pastdest)
 	{
 	    switch(ceiling->type)
@@ -86,7 +87,7 @@ void T_MoveCeiling (ceiling_t* ceiling)
 	      case raiseToHighest:
 		P_RemoveActiveCeiling(ceiling);
 		break;
-		
+
 	      case silentCrushAndRaise:
 		S_StartSound((mobj_t *)&ceiling->sector->soundorg,
 			     sfx_pstop);
@@ -94,21 +95,21 @@ void T_MoveCeiling (ceiling_t* ceiling)
 	      case crushAndRaise:
 		ceiling->direction = -1;
 		break;
-		
+
 	      default:
 		break;
 	    }
-	    
+
 	}
 	break;
-	
+
       case -1:
 	// DOWN
 	res = T_MovePlane(ceiling->sector,
 			  ceiling->speed,
 			  ceiling->bottomheight,
 			  ceiling->crush,1,ceiling->direction);
-	
+
 	if (!(leveltime&7))
 	{
 	    switch(ceiling->type)
@@ -119,7 +120,7 @@ void T_MoveCeiling (ceiling_t* ceiling)
 			     sfx_stnmov);
 	    }
 	}
-	
+
 	if (res == pastdest)
 	{
 	    switch(ceiling->type)
@@ -177,10 +178,10 @@ EV_DoCeiling
     int		rtn;
     sector_t*	sec;
     ceiling_t*	ceiling;
-	
+
     secnum = -1;
     rtn = 0;
-    
+
     //	Reactivate in-stasis ceilings...for certain types.
     switch(type)
     {
@@ -191,13 +192,13 @@ EV_DoCeiling
       default:
 	break;
     }
-	
+
     while ((secnum = P_FindSectorFromLineTag(line,secnum)) >= 0)
     {
 	sec = &sectors[secnum];
 	if (sec->specialdata)
 	    continue;
-	
+
 	// new door thinker
 	rtn = 1;
 	ceiling = Z_Malloc (sizeof(*ceiling), PU_LEVSPEC, 0);
@@ -206,7 +207,7 @@ EV_DoCeiling
 	ceiling->thinker.function.acp1 = (actionf_p1)T_MoveCeiling;
 	ceiling->sector = sec;
 	ceiling->crush = false;
-	
+
 	switch(type)
 	{
 	  case fastCrushAndRaise:
@@ -236,7 +237,7 @@ EV_DoCeiling
 	    ceiling->speed = CEILSPEED;
 	    break;
 	}
-		
+
 	ceiling->tag = sec->tag;
 	ceiling->type = type;
 	P_AddActiveCeiling(ceiling);
@@ -251,7 +252,7 @@ EV_DoCeiling
 void P_AddActiveCeiling(ceiling_t* c)
 {
     int		i;
-    
+
     for (i = 0; i < MAXCEILINGS;i++)
     {
 	if (activeceilings[i] == NULL)
@@ -270,7 +271,7 @@ void P_AddActiveCeiling(ceiling_t* c)
 void P_RemoveActiveCeiling(ceiling_t* c)
 {
     int		i;
-	
+
     for (i = 0;i < MAXCEILINGS;i++)
     {
 	if (activeceilings[i] == c)
@@ -291,7 +292,7 @@ void P_RemoveActiveCeiling(ceiling_t* c)
 void P_ActivateInStasisCeiling(line_t* line)
 {
     int		i;
-	
+
     for (i = 0;i < MAXCEILINGS;i++)
     {
 	if (activeceilings[i]
@@ -315,7 +316,7 @@ int	EV_CeilingCrushStop(line_t	*line)
 {
     int		i;
     int		rtn;
-	
+
     rtn = 0;
     for (i = 0;i < MAXCEILINGS;i++)
     {
@@ -329,7 +330,7 @@ int	EV_CeilingCrushStop(line_t	*line)
 	    rtn = 1;
 	}
     }
-    
+
 
     return rtn;
 }

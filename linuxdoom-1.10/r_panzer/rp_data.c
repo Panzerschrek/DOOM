@@ -3,6 +3,7 @@
 #include "../doomdata.h"
 #include "../z_zone.h"
 #include "../w_wad.h"
+#include "../m_str.h"
 #include "../m_swap.h"
 #include "../i_system.h"
 #include "../p_setup.h"
@@ -532,7 +533,7 @@ int R_32b_CheckTextureNumForName(char* name)
 	return 0;
 
     for (i=0 ; i<g_wall_textures_count ; i++)
-	if (!strncasecmp (g_wall_textures[i].name, name, 8) )
+	if (!id_strncasecmp (g_wall_textures[i].name, name, 8) )
 	    return i;
 
     return -1;

@@ -188,12 +188,14 @@ void D_ProcessEvents (void)
 
 void D_CalcFPS()
 {
+    int time_delta;
+
     static int prev_tick_time = 0;
     static int ticks = 0;
-
     const int ticks_for_scaling = TICRATE;
 
     int current_time = I_GetTime();
+
     if (!prev_tick_time)
     {
 	HU_SetFPS(0);
@@ -201,7 +203,7 @@ void D_CalcFPS()
     }
 
     ticks++;
-    int time_delta = current_time - prev_tick_time;
+    time_delta = current_time - prev_tick_time;
     if (time_delta > ticks_for_scaling)
     {
 	fixed_t fps = time_delta ? ((ticks * TICRATE) << FRACBITS) / time_delta : 0;
@@ -317,11 +319,13 @@ void D_Display (void)
     // draw pause pic
     if (paused)
     {
+	patch_t* patch;
+
 	if (automapactive)
 	    y = 4 * menuscale;
 	else
 	    y = viewwindowy+4*menuscale;
-	patch_t* patch = W_CacheLumpName ("M_PAUSE", PU_CACHE);
+	patch = W_CacheLumpName ("M_PAUSE", PU_CACHE);
 	V_DrawPatchScaled(
 	    viewwindowx+(scaledviewwidth - 68*menuscale)/2, y,
 	    patch->width * menuscale, patch->height * menuscale,

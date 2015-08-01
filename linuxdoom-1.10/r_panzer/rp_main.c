@@ -98,7 +98,7 @@ static void SetLightLevel(int level)
 }
 
 // uses g_cur_column_light
-static inline pixel_t LightPixel(pixel_t p)
+static pixel_t LightPixel(pixel_t p)
 {
    p.components[0] = (p.components[0] * g_cur_column_light) >> 16;
    p.components[1] = (p.components[1] * g_cur_column_light) >> 16;
@@ -499,6 +499,25 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boole
     float	vertex_z[4];
     fixed_t	screen_y[4];
     int		i;
+    pixel_t*	framebuffer;
+
+    fixed_t	dx;
+    int		x, x_begin, x_end;
+    fixed_t	ddx;
+    fixed_t	top_dy, bottom_dy, top_y, bottom_y;
+
+    fixed_t	tex_width [RP_MAX_WALL_MIPS];
+    fixed_t	tex_height[RP_MAX_WALL_MIPS];
+    fixed_t	mip_tc_u_scaler[RP_MAX_WALL_MIPS];
+    fixed_t	mip_tc_v_scaler[RP_MAX_WALL_MIPS];
+
+    fixed_t	vert_u[2], u_div_z[2];
+    fixed_t	u_div_z_step, inv_z_step;
+    fixed_t	part_step, part;
+
+    pixel_t*	dst;
+    pixel_t*	dst_end;
+    pixel_t*	src;
 
     vertex_z[0] = FixedToFloat(z_min);
     vertex_z[1] = FixedToFloat(z_max);
@@ -514,7 +533,7 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boole
 
     if (draw_as_sky)
     {
-    	screen_vertex_t sky_polygon_vertices[4];
+	screen_vertex_t sky_polygon_vertices[4];
 
 	sky_polygon_vertices[0].x = g_cur_seg_data.screen_x[0];
 	sky_polygon_vertices[0].y = screen_y[0];
@@ -527,32 +546,28 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boole
 
 	PreparePolygon(sky_polygon_vertices, 4, true);
 	RP_DrawSkyPolygon();
-    	return;
+	return;
     }
 
-    pixel_t* framebuffer = VP_GetFramebuffer();
+    framebuffer = VP_GetFramebuffer();
 
-    fixed_t dx = g_cur_seg_data.screen_x[1] - g_cur_seg_data.screen_x[0];
+    dx = g_cur_seg_data.screen_x[1] - g_cur_seg_data.screen_x[0];
     if ( dx <= 0 ) return;
 
-    int x_begin = FixedRoundToInt(g_cur_seg_data.screen_x[0]);
+    x_begin = FixedRoundToInt(g_cur_seg_data.screen_x[0]);
     if (x_begin < 0 ) x_begin = 0;
-    int x_end   = FixedRoundToInt(g_cur_seg_data.screen_x[1]);
+    x_end   = FixedRoundToInt(g_cur_seg_data.screen_x[1]);
     if (x_end > SCREENWIDTH) x_end = SCREENWIDTH;
-    int x = x_begin;
+    x = x_begin;
 
-    fixed_t ddx = (x_begin<<FRACBITS) + FRACUNIT/2 - g_cur_seg_data.screen_x[0];
+    ddx = (x_begin<<FRACBITS) + FRACUNIT/2 - g_cur_seg_data.screen_x[0];
 
-    fixed_t top_dy =    FixedDiv(screen_y[3] - screen_y[1], dx);
-    fixed_t bottom_dy = FixedDiv(screen_y[2] - screen_y[0], dx);
+    top_dy =    FixedDiv(screen_y[3] - screen_y[1], dx);
+    bottom_dy = FixedDiv(screen_y[2] - screen_y[0], dx);
 
-    fixed_t top_y =    screen_y[1] + FixedMul(ddx, top_dy   );
-    fixed_t bottom_y = screen_y[0] + FixedMul(ddx, bottom_dy);
+    top_y =    screen_y[1] + FixedMul(ddx, top_dy   );
+    bottom_y = screen_y[0] + FixedMul(ddx, bottom_dy);
 
-    fixed_t tex_width [RP_MAX_WALL_MIPS];
-    fixed_t tex_height[RP_MAX_WALL_MIPS];
-    fixed_t mip_tc_u_scaler[RP_MAX_WALL_MIPS];
-    fixed_t mip_tc_v_scaler[RP_MAX_WALL_MIPS];
     for( i = 0; i <= g_cur_wall_texture->max_mip; i++ )
     {
 	tex_width [i] = (g_cur_wall_texture->width  >> i) << FRACBITS;
@@ -561,67 +576,63 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boole
 	mip_tc_v_scaler[i] = FixedDiv(tex_height[i], tex_height[0]);
     }
 
-    fixed_t vert_u[2];
     vert_u[0] = PositiveMod(g_cur_side->textureoffset + g_cur_seg_data.tc_u_offset, tex_width[0]);
     vert_u[1] = vert_u[0] + g_cur_seg_data.length;
-    fixed_t u_div_z[2];
     u_div_z[0] = FixedDiv(vert_u[0], g_cur_seg_data.z[0]);
     u_div_z[1] = FixedDiv(vert_u[1], g_cur_seg_data.z[1]);
 
     // for calculation of u mip
-    fixed_t u_div_z_step;
-    fixed_t inv_z_step;
     u_div_z_step = FixedDiv(u_div_z[1] - u_div_z[0], dx);
     inv_z_step = FixedDiv(g_cur_seg_data.inv_z[1] - g_cur_seg_data.inv_z[0], dx);
 
     // interpolate value in range [0; 1 ^ PR_SEG_PART_BITS ]
     // becouse direct interpolation of u/z and 1/z can be inaccurate
-    fixed_t part_step = FixedDiv(FRACUNIT << PR_SEG_PART_BITS, dx);
-    fixed_t part = FixedMul(part_step, ddx);
+    part_step = FixedDiv(FRACUNIT << PR_SEG_PART_BITS, dx);
+    part = FixedMul(part_step, ddx);
 
-    pixel_t* dst;
-    pixel_t* dst_end;
-    pixel_t* src;
-    pixel_t pixel;
     SetLightLevel(g_cur_side->sector->lightlevel);
     while (x < x_end)
     {
+	int	y,y_begin, y_end;
+	fixed_t	ddy, v_step, v;
+	int	u_mip, v_mip, mip;
+	fixed_t	cur_mip_tex_heigth;
+	pixel_t	pixel;
+
 	fixed_t one_minus_part = (FRACUNIT<<PR_SEG_PART_BITS) - part;
 	fixed_t cur_u_div_z = FixedMul(part, u_div_z[1]) + FixedMul(one_minus_part, u_div_z[0]);
 	fixed_t inv_z = FixedDiv(part, g_cur_seg_data.z[1]) + FixedDiv(one_minus_part, g_cur_seg_data.z[0]);
 	fixed_t u = FixedDiv(cur_u_div_z, inv_z);
 
 	fixed_t du_dx = FixedDiv(u_div_z_step - FixedMul(u, inv_z_step), inv_z >> PR_SEG_PART_BITS);
-	int u_mip = IntLog2Floor((du_dx / PR_SEG_U_MIP_SCALER) >> FRACBITS);
+	u_mip = IntLog2Floor((du_dx / PR_SEG_U_MIP_SCALER) >> FRACBITS);
 
-	int y_begin = FixedRoundToInt(top_y   );
+	y_begin = FixedRoundToInt(top_y   );
 	if (y_begin < 0 ) y_begin = 0;
-	int y_end   = FixedRoundToInt(bottom_y);
+	y_end   = FixedRoundToInt(bottom_y);
 	if (y_end > SCREENHEIGHT) y_end = SCREENHEIGHT;
-
 	if (y_end <= y_begin) goto x_loop_end; // can be, in some cases
 
-	int y = y_begin;
+	y = y_begin;
 
-	fixed_t ddy = (y_begin<<FRACBITS) + FRACUNIT/2 - top_y;
+	ddy = (y_begin<<FRACBITS) + FRACUNIT/2 - top_y;
 
 	dst = framebuffer + x + y * SCREENWIDTH;
 	dst_end = framebuffer + x + y_end * SCREENWIDTH;
 
-	fixed_t v_step;
 	v_step = FixedDiv(z_max - z_min, bottom_y - top_y);
-	fixed_t v = top_tex_offset + g_cur_side->rowoffset + FixedMul(ddy, v_step);
+	v = top_tex_offset + g_cur_side->rowoffset + FixedMul(ddy, v_step);
 
-	int v_mip = IntLog2Floor(v_step >> FRACBITS);
+	v_mip = IntLog2Floor(v_step >> FRACBITS);
 
-	int mip = u_mip > v_mip ? u_mip : v_mip;
+	mip = u_mip > v_mip ? u_mip : v_mip;
 	if (mip > g_cur_wall_texture->max_mip) mip = g_cur_wall_texture->max_mip;
 
 	u = FixedMul(mip_tc_u_scaler[mip], u);
 	v = FixedMul(mip_tc_v_scaler[mip], v);
 	v_step = FixedMul(v_step, mip_tc_v_scaler[mip]);
 	if( u >= tex_width [mip]) u %= tex_width [mip];
-	fixed_t cur_mip_tex_heigth = tex_height[mip];
+	cur_mip_tex_heigth = tex_height[mip];
 
 	src = g_cur_wall_texture->mip[mip] + (u>>FRACBITS) * (g_cur_wall_texture->height >> mip);
 
@@ -790,23 +801,33 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 {
     int			i;
     subsector_t*	subsector;
+    fixed_t		height;
+    int			texture_num;
+    screen_vertex_t	vertices_proj[RP_MAX_SUBSECTOR_VERTICES + 3];
+    flat_texture_t*	texture;
+
+    screen_vertex_t*	top_vertex;
+    screen_vertex_t*	bottom_vertex;
+
+    fixed_t		dy, ddy, part_step, part;
+    fixed_t		inv_z_scaled_step;
+    fixed_t		uv_start[2], uv_dir[2], uv_per_dir[2];
+    fixed_t		uv_line_step_on_z1;
+    int			y;
 
     subsector = &subsectors[subsector_num];
 
-    fixed_t height = is_floor ? subsector->sector->floorheight : subsector->sector->ceilingheight;
-    int texture_num = flattranslation[is_floor ? subsector->sector->floorpic : subsector->sector->ceilingpic];
-
-    screen_vertex_t vertices_proj[RP_MAX_SUBSECTOR_VERTICES + 3];
+    height = is_floor ? subsector->sector->floorheight : subsector->sector->ceilingheight;
+    texture_num = flattranslation[is_floor ? subsector->sector->floorpic : subsector->sector->ceilingpic];
 
     for( i = 0; i < g_cur_subsector_data.vertex_count; i++)
     {
-	float f_vertex[3];
+	float f_vertex[3], proj[3];
 
 	f_vertex[0] = FixedToFloat(g_cur_subsector_data.clipped_vertices[i].x);
 	f_vertex[1] = FixedToFloat(g_cur_subsector_data.clipped_vertices[i].y);
 	f_vertex[2] = FixedToFloat(height);
 
-	float proj[3];
 	RP_VecMatMul(f_vertex, g_view_matrix, proj);
 
 	proj[0] /= proj[2];
@@ -825,25 +846,22 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	return;
     }
 
-    screen_vertex_t*    top_vertex = &vertices_proj[g_cur_screen_polygon.top_vertex_index   ];
-    screen_vertex_t* bottom_vertex = &vertices_proj[g_cur_screen_polygon.bottom_vertex_index];
+    top_vertex    = &vertices_proj[g_cur_screen_polygon.top_vertex_index   ];
+    bottom_vertex = &vertices_proj[g_cur_screen_polygon.bottom_vertex_index];
 
     SetLightLevel(subsector->sector->lightlevel);
-    flat_texture_t* texture = GetFlatTexture(texture_num);
+    texture = GetFlatTexture(texture_num);
 
-    fixed_t dy = bottom_vertex->y - top_vertex->y;
-    fixed_t part_step = FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, dy);
-    fixed_t ddy = (g_cur_screen_polygon.y_min<<FRACBITS) + FRACUNIT/2 - top_vertex->y;
-    fixed_t part = FixedMul(ddy, part_step);
+    dy = bottom_vertex->y - top_vertex->y;
+    part_step = FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, dy);
+    ddy = (g_cur_screen_polygon.y_min<<FRACBITS) + FRACUNIT/2 - top_vertex->y;
+    part = FixedMul(ddy, part_step);
 
-    fixed_t inv_z_scaled_step = FixedDiv( // value is negative
+    inv_z_scaled_step = FixedDiv( // value is negative
         FixedDiv(FRACUNIT << PR_FLAT_PART_BITS,    top_vertex->z) -
         FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, bottom_vertex->z), dy );
     inv_z_scaled_step = abs(inv_z_scaled_step);
 
-    fixed_t uv_start[2];
-    fixed_t uv_dir[2];
-    fixed_t uv_per_dir[2];
     uv_start[0] = g_view_pos[0];
     uv_start[1] = -g_view_pos[1];
     uv_dir[0] =  finecosine[g_view_angle];
@@ -852,50 +870,53 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
     uv_per_dir[1] =  uv_dir[0];
 
     // TODO - optimize this
-    fixed_t uv_line_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
-    int y;
+    uv_line_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
     for( y = g_cur_screen_polygon.y_min; y < g_cur_screen_polygon.y_max; y++, part+= part_step )
     {
+	int	x, x_begin, x_end;
+	int	y_mip, x_mip, mip;
+	int	texel_fetch_shift, texel_fetch_mask;
+	fixed_t	line_duv_scaler, u, v, du_dx, dv_dx, center_offset;
+	pixel_t	*src, *dst, pixel;
+
 	fixed_t inv_z_scaled = // (1<<PR_FLAT_PART_BITS) / z
 	    FixedDiv(part, bottom_vertex->z) +
 	    FixedDiv((FRACUNIT<<PR_FLAT_PART_BITS) - part, top_vertex->z);
 	fixed_t z = FixedDiv(FRACUNIT<<PR_FLAT_PART_BITS, inv_z_scaled);
 
-	int y_mip =
+	y_mip =
 	    IntLog2Floor((FixedMul(FixedDiv(inv_z_scaled_step, inv_z_scaled), z) / PR_FLAT_MIP_SCALER) >> FRACBITS);
 
-	int x_begin = g_cur_screen_polygon.x_min[y];
+	x_begin = g_cur_screen_polygon.x_min[y];
 	if (x_begin < 0 ) x_begin = 0;
-	int x_end = g_cur_screen_polygon.x_max[y];
+	x_end = g_cur_screen_polygon.x_max[y];
 	if( x_end > SCREENWIDTH) x_end = SCREENWIDTH;
-	int x;
-	pixel_t* dst = VP_GetFramebuffer() + x_begin + y * SCREENWIDTH;
+	dst = VP_GetFramebuffer() + x_begin + y * SCREENWIDTH;
 
-	fixed_t line_duv_scaler = FixedMul(uv_line_step_on_z1, z);
-	fixed_t u = FixedMul(z, uv_dir[0]) + uv_start[0];
-	fixed_t v = FixedMul(z, uv_dir[1]) + uv_start[1];
-	fixed_t du_dx = FixedMul(uv_per_dir[0], line_duv_scaler);
-	fixed_t dv_dx = FixedMul(uv_per_dir[1], line_duv_scaler);
+	line_duv_scaler = FixedMul(uv_line_step_on_z1, z);
+	u = FixedMul(z, uv_dir[0]) + uv_start[0];
+	v = FixedMul(z, uv_dir[1]) + uv_start[1];
+	du_dx = FixedMul(uv_per_dir[0], line_duv_scaler);
+	dv_dx = FixedMul(uv_per_dir[1], line_duv_scaler);
 
-	fixed_t center_offset = (x_begin<<FRACBITS) - (SCREENWIDTH<<FRACBITS)/2 + FRACUNIT/2;
+	center_offset = (x_begin<<FRACBITS) - (SCREENWIDTH<<FRACBITS)/2 + FRACUNIT/2;
 	u += FixedMul(center_offset, du_dx);
 	v += FixedMul(center_offset, dv_dx);
 
 	// mip = log(sqrt(du *du + dv * dv)) = log(du *du + dv * dv) / 2
 	// add small shift for prevention of overflow
-	int x_mip = IntLog2Floor((
+	x_mip = IntLog2Floor((
 	    FixedMul(du_dx>>2, du_dx>>2) +
 	    FixedMul(dv_dx>>2, dv_dx>>2) ) >> (FRACBITS-4) ) >> 1;
 
-	int mip = y_mip > x_mip ? y_mip : x_mip;
+	mip = y_mip > x_mip ? y_mip : x_mip;
 	if (mip > RP_FLAT_TEXTURE_SIZE_LOG2) mip = RP_FLAT_TEXTURE_SIZE_LOG2;
-	int texel_fetch_shift = RP_FLAT_TEXTURE_SIZE_LOG2 - mip;
-	int texel_fetch_mask = (1<<texel_fetch_shift) - 1;
+	texel_fetch_shift = RP_FLAT_TEXTURE_SIZE_LOG2 - mip;
+	texel_fetch_mask = (1<<texel_fetch_shift) - 1;
 	u>>=mip; v>>=mip;
 	du_dx>>=mip; dv_dx>>=mip;
 
-	pixel_t pixel;
-	pixel_t* src = texture->mip[mip];
+	src = texture->mip[mip];
 	for( x = x_begin; x < x_end; x++, dst++, u += du_dx, v += dv_dx )
 	{
 	    pixel = src[ ((u>>FRACBITS)&texel_fetch_mask) + (((v>>FRACBITS)&texel_fetch_mask) << texel_fetch_shift) ];
@@ -907,37 +928,49 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 void RP_DrawSubsectorSprites(subsector_t* sub)
 {
     extern spritedef_t* sprites;
-    mobj_t* mob = sub->sector->thinglist;
-    SetLightLevel(sub->sector->lightlevel);
+
+    mobj_t*		mob;
+    spriteframe_t*	frame;
+    sprite_picture_t*	sprite;
+    int			angle_num;
+    pixel_t*		fb = VP_GetFramebuffer();
+
+    mob = sub->sector->thinglist;
+
     while(mob)
     {
-    	if(mob->subsector != sub) goto next_mob;
+	float pos[3];
+	float proj[3];
+	fixed_t z, sx, sy;
+	fixed_t u_step_on_z1;
+	fixed_t u, v, u_begin, v_begin, u_step, v_step;
+	fixed_t sprite_width, sprite_height;
+	fixed_t	x_begin_f, y_begin_f;
+	int	x, y, x_begin, y_begin;
 
-	spritedef_t* sprdef = &sprites[mob->sprite];
-	spriteframe_t* frame = &sprdef->spriteframes[mob->frame & FF_FRAMEMASK];
-	sprite_picture_t* sprite;
-	int angle_num;
+	if(mob->subsector != sub) goto next_mob;
 
+	frame = &sprites[mob->sprite].spriteframes[mob->frame & FF_FRAMEMASK];
 	{ // TODO - make it easier
-	    fixed_t dir_to_mob[2];
+	    fixed_t	dir_to_mob[2], mob_dir[2];
+	    fixed_t	dot, cross;
+	    float	angle;
+	    const	float pi = 3.1515926535f;
+
 	    dir_to_mob[0] = mob->x - g_view_pos[0];
 	    dir_to_mob[1] = mob->y - g_view_pos[1];
 
-	    fixed_t mob_dir[2];
 	    angle_num = (mob->angle >> ANGLETOFINESHIFT) & FINEMASK;
 	    mob_dir[0] = finecosine[angle_num];
 	    mob_dir[1] = finesine  [angle_num];
 
-	    fixed_t dot   = FixedMul(dir_to_mob[0], mob_dir[0]) + FixedMul(dir_to_mob[1], mob_dir[1]);
-	    fixed_t cross = FixedMul(dir_to_mob[1], mob_dir[0]) - FixedMul(dir_to_mob[0], mob_dir[1]);
-	    float pi = 3.1415926535f;
-	    float angle = atan2(FixedToFloat(cross), FixedToFloat(dot)) + pi*3.0f;
+	    dot   = FixedMul(dir_to_mob[0], mob_dir[0]) + FixedMul(dir_to_mob[1], mob_dir[1]);
+	    cross = FixedMul(dir_to_mob[1], mob_dir[0]) - FixedMul(dir_to_mob[0], mob_dir[1]);
+	    angle = atan2(FixedToFloat(cross), FixedToFloat(dot)) + pi*3.0f;
 	    angle_num = ((int)((8.0f*(angle + pi/8.0f)) / (2.0f * pi))) & 7;
 	    sprite = GetSpritePicture(frame->lump[angle_num]);
 	}
 
-	float pos[3];
-	float proj[3];
 	pos[0] = FixedToFloat(mob->x);
 	pos[1] = FixedToFloat(mob->y);
 	pos[2] = FixedToFloat(mob->z + FRACUNIT * sprite->height);
@@ -947,24 +980,21 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	proj[0] /= proj[2];
 	proj[1] /= proj[2];
 
-	fixed_t z = FloatToFixed(proj[2]);
-	fixed_t sx = FloatToFixed((proj[0] + 1.0f ) * ((float) SCREENWIDTH ) * 0.5f );
-	fixed_t sy = FloatToFixed((proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f );
+	z = FloatToFixed(proj[2]);
+	sx = FloatToFixed((proj[0] + 1.0f ) * ((float) SCREENWIDTH ) * 0.5f );
+	sy = FloatToFixed((proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f );
 
-	fixed_t u_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
+	u_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
 
-	fixed_t u_step = FixedMul(u_step_on_z1, z);
-	fixed_t v_step = FixedMul(u_step, g_inv_y_scaler);
-	fixed_t u, v;
-	fixed_t u_begin, v_begin;
+	u_step = FixedMul(u_step_on_z1, z);
+	v_step = FixedMul(u_step, g_inv_y_scaler);
+	sprite_width = sprite->width << FRACBITS;
+	sprite_height = sprite->height << FRACBITS;
 
-	fixed_t sprite_width = sprite->width << FRACBITS;
-	fixed_t sprite_height = sprite->height << FRACBITS;
-
-        fixed_t x_begin_f = sx - FixedDiv(sprite_width/2, u_step);
-        fixed_t y_begin_f = sy;
-	int x_begin = FixedRoundToInt(x_begin_f);
-	int y_begin = FixedRoundToInt(y_begin_f);
+        x_begin_f = sx - FixedDiv(sprite_width/2, u_step);
+        y_begin_f = sy;
+	x_begin = FixedRoundToInt(x_begin_f);
+	y_begin = FixedRoundToInt(y_begin_f);
 
 	if (x_begin < 0) x_begin = 0;
 	if (y_begin < 0) y_begin = 0;
@@ -972,8 +1002,6 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	u_begin = FixedMul((x_begin<<FRACBITS) - x_begin_f + FRACUNIT/2, u_step);
 	v_begin = FixedMul((y_begin<<FRACBITS) - y_begin_f + FRACUNIT/2, v_step);
 
-	int x, y;
-	pixel_t* fb = VP_GetFramebuffer();
 	for( y = y_begin, v = v_begin; y < SCREENHEIGHT && v < sprite_height; y++, v += v_step)
 	{
 	    pixel_t* src;
@@ -1068,12 +1096,16 @@ void RP_RenderBSPNode (int bspnum)
 
 void R_32b_RenderPlayerView (player_t *player)
 {
-    pixel_t* framebuffer = VP_GetFramebuffer();
     int y, x;
-    pixel_t colors[2] = { VP_GetPaletteStorage()[2], VP_GetPaletteStorage()[34] };
+    pixel_t conrast_colors[2];
+    pixel_t* framebuffer = VP_GetFramebuffer();
+
+    conrast_colors[0] = VP_GetPaletteStorage()[2];
+    conrast_colors[1] = VP_GetPaletteStorage()[34];
+
     for( y = 0; y < SCREENHEIGHT; y++ )
 	for( x = 0; x < SCREENWIDTH; x++, framebuffer++ )
-	    *framebuffer = colors[ ((x>>1) ^ (y>>1)) & 1 ];
+	    *framebuffer = conrast_colors[ ((x>>1) ^ (y>>1)) & 1 ];
 
     RP_BuildViewMatrix(player);
     RP_BuildClipPlanes(player);

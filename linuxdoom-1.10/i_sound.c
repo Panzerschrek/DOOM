@@ -210,6 +210,7 @@ void I_MixMusic( int len )
 
 	if( current_music.position == current_music.next_event_position )
 	{
+	    int ticks_to_next_event;
 	    int event = *current_music.mus_position;
 	    int event_type = (event & 0x70) >> 4;
 	    int channel_num = event & 0x0F;
@@ -228,10 +229,10 @@ void I_MixMusic( int len )
 
 	    case 1: // play note
 	    {
+		int volume;
 		int note_number = *current_music.mus_position & 127;
 		int is_volume = *current_music.mus_position & 128;
 		current_music.mus_position++;
-		int volume;
 		if(is_volume)
 		{
 		    volume = *current_music.mus_position & 127;
@@ -253,9 +254,10 @@ void I_MixMusic( int len )
 
 	    case 4: // change controller
 		{
-		    int controller_number = *current_music.mus_position;
+		    int controller_number, controller_value;
+		    controller_number = *current_music.mus_position;
 		    current_music.mus_position++;
-		    int controller_value = *current_music.mus_position;
+		    controller_value = *current_music.mus_position;
 		    current_music.mus_position++;
 		    if (controller_number == 3) // set volume. controller_value is volume
 			current_music.master_volume = controller_value & 127;
@@ -283,7 +285,7 @@ void I_MixMusic( int len )
 		break;
 	    };
 
-	    int ticks_to_next_event = 0;
+	    ticks_to_next_event = 0;
 	    if (event & 128)
 	    {
 		byte time_byte;
@@ -449,6 +451,7 @@ int I_StartSound
   int		pitch,
   int		priority )
 {
+    const int	c_lump_bytes_cut = 8; // header or something else, but beginning butes need cut
     int			i;
     int			freeslot;
     snd_channel_t*	channel;
@@ -475,12 +478,12 @@ int I_StartSound
     genchannelvolume( channel, vol, sep );
 
     info = &S_sfx[id];
-    if (!info->data) info->data = W_CacheLumpNum(info->lumpnum, PU_SOUND) + sizeof(lumpinfo_t);
+    if (!info->data) info->data = ((char*)W_CacheLumpNum(info->lumpnum, PU_SOUND)) + c_lump_bytes_cut;
     info->usefulness++;
 
     channel->src_data = info->data;
     // Cut 1 byte, because we can linear interpolation of src sound
-    channel->length = (W_LumpLength(info->lumpnum) - sizeof(lumpinfo_t) - 1) << 8;
+    channel->length = (W_LumpLength(info->lumpnum) - c_lump_bytes_cut - 1) << 8;
     channel->fetch_step = (ID_SAMPLE_RATE << 8) / sdl_audio.format.freq;
 
     SDL_UnlockMutex( sdl_audio.mutex );
@@ -556,9 +559,11 @@ int I_GetSfxLumpNum(sfxinfo_t* sfx)
 
 int I_RegisterSong(void *data)
 {
+    mus_header_t* mus;
+
     SDL_LockMutex(sdl_audio.mutex);
 
-    mus_header_t* mus = (mus_header_t*)data;
+    mus = (mus_header_t*)data;
 
 #if 0
     int		i;

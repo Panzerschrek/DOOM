@@ -26,9 +26,8 @@ static const char
 rcsid[] = "$Id: r_things.c,v 1.5 1997/02/03 16:47:56 b1 Exp $";
 
 
-#include <stdio.h>
 #include <stdlib.h>
-
+#include <stdio.h>
 
 #include "doomdef.h"
 #include "m_swap.h"
@@ -842,8 +841,8 @@ void R_SortVisSprites (void)
 void R_DrawSprite (vissprite_t* spr)
 {
     drawseg_t*		ds;
-    short		clipbot[SCREENWIDTH];
-    short		cliptop[SCREENWIDTH];
+    short		clipbot[MAX_SCREENWIDTH];
+    short		cliptop[MAX_SCREENWIDTH];
     int			x;
     int			r1;
     int			r2;

@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -24,6 +24,8 @@
 
 static const char
 rcsid[] = "$Id: p_tick.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
+
+#include <stdlib.h>
 
 #include "z_zone.h"
 #include "p_local.h"
@@ -130,11 +132,11 @@ void P_RunThinkers (void)
 void P_Ticker (void)
 {
     int		i;
-    
+
     // run the tic
     if (paused)
 	return;
-		
+
     // pause if in menu and at least one tic has been run
     if ( !netgame
 	 && menuactive
@@ -143,16 +145,16 @@ void P_Ticker (void)
     {
 	return;
     }
-    
-		
+
+
     for (i=0 ; i<MAXPLAYERS ; i++)
 	if (playeringame[i])
 	    P_PlayerThink (&players[i]);
-			
+
     P_RunThinkers ();
     P_UpdateSpecials ();
     P_RespawnSpecials ();
 
     // for par times
-    leveltime++;	
+    leveltime++;
 }

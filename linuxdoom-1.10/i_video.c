@@ -321,6 +321,7 @@ void I_InitGraphics(void)
 {
     int			i;
     SDL_DisplayMode	display_mode;
+    SDL_PixelFormat*	pixel_format;
 
     if ( SDL_InitSubSystem(SDL_INIT_VIDEO) < 0 )
 	I_Error("Could not initialize SDL");
@@ -374,7 +375,7 @@ void I_InitGraphics(void)
 
     sdl.window_surface = SDL_GetWindowSurface( sdl.window );
 
-    SDL_PixelFormat* pixel_format = sdl.window_surface->format;
+    pixel_format = sdl.window_surface->format;
 
     if (pixel_format->BytesPerPixel != 4)
 	I_Error("I_InitGraphics: invalid pixel format. Requred 4 bytes per pixel, actual - %d\n", pixel_format->BytesPerPixel);
