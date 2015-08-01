@@ -50,7 +50,7 @@ static seg_t*		g_cur_seg;
 static side_t*		g_cur_side;
 static wall_texture_t*	g_cur_wall_texture;
 static boolean		g_cur_wall_texture_transparent;
-static int		g_cur_column_light; // in range [0; 255 * 258]
+static int		g_cur_column_light; // in range [0; 65536]
 
 static struct
 {
@@ -92,9 +92,11 @@ extern int	skytexture;
 
 
 // input - in range [0;255]
-static void SetLightLevel(int level)
+static void SetLightLevel(int level, fixed_t z)
 {
-    g_cur_column_light = level * 258;
+    // TODO - invent magic for cool fake contrast, like in vanila
+    (void)z;
+    g_cur_column_light = GetLightingGammaTable()[level];
 }
 
 // uses g_cur_column_light
@@ -104,6 +106,15 @@ static pixel_t LightPixel(pixel_t p)
    p.components[1] = (p.components[1] * g_cur_column_light) >> 16;
    p.components[2] = (p.components[2] * g_cur_column_light) >> 16;
    return p;
+}
+
+static pixel_t BlendPixels(pixel_t p0, pixel_t p1)
+{
+    int inv_a = 256 - p0.components[3];
+    p0.components[0] = (p0.components[0] * p0.components[3] + inv_a * p1.components[0])>>8;
+    p0.components[1] = (p0.components[1] * p0.components[3] + inv_a * p1.components[1])>>8;
+    p0.components[2] = (p0.components[2] * p0.components[3] + inv_a * p1.components[2])>>8;
+    return p0;
 }
 
 static int IntLog2Floor(int x)
@@ -500,6 +511,7 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boole
     fixed_t	screen_y[4];
     int		i;
     pixel_t*	framebuffer;
+    int		light_level;
 
     fixed_t	dx;
     int		x, x_begin, x_end;
@@ -550,6 +562,13 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boole
     }
 
     framebuffer = VP_GetFramebuffer();
+    // some magic. correct just a bit light level, deend on orientation
+    // correction value - [0.8; 1.0]
+    light_level = g_cur_side->sector->lightlevel;
+    {
+       fixed_t seg_cos_abs = abs(finecosine[ (g_cur_seg->angle >> ANGLETOFINESHIFT) & FINEMASK ]);
+       light_level = (light_level * (seg_cos_abs + 4 * FRACUNIT)) / (FRACUNIT * 5);
+    }
 
     dx = g_cur_seg_data.screen_x[1] - g_cur_seg_data.screen_x[0];
     if ( dx <= 0 ) return;
@@ -590,11 +609,11 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boole
     part_step = FixedDiv(FRACUNIT << PR_SEG_PART_BITS, dx);
     part = FixedMul(part_step, ddx);
 
-    SetLightLevel(g_cur_side->sector->lightlevel);
     while (x < x_end)
     {
 	int	y,y_begin, y_end;
 	fixed_t	ddy, v_step, v;
+	fixed_t du_dx;
 	int	u_mip, v_mip, mip;
 	fixed_t	cur_mip_tex_heigth;
 	pixel_t	pixel;
@@ -604,7 +623,9 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boole
 	fixed_t inv_z = FixedDiv(part, g_cur_seg_data.z[1]) + FixedDiv(one_minus_part, g_cur_seg_data.z[0]);
 	fixed_t u = FixedDiv(cur_u_div_z, inv_z);
 
-	fixed_t du_dx = FixedDiv(u_div_z_step - FixedMul(u, inv_z_step), inv_z >> PR_SEG_PART_BITS);
+	SetLightLevel(light_level, FixedDiv((FRACUNIT<<PR_SEG_PART_BITS), inv_z));
+
+	du_dx = FixedDiv(u_div_z_step - FixedMul(u, inv_z_step), inv_z >> PR_SEG_PART_BITS);
 	u_mip = IntLog2Floor((du_dx / PR_SEG_U_MIP_SCALER) >> FRACBITS);
 
 	y_begin = FixedRoundToInt(top_y   );
@@ -849,7 +870,6 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
     top_vertex    = &vertices_proj[g_cur_screen_polygon.top_vertex_index   ];
     bottom_vertex = &vertices_proj[g_cur_screen_polygon.bottom_vertex_index];
 
-    SetLightLevel(subsector->sector->lightlevel);
     texture = GetFlatTexture(texture_num);
 
     dy = bottom_vertex->y - top_vertex->y;
@@ -943,10 +963,12 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	float proj[3];
 	fixed_t z, sx, sy;
 	fixed_t u_step_on_z1;
-	fixed_t u, v, u_begin, v_begin, u_step, v_step;
+	fixed_t u, v, u_begin, v_begin, u_step, v_step, initial_u_step;
 	fixed_t sprite_width, sprite_height;
 	fixed_t	x_begin_f, y_begin_f;
 	int	x, y, x_begin, y_begin;
+	int	mip, mip_u, mip_v;
+	int	cur_mip_width;
 
 	if(mob->subsector != sub) goto next_mob;
 
@@ -987,14 +1009,26 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	u_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
 
 	u_step = FixedMul(u_step_on_z1, z);
+	initial_u_step = u_step;
 	v_step = FixedMul(u_step, g_inv_y_scaler);
-	sprite_width = sprite->width << FRACBITS;
-	sprite_height = sprite->height << FRACBITS;
 
-        x_begin_f = sx - FixedDiv(sprite_width/2, u_step);
-        y_begin_f = sy;
+	mip_u = IntLog2Floor(u_step >> FRACBITS);
+	mip_v = IntLog2Floor(v_step >> FRACBITS);
+	mip = mip_u > mip_v ? mip_u : mip_v;
+	if (mip > sprite->max_mip) mip = sprite->max_mip;
+
+	sprite_width  = (sprite->width >>mip) << FRACBITS;
+	sprite_height = (sprite->height>>mip) << FRACBITS;
+
+	u_step >>= mip; v_step >>= mip;
+	cur_mip_width = sprite->width >> mip;
+
+	x_begin_f = sx - FixedDiv((sprite->width<<FRACBITS)/2, initial_u_step);
+	y_begin_f = sy;
 	x_begin = FixedRoundToInt(x_begin_f);
 	y_begin = FixedRoundToInt(y_begin_f);
+
+	SetLightLevel((mob->frame & FF_FULLBRIGHT) ? 255 : sub->sector->lightlevel, z);
 
 	if (x_begin < 0) x_begin = 0;
 	if (y_begin < 0) y_begin = 0;
@@ -1007,21 +1041,20 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	    pixel_t* src;
 	    pixel_t* dst;
 	    pixel_t pixel;
-	    src = sprite->mip[0] + (v>>FRACBITS) * sprite->width;
+	    src = sprite->mip[mip] + (v>>FRACBITS) * cur_mip_width;
 	    dst = fb + x_begin + y * SCREENWIDTH;
+	    // TODO - really blending? Maybe just alpha-test?
 	    if (frame->flip[angle_num])
 		for( x = x_begin, u = u_begin; x < SCREENWIDTH && u < sprite_width; x++, u += u_step, dst++)
 		{
-		    pixel = src[ (sprite->width - 1) - (u >> FRACBITS) ];
-		    if (pixel.components[3] >= 128)
-			*dst = LightPixel(pixel);
+		    pixel = src[ (cur_mip_width - 1) - (u >> FRACBITS) ];
+		    *dst = BlendPixels(LightPixel(pixel), *dst);
 		}
 	    else
 		for( x = x_begin, u = u_begin; x < SCREENWIDTH && u < sprite_width; x++, u += u_step, dst++)
 		{
 		    pixel = src[ u >> FRACBITS ];
-		    if (pixel.components[3] >= 128)
-			*dst = LightPixel(pixel);
+		    *dst = BlendPixels(LightPixel(pixel), *dst);
 		}
 	}
 

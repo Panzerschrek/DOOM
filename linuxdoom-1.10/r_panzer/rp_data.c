@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <math.h>
 
 #include "../doomdata.h"
 #include "../z_zone.h"
@@ -40,6 +41,9 @@ static int		g_first_flat; // lump number
 static sprite_picture_t*	g_sprites_pictures;
 static int			g_sprites_pictures_count;
 
+// values in range [0; 65536]
+static int			g_lighting_gamma_table[256];
+
 static sky_texture_t	g_sky_texture;
 
 static pixel_t		g_textures_palette[256];
@@ -65,13 +69,17 @@ static void BuildFlatMip(const pixel_t* in_texture, pixel_t* out_texture, int sr
     int			x, y, i;
     const pixel_t*	src[2];
     pixel_t* 		dst;
+    int			w, h;
+
+    w = src_width  & (~1);
+    h = src_height & (~1);
 
     dst = out_texture;
-    for( y = 0; y < src_height; y += 2)
+    for( y = 0; y < h; y += 2)
     {
 	src[0] = in_texture + y * src_width;
 	src[1] = src[0] + src_width;
-	for( x = 0; x < src_width; x += 2, src[0]+= 2, src[1]+= 2, dst++ )
+	for( x = 0; x < w; x += 2, src[0]+= 2, src[1]+= 2, dst++ )
 	{
 	    for( i = 0; i < 4; i++ )
 		dst->components[i] =
@@ -269,6 +277,21 @@ static void RP_InitSpritesPictures()
         g_sprites_pictures[i].raw_data = NULL;
 }
 
+static void RP_InitLightingGammaTable()
+{
+    int i;
+    // TODO - make 1, when fake contrast will added
+    const float gamma = 1.5f;
+
+    for( i = 0; i < 256; i++ )
+    {
+	float k = pow(((float)(i+1)) / 256.0f, gamma) * 65536.0f;
+	if (k > 65536.0f) k = 65536.0f;
+
+	g_lighting_gamma_table[i] = (int)k;
+    }
+}
+
 static void R_32b_LoadWallTexture(int texture_num)
 {
     wall_texture_t*		tex;
@@ -320,7 +343,7 @@ static void R_32b_LoadWallTexture(int texture_num)
 
 	    while (patch_column->topdelta != 0xff)
 	    {
-	    	src = (byte*)patch_column + 3;
+		src = (byte*)patch_column + 3;
 
 		y = patch_column->topdelta + y0;
 		column_pixel_count = patch_column->length;
@@ -346,9 +369,9 @@ static void R_32b_LoadWallTexture(int texture_num)
     offset = tex->width * tex->height;
     for( i = 1, x = tex->width, y = tex->height; i <= tex->max_mip; i++, x>>=1, y>>=1 )
     {
-    	tex->mip[i] = tex->raw_data + offset;
-    	BuildWallMip(tex->mip[i-1], tex->mip[i], x, y );
-    	offset += (x>>1) * (y>>1);
+	tex->mip[i] = tex->raw_data + offset;
+	BuildWallMip(tex->mip[i-1], tex->mip[i], x, y );
+	offset += (x>>1) * (y>>1);
     }
 }
 
@@ -390,7 +413,7 @@ static void R_32b_LoadSpritePicture(int num)
     byte*		src;
     pixel_t*		dst;
     int			pixel_count;
-    int			i, x, y, count;
+    int			i, x, y, count, offset;
 
     sprite = &g_sprites_pictures[num];
 
@@ -428,6 +451,15 @@ static void R_32b_LoadSpritePicture(int num)
 	    }
 	    column = (column_t *)( (byte *)column + column->length + 4 );
 	}
+    }
+
+    // build mips
+    offset = sprite->width * sprite->height;
+    for( i = 1, x = sprite->width, y = sprite->height; i <= sprite->max_mip; i++, x>>=1, y>>=1 )
+    {
+	sprite->mip[i] = sprite->raw_data + offset;
+	BuildFlatMip(sprite->mip[i-1], sprite->mip[i], x, y );
+	offset += (x>>1) * (y>>1);
     }
 }
 
@@ -506,6 +538,8 @@ void R_32b_InitData ()
     PR_InitSkyTexture();
 
     RP_InitSpritesPictures();
+
+    RP_InitLightingGammaTable();
 }
 
 int R_32b_FlatNumForName(char* name)
@@ -582,4 +616,9 @@ sprite_picture_t* GetSpritePicture(int num)
 sky_texture_t* GetSkyTexture()
 {
     return &g_sky_texture;
+}
+
+int* GetLightingGammaTable()
+{
+    return g_lighting_gamma_table;
 }
