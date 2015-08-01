@@ -11,6 +11,8 @@
 *.CFG
 
 screenshots/*
+maps/*
+obj/*
 
 *.zip
 *.7z
