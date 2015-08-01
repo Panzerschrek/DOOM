@@ -68,13 +68,17 @@ static void BuildFlatMip(const pixel_t* in_texture, pixel_t* out_texture, int sr
     int			x, y, i;
     const pixel_t*	src[2];
     pixel_t* 		dst;
+    int			w, h;
+
+    w = src_width  & (~1);
+    h = src_height & (~1);
 
     dst = out_texture;
-    for( y = 0; y < src_height; y += 2)
+    for( y = 0; y < h; y += 2)
     {
 	src[0] = in_texture + y * src_width;
 	src[1] = src[0] + src_width;
-	for( x = 0; x < src_width; x += 2, src[0]+= 2, src[1]+= 2, dst++ )
+	for( x = 0; x < w; x += 2, src[0]+= 2, src[1]+= 2, dst++ )
 	{
 	    for( i = 0; i < 4; i++ )
 		dst->components[i] =
@@ -364,9 +368,9 @@ static void R_32b_LoadWallTexture(int texture_num)
     offset = tex->width * tex->height;
     for( i = 1, x = tex->width, y = tex->height; i <= tex->max_mip; i++, x>>=1, y>>=1 )
     {
-    	tex->mip[i] = tex->raw_data + offset;
-    	BuildWallMip(tex->mip[i-1], tex->mip[i], x, y );
-    	offset += (x>>1) * (y>>1);
+	tex->mip[i] = tex->raw_data + offset;
+	BuildWallMip(tex->mip[i-1], tex->mip[i], x, y );
+	offset += (x>>1) * (y>>1);
     }
 }
 
@@ -408,7 +412,7 @@ static void R_32b_LoadSpritePicture(int num)
     byte*		src;
     pixel_t*		dst;
     int			pixel_count;
-    int			i, x, y, count;
+    int			i, x, y, count, offset;
 
     sprite = &g_sprites_pictures[num];
 
@@ -446,6 +450,15 @@ static void R_32b_LoadSpritePicture(int num)
 	    }
 	    column = (column_t *)( (byte *)column + column->length + 4 );
 	}
+    }
+
+    // build mips
+    offset = sprite->width * sprite->height;
+    for( i = 1, x = sprite->width, y = sprite->height; i <= sprite->max_mip; i++, x>>=1, y>>=1 )
+    {
+	sprite->mip[i] = sprite->raw_data + offset;
+	BuildFlatMip(sprite->mip[i-1], sprite->mip[i], x, y );
+	offset += (x>>1) * (y>>1);
     }
 }
 

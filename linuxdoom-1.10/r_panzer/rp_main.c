@@ -108,6 +108,15 @@ static inline pixel_t LightPixel(pixel_t p)
    return p;
 }
 
+static inline pixel_t BlendPixels(pixel_t p0, pixel_t p1)
+{
+    int inv_a = 256 - p0.components[3];
+    p0.components[0] = (p0.components[0] * p0.components[3] + inv_a * p1.components[0])>>8;
+    p0.components[1] = (p0.components[1] * p0.components[3] + inv_a * p1.components[1])>>8;
+    p0.components[2] = (p0.components[2] * p0.components[3] + inv_a * p1.components[2])>>8;
+    return p0;
+}
+
 static int IntLog2Floor(int x)
 {
     int i = -1;
@@ -967,14 +976,23 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	fixed_t u_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
 
 	fixed_t u_step = FixedMul(u_step_on_z1, z);
+	fixed_t initial_u_step = u_step;
 	fixed_t v_step = FixedMul(u_step, g_inv_y_scaler);
 	fixed_t u, v;
 	fixed_t u_begin, v_begin;
 
-	fixed_t sprite_width = sprite->width << FRACBITS;
-	fixed_t sprite_height = sprite->height << FRACBITS;
+	int mip_u = IntLog2Floor(u_step >> FRACBITS);
+	int mip_v = IntLog2Floor(v_step >> FRACBITS);
+	int mip = mip_u > mip_v ? mip_u : mip_v;
+	if (mip > sprite->max_mip) mip = sprite->max_mip;
 
-        fixed_t x_begin_f = sx - FixedDiv(sprite_width/2, u_step);
+	fixed_t sprite_width  = (sprite->width >>mip) << FRACBITS;
+	fixed_t sprite_height = (sprite->height>>mip) << FRACBITS;
+
+	u_step >>= mip; v_step >>= mip;
+	int cur_mip_width = sprite->width >> mip;
+
+        fixed_t x_begin_f = sx - FixedDiv((sprite->width<<FRACBITS)/2, initial_u_step);
         fixed_t y_begin_f = sy;
 	int x_begin = FixedRoundToInt(x_begin_f);
 	int y_begin = FixedRoundToInt(y_begin_f);
@@ -992,21 +1010,20 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	    pixel_t* src;
 	    pixel_t* dst;
 	    pixel_t pixel;
-	    src = sprite->mip[0] + (v>>FRACBITS) * sprite->width;
+	    src = sprite->mip[mip] + (v>>FRACBITS) * cur_mip_width;
 	    dst = fb + x_begin + y * SCREENWIDTH;
+	    // TODO - really blending? Maybe just alpha-test?
 	    if (frame->flip[angle_num])
 		for( x = x_begin, u = u_begin; x < SCREENWIDTH && u < sprite_width; x++, u += u_step, dst++)
 		{
-		    pixel = src[ (sprite->width - 1) - (u >> FRACBITS) ];
-		    if (pixel.components[3] >= 128)
-			*dst = LightPixel(pixel);
+		    pixel = src[ (cur_mip_width - 1) - (u >> FRACBITS) ];
+		    *dst = BlendPixels(LightPixel(pixel), *dst);
 		}
 	    else
 		for( x = x_begin, u = u_begin; x < SCREENWIDTH && u < sprite_width; x++, u += u_step, dst++)
 		{
 		    pixel = src[ u >> FRACBITS ];
-		    if (pixel.components[3] >= 128)
-			*dst = LightPixel(pixel);
+		    *dst = BlendPixels(LightPixel(pixel), *dst);
 		}
 	}
 
