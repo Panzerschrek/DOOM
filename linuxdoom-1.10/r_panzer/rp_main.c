@@ -87,8 +87,10 @@ static struct
 static int	g_y_to_sky_u_table[ MAX_SCREENHEIGHT ];
 
 
-extern int	skyflatnum;
-extern int	skytexture;
+extern int		skyflatnum;
+extern int		skytexture;
+extern spritedef_t*	sprites;
+extern int		menuscale;
 
 
 // input - in range [0;255]
@@ -505,7 +507,7 @@ void RP_BuildClipPlanes(player_t *player)
     g_clip_planes[0].dist -= RP_Z_NEAR_FIXED;
 }
 
-void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boolean draw_as_sky)
+void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 {
     float	vertex_z[4];
     fixed_t	screen_y[4];
@@ -543,23 +545,9 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boole
 	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
     }
 
-    if (draw_as_sky)
-    {
-	screen_vertex_t sky_polygon_vertices[4];
-
-	sky_polygon_vertices[0].x = g_cur_seg_data.screen_x[0];
-	sky_polygon_vertices[0].y = screen_y[0];
-	sky_polygon_vertices[1].x = g_cur_seg_data.screen_x[0];
-	sky_polygon_vertices[1].y = screen_y[1];
-	sky_polygon_vertices[2].x = g_cur_seg_data.screen_x[1];
-	sky_polygon_vertices[2].y = screen_y[3];
-	sky_polygon_vertices[3].x = g_cur_seg_data.screen_x[1];
-	sky_polygon_vertices[3].y = screen_y[2];
-
-	PreparePolygon(sky_polygon_vertices, 4, true);
-	RP_DrawSkyPolygon();
-	return;
-    }
+    // wall is not wisible on screen
+    if (screen_y[0] < 0 && screen_y[2] < 0 ) return;
+    if (screen_y[1] >= (SCREENHEIGHT<<FRACBITS) && screen_y[3] >= (SCREENHEIGHT<<FRACBITS) ) return;
 
     framebuffer = VP_GetFramebuffer();
     // some magic. correct just a bit light level, deend on orientation
@@ -684,6 +672,81 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boole
     } // for x
 }
 
+void PR_DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boolean draw_as_sky)
+{
+    /*
+    Because we draw walls using column-based algorithm,
+    each pixel in column hits new row of framebuffer.
+    This is wery bad on modern CPUs, because for each recording of pixel,
+    cpu read to cache hundreds and thousands bytes to CPU cache.
+    If we split walls, which hits a lot of framebuffer rows, perfomance will increase.
+    */
+    const int c_framebuffer_pixels_traversed = 128 * 1024;
+    const int c_min_allowed_dy = 64; // do not split to low on very wide screens
+
+    float	vertex_z[4];
+    fixed_t	screen_y[4];
+    int		i;
+    int		dy_left, dy_right, dy_max;
+    int		allowed_dy;
+    int		splits;
+    fixed_t	z_step;
+
+    allowed_dy = c_framebuffer_pixels_traversed / SCREENWIDTH;
+    if (allowed_dy < c_min_allowed_dy) allowed_dy = c_min_allowed_dy;
+
+    vertex_z[0] = FixedToFloat(z_min);
+    vertex_z[1] = FixedToFloat(z_max);
+    vertex_z[2] = FixedToFloat(z_min);
+    vertex_z[3] = FixedToFloat(z_max);
+
+    for( i = 0; i < 4; i++ )
+    {
+	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
+	screen_space_y /= g_cur_seg_data.screen_z[i>>1];
+	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
+    }
+
+    if (draw_as_sky)
+    {
+	screen_vertex_t sky_polygon_vertices[4];
+
+	sky_polygon_vertices[0].x = g_cur_seg_data.screen_x[0];
+	sky_polygon_vertices[0].y = screen_y[0];
+	sky_polygon_vertices[1].x = g_cur_seg_data.screen_x[0];
+	sky_polygon_vertices[1].y = screen_y[1];
+	sky_polygon_vertices[2].x = g_cur_seg_data.screen_x[1];
+	sky_polygon_vertices[2].y = screen_y[3];
+	sky_polygon_vertices[3].x = g_cur_seg_data.screen_x[1];
+	sky_polygon_vertices[3].y = screen_y[2];
+
+	PreparePolygon(sky_polygon_vertices, 4, true);
+	RP_DrawSkyPolygon();
+	return;
+    }
+
+    dy_left  = (screen_y[0] - screen_y[1]) >> FRACBITS;
+    dy_right = (screen_y[2] - screen_y[3]) >> FRACBITS;
+    dy_max = dy_left > dy_right ? dy_left : dy_right;
+
+    if (dy_max <= allowed_dy)
+	PR_DrawWallPart(top_tex_offset, z_min, z_max);
+    else
+    {
+	splits = dy_max / allowed_dy;
+	if (splits * allowed_dy < dy_max) splits++;
+
+	z_step = (z_max - z_min) / splits;
+	for( i = 0; i < splits; i++ )
+	{
+	    PR_DrawWallPart(
+		top_tex_offset + (splits - i - 1) * z_step,
+		z_min + i * z_step,
+		(i == splits - 1) ? z_max : (z_min + (i+1) * z_step));
+	}
+    }
+}
+
 void PR_DrawWall()
 {
     int		v_offset;
@@ -729,7 +792,7 @@ void PR_DrawWall()
 			g_cur_wall_texture->height << FRACBITS);
 	    else v_offset = 0;
 
-	    PR_DrawWallPart(
+	    PR_DrawSplitWallPart(
 		v_offset,
 		g_cur_seg->frontsector->floorheight,
 		g_cur_seg->backsector->floorheight,
@@ -753,7 +816,7 @@ void PR_DrawWall()
 			g_cur_seg->backsector->ceilingheight - g_cur_seg->frontsector->ceilingheight,
 			g_cur_wall_texture->height * FRACUNIT );
 
-	    PR_DrawWallPart(
+	    PR_DrawSplitWallPart(
 		v_offset,
 		g_cur_seg->backsector->ceilingheight,
 		g_cur_seg->frontsector->ceilingheight,
@@ -775,7 +838,7 @@ void PR_DrawWall()
 		    ? g_cur_seg->frontsector->floorheight
 		    : g_cur_seg->backsector->floorheight;
 
-		PR_DrawWallPart(
+		PR_DrawSplitWallPart(
 		    0,
 		    h,
 		    h + (g_cur_wall_texture->height << FRACBITS),
@@ -787,7 +850,7 @@ void PR_DrawWall()
 		    ? g_cur_seg->frontsector->ceilingheight
 		    : g_cur_seg->backsector->ceilingheight;
 
-		PR_DrawWallPart(
+		PR_DrawSplitWallPart(
 		    0,
 		    h - (g_cur_wall_texture->height << FRACBITS),
 		    h,
@@ -810,7 +873,7 @@ void PR_DrawWall()
 		    g_cur_wall_texture->height * FRACUNIT );
 	else v_offset = 0;
 
-	PR_DrawWallPart(
+	PR_DrawSplitWallPart(
 	    v_offset,
 	    g_cur_seg->frontsector->floorheight,
 	    g_cur_seg->frontsector->ceilingheight,
