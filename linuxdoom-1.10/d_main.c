@@ -773,7 +773,7 @@ void IdentifyVersion (void)
 		}
 		else if (!id_strcasecmp(iwad, doomuwad))
 		{
-		    gamemode = commercial;
+		    gamemode = retail;
 		    gamemission = doom;
 		}
 		else if (!id_strcasecmp(iwad, tntwad))
