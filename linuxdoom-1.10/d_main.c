@@ -54,6 +54,7 @@ static const char rcsid[] = "$Id: d_main.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 #include "m_argv.h"
 #include "m_misc.h"
 #include "m_menu.h"
+#include "m_str.h"
 
 #include "i_system.h"
 #include "i_sound.h"
@@ -129,9 +130,9 @@ boolean		advancedemo;
 
 
 
-char		wadfile[1024];		// primary wad file
-char		mapdir[1024];           // directory of development maps
-char		basedefault[1024];      // default file
+char		wadfile[2048];		// primary wad file
+char		mapdir[2048];           // directory of development maps
+char		basedefault[2048];      // default file
 
 
 void D_CheckNetGame (void);
@@ -553,7 +554,7 @@ void D_StartTitle (void)
 
 
 //      print title for every printed line
-char            title[128];
+char            title[256];
 
 
 
@@ -589,7 +590,7 @@ int CanOpenFile( char* file )
 // Checks availability of IWAD files by name,
 // to determine whether registered/commercial features
 // should be executed (notably loading PWAD's).
-//
+// Also, checks "-iwad", "-game", "-waddir" params
 void IdentifyVersion (void)
 {
 
@@ -602,7 +603,25 @@ void IdentifyVersion (void)
     char*	plutoniawad;
     char*	tntwad;
 
+    char*	height_priority_wad = NULL;
+    int		p;
+
     char *doomwaddir = ".";
+
+    gamemode = indetermined;
+
+    if ((p = M_CheckParm ("-waddir")))
+    {
+	if (p+1 < myargc)
+	{
+	    int len = strlen(myargv[p+1]);
+	    doomwaddir = malloc(len + 1);
+	    strcpy(doomwaddir, myargv[p+1]);
+
+	    if (doomwaddir[len-1] == '/' || doomwaddir[len-1] == '\\')
+		doomwaddir[len-1] = 0;
+	}
+    }
 
     // Commercial.
     doom2wad = malloc(strlen(doomwaddir)+1+9+1);
@@ -677,10 +696,110 @@ void IdentifyVersion (void)
 	return;
     }
 
-    if ( CanOpenFile (doom2fwad) )
+    if ((p = M_CheckParm ("-game")))
     {
-	gamemode = commercial;
-	gamemission = doom2;
+	if (p+1 < myargc)
+	{
+	    const char* game_type = myargv[p+1];
+	    if (!id_strcasecmp(game_type, "shareware_doom"))
+	    {
+		gamemode = shareware;
+		gamemission = doom;
+		height_priority_wad = doom1wad;
+	    }
+	    else if (!id_strcasecmp(game_type, "doom"))
+	    {
+		gamemode = registered;
+		gamemission = doom;
+		height_priority_wad = doomwad;
+	    }
+	    else if (!id_strcasecmp(game_type, "doom2"))
+	    {
+		gamemode = commercial;
+		gamemission = doom2;
+		height_priority_wad = CanOpenFile(doom2fwad) ? doom2fwad : doom2wad;
+	    }
+	    else if (!id_strcasecmp(game_type, "ultdoom"))
+	    {
+		gamemode = retail;
+		gamemission = doom;
+		height_priority_wad = doomuwad;
+	    }
+	    else if (!id_strcasecmp(game_type, "tnt"))
+	    {
+		gamemode = commercial;
+		gamemission = pack_tnt;
+		height_priority_wad = tntwad;
+	    }
+	    else if (!id_strcasecmp(game_type, "plutonia"))
+	    {
+		gamemode = commercial;
+		gamemission = pack_plut;
+		height_priority_wad = plutoniawad;
+	    }
+	}
+    }
+
+    if ((p = M_CheckParm ("-iwad")))
+    {
+	if (p+1 < myargc)
+	{
+	    char* iwad = malloc( strlen(doomwaddir) + + strlen("/") + strlen(myargv[p+1] + 1));
+	    sprintf(iwad, "%s/%s", doomwaddir, myargv[p+1]);
+
+	    // if -iwad without -game
+	    if (gamemode == indetermined)
+	    {
+		if (!id_strcasecmp(iwad, doom1wad))
+		{
+		    gamemode = shareware;
+		    gamemission = doom;
+		}
+		else if (!id_strcasecmp(iwad, doomwad))
+		{
+		    gamemode = registered;
+		    gamemission = doom;
+		}
+		else if (!id_strcasecmp(iwad, doom2wad))
+		{
+		    gamemode = commercial;
+		    gamemission = doom2;
+		}
+		else if (!id_strcasecmp(iwad, doom2fwad))
+		{
+		    gamemode = commercial;
+		    gamemission = doom2;
+		    language = french;
+		}
+		else if (!id_strcasecmp(iwad, doomuwad))
+		{
+		    gamemode = commercial;
+		    gamemission = doom;
+		}
+		else if (!id_strcasecmp(iwad, tntwad))
+		{
+		    gamemode = commercial;
+		    gamemission = pack_tnt;
+		}
+		else if (!id_strcasecmp(iwad, plutoniawad))
+		{
+		    gamemode = commercial;
+		    gamemission = pack_plut;
+		}
+	    }
+
+	    D_AddFile(iwad);
+	    return;
+	}
+    }
+
+    if ( (height_priority_wad == NULL || height_priority_wad == doom2fwad) && CanOpenFile (doom2fwad) )
+    {
+	if (gamemode == indetermined)
+	{
+	    gamemode = commercial;
+	    gamemission = doom2;
+	}
 	// C'est ridicule!
 	// Let's handle languages in config files, okay?
 	language = french;
@@ -689,56 +808,73 @@ void IdentifyVersion (void)
 	return;
     }
 
-    if ( CanOpenFile (doom2wad) )
+    if ( (height_priority_wad == NULL || height_priority_wad == doom2wad) && CanOpenFile (doom2wad) )
     {
-	gamemode = commercial;
-	gamemission = doom2;
+	if (gamemode == indetermined)
+	{
+	    gamemode = commercial;
+	    gamemission = doom2;
+	}
 	D_AddFile (doom2wad);
 	return;
     }
 
-    if ( CanOpenFile (plutoniawad) )
+    if ( (height_priority_wad == NULL || height_priority_wad == plutoniawad) && CanOpenFile (plutoniawad) )
     {
-      gamemode = commercial;
-      gamemission = pack_plut;
-      D_AddFile (plutoniawad);
-      return;
+	if (gamemode == indetermined)
+	{
+	    gamemode = commercial;
+	    gamemission = pack_plut;
+	}
+	D_AddFile (plutoniawad);
+	return;
     }
 
-    if ( CanOpenFile (tntwad) )
+    if ( (height_priority_wad == NULL || height_priority_wad == tntwad) && CanOpenFile (tntwad) )
     {
-      gamemode = commercial;
-      gamemission = pack_tnt;
-      D_AddFile (tntwad);
-      return;
+	if (gamemode == indetermined)
+	{
+	    gamemode = commercial;
+	    gamemission = pack_tnt;
+	}
+	D_AddFile (tntwad);
+	return;
     }
 
-    if ( CanOpenFile (doomuwad) )
+    if ( (height_priority_wad == NULL || height_priority_wad == doomuwad) && CanOpenFile (doomuwad) )
     {
-      gamemode = retail;
-      gamemission = doom;
-      D_AddFile (doomuwad);
-      return;
+	if (gamemode == indetermined)
+	{
+	    gamemode = retail;
+	    gamemission = doom;
+	}
+	D_AddFile (doomuwad);
+	return;
     }
 
-    if ( CanOpenFile (doomwad) )
+    if ( (height_priority_wad == NULL || height_priority_wad == doomwad) && CanOpenFile (doomwad) )
     {
-      gamemode = registered;
-      gamemission = doom;
-      D_AddFile (doomwad);
-      return;
+	if (gamemode == indetermined)
+	{
+	     gamemode = registered;
+	     gamemission = doom;
+	}
+	D_AddFile (doomwad);
+	return;
     }
 
-    if ( CanOpenFile (doom1wad) )
+    if ( (height_priority_wad == NULL || height_priority_wad == doom1wad) && CanOpenFile (doom1wad) )
     {
-      gamemode = shareware;
-      gamemission = doom;
-      D_AddFile (doom1wad);
-      return;
+	if (gamemode == indetermined)
+	{
+	    gamemode = shareware;
+	    gamemission = doom;
+	}
+	D_AddFile (doom1wad);
+	return;
     }
 
     printf("Game mode indeterminate.\n");
-    gamemode = indetermined;
 
     // We don't abort. Let's see what the PWAD contains.
     //exit(1);
@@ -867,28 +1003,28 @@ void D_DoomMain (void)
 		 VERSION/100,VERSION%100);
 	break;
       case commercial:
-	sprintf (title,
-		 "                         "
-		 "DOOM 2: Hell on Earth v%i.%i"
-		 "                           ",
-		 VERSION/100,VERSION%100);
-	break;
-/*FIXME
-       case pack_plut:
-	sprintf (title,
-		 "                   "
-		 "DOOM 2: Plutonia Experiment v%i.%i"
-		 "                           ",
-		 VERSION/100,VERSION%100);
-	break;
-      case pack_tnt:
-	sprintf (title,
-		 "                     "
-		 "DOOM 2: TNT - Evilution v%i.%i"
-		 "                           ",
-		 VERSION/100,VERSION%100);
-	break;
-*/
+      {
+	    if (gamemission == pack_plut)
+		sprintf (title,
+		     "                   "
+		     "DOOM 2: Plutonia Experiment v%i.%i"
+		     "                           ",
+		     VERSION/100,VERSION%100);
+	    else if (gamemission == pack_tnt)
+		sprintf (title,
+		     "                     "
+		     "DOOM 2: TNT - Evilution v%i.%i"
+		     "                           ",
+		     VERSION/100,VERSION%100);
+	    else
+		sprintf (title,
+		     "                         "
+		     "DOOM 2: Hell on Earth v%i.%i"
+		     "                           ",
+		     VERSION/100,VERSION%100);
+      }
+      break;
+
       default:
 	sprintf (title,
 		 "                     "
@@ -903,7 +1039,12 @@ void D_DoomMain (void)
     if (devparm)
 	printf(D_DEVSTR);
 
-    strcpy (basedefault, "default.cfg");
+     strcpy (basedefault, "default.cfg");
+    if ((p = M_CheckParm("-config")))
+    {
+	if (p+1 < myargc)
+	    strcpy (basedefault, myargv[p+1]);
+    }
 
     // turbo option
     if ( (p=M_CheckParm ("-turbo")) )
