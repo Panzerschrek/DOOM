@@ -1039,12 +1039,7 @@ void D_DoomMain (void)
     if (devparm)
 	printf(D_DEVSTR);
 
-     strcpy (basedefault, "default.cfg");
-    if ((p = M_CheckParm("-config")))
-    {
-	if (p+1 < myargc)
-	    strcpy (basedefault, myargv[p+1]);
-    }
+    strcpy (basedefault, "default.cfg");
 
     // turbo option
     if ( (p=M_CheckParm ("-turbo")) )
