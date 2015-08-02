@@ -1177,6 +1177,7 @@ void D_DoomMain (void)
 
     // init subsystems
     printf ("V_Init: allocate screens.\n");
+    I_PrepareGraphics();
     if (v_32bit) VP_Init();
     else V_Init ();
 

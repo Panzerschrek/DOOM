@@ -165,6 +165,9 @@ extern char*	chat_macros[];
 extern int	v_fullscreen;
 extern int	v_display;
 extern int	v_32bit;
+extern int	v_scaler;
+extern int	v_system_window_width ;
+extern int	v_system_window_height;
 
 
 
@@ -224,8 +227,9 @@ default_t	defaults[] =
     { "fullscreen", &v_fullscreen, 0 },
     { "display", &v_display, 0 },
     { "v_32bit", &v_32bit, 0 },
-    { "screenwidth", &SCREENWIDTH, 0 },
-    { "screenheight", &SCREENHEIGHT, 0 },
+    { "v_scaler", &v_scaler, 1 },
+    { "screenwidth" , &v_system_window_width , ID_SCREENWIDTH },
+    { "screenheight", &v_system_window_height, ID_SCREENHEIGHT },
 
     {"chatmacro0", (int *) &chat_macros[0], (int) HUSTR_CHATMACRO0 },
     {"chatmacro1", (int *) &chat_macros[1], (int) HUSTR_CHATMACRO1 },

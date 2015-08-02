@@ -42,6 +42,9 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 
 #define MOUSE_MOTION_SCALE 3
 
+// max scaler - for future ultra-hyper-über displays
+#define MAX_SCREEN_SCALER 32
+
 // m_misc.c
 extern int	usemouse;
 
@@ -49,6 +52,9 @@ extern int	usemouse;
 int		v_fullscreen;
 int		v_display;
 int		v_32bit;
+int		v_scaler;
+int		v_system_window_width ;
+int		v_system_window_height;
 
 enum
 {
@@ -59,9 +65,11 @@ enum
 
 struct
 {
-    SDL_Window *window;
-    SDL_Event last_event;
-    SDL_Surface* window_surface;
+    SDL_Window*		window;
+    SDL_Event		last_event;
+    SDL_Surface*	window_surface;
+
+    pixel_t*		scaled_framebuffer_32b;
 
     struct
     {
@@ -80,6 +88,7 @@ struct
 
 void I_ShutdownGraphics(void)
 {
+    if (sdl.scaled_framebuffer_32b) free(sdl.scaled_framebuffer_32b);
     SDL_DestroyWindow(sdl.window);
     SDL_ShowCursor(true);
     SDL_SetRelativeMouseMode(false);
@@ -271,9 +280,11 @@ void I_UpdateNoBlit (void)
 void I_FinishUpdate (void)
 {
     int		i;
-    int*	p;
+    pixel_t*	p;
     int		must_lock;
     pixel_t*	palette;
+    int		x, y;
+    fixed_t	inv_scaler;
 
     must_lock = SDL_MUSTLOCK(sdl.window_surface);
 
@@ -282,9 +293,47 @@ void I_FinishUpdate (void)
     if (!v_32bit)
     {
 	palette = VP_GetPaletteStorage();
-	p = sdl.window_surface->pixels;
-	for( i = 0; i < SCREENWIDTH * SCREENHEIGHT; i++ )
-	    p[i] = palette[ screens[0][i] ].p;
+	if (v_scaler == 1)
+	{
+	    p = sdl.window_surface->pixels;
+	    for( i = 0; i < v_system_window_width * v_system_window_height; i++ )
+		p[i] = palette[ screens[0][i] ];
+	}
+	else
+	{
+	    byte* src;
+	    inv_scaler = FRACUNIT / v_scaler;
+
+	    if( (((v_system_window_width-1) * (inv_scaler+1))>>FRACBITS) <= SCREENWIDTH )
+		inv_scaler++;
+
+	    p = sdl.window_surface->pixels;
+	    for( y = 0; y < v_system_window_height; y++ )
+	    {
+		src = screens[0] + (y * SCREENHEIGHT / v_system_window_height) * SCREENWIDTH;
+		for( x = 0; x < v_system_window_width; x++, p++ )
+		    *p = palette[ src[ (x * inv_scaler)>>FRACBITS ] ];
+	    }
+	}
+    }
+    else
+    {
+	if (v_scaler > 1)
+	{
+	    pixel_t* src;
+	    inv_scaler = FRACUNIT / v_scaler;
+
+	    if( (((v_system_window_width-1) * (inv_scaler+1))>>FRACBITS) < SCREENWIDTH )
+		inv_scaler++;
+
+	    p = sdl.window_surface->pixels;
+	    for( y = 0; y < v_system_window_height; y++ )
+	    {
+		src = sdl.scaled_framebuffer_32b + (y * SCREENHEIGHT / v_system_window_height) * SCREENWIDTH;
+		for( x = 0; x < v_system_window_width; x++, p++ )
+		    *p = src[ (x * inv_scaler)>>FRACBITS ];
+	    }
+	}
     }
 
     if (must_lock) SDL_UnlockSurface( sdl.window_surface );
@@ -317,6 +366,23 @@ void I_SetPalette (byte* palette)
     }
 }
 
+void I_PrepareGraphics (void)
+{
+     if(v_scaler < 1) v_scaler = 1;
+     else if (v_scaler > MAX_SCREEN_SCALER) v_scaler = MAX_SCREEN_SCALER;
+
+     SCREENWIDTH  = v_system_window_width  / v_scaler;
+     SCREENHEIGHT = v_system_window_height / v_scaler;
+
+     // do not try scaling, if effective screen size less then in vanila
+     while (SCREENWIDTH < ID_SCREENWIDTH || SCREENHEIGHT < ID_SCREENHEIGHT)
+     {
+	v_scaler--;
+	SCREENWIDTH  = v_system_window_width  / v_scaler;
+	SCREENHEIGHT = v_system_window_height / v_scaler;
+     }
+}
+
 void I_InitGraphics(void)
 {
     int			i;
@@ -343,7 +409,7 @@ void I_InitGraphics(void)
 	{
 	    SDL_DisplayMode mode;
 	    SDL_GetDisplayMode( v_display, i, &mode );
-	    if (mode.w == SCREENWIDTH && mode.h == SCREENHEIGHT && SDL_BYTESPERPIXEL(mode.format) == 4)
+	    if (mode.w == v_system_window_width && mode.h == v_system_window_height && SDL_BYTESPERPIXEL(mode.format) == 4)
 	    {
 		sdl.fullscreen = true; // found necessary mode
 		display_mode = mode;
@@ -355,7 +421,7 @@ void I_InitGraphics(void)
     sdl.window = SDL_CreateWindow(
 	"PanzerDoom",
 	SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-	SCREENWIDTH, SCREENHEIGHT,
+	v_system_window_width, v_system_window_height,
 	    SDL_WINDOW_SHOWN | (sdl.fullscreen ? SDL_WINDOW_FULLSCREEN : 0) );
     if (!sdl.window)
 	I_Error("I_InitGraphics: Could not create window");
@@ -401,8 +467,19 @@ void I_InitGraphics(void)
 	sdl.pixel_format.component_index[ COMPONENT_B ] == -1 )
 	I_Error("I_InitGraphics: invalid pixel format. Unknown color component order");
 
+
+    sdl.scaled_framebuffer_32b = NULL;
     if (v_32bit)
-	VP_SetupFramebuffer (sdl.window_surface->pixels);
+    {
+	if (v_scaler == 1)
+	    VP_SetupFramebuffer (sdl.window_surface->pixels);
+	else
+	{
+	    // In scaled mode, we can not use inner storage of sdl surface as framebuffer, createown instead.
+	    sdl.scaled_framebuffer_32b = malloc( SCREENWIDTH * SCREENHEIGHT * sizeof(pixel_t));
+	    VP_SetupFramebuffer (sdl.scaled_framebuffer_32b);
+	}
+    }
 
     sdl.is_focus = true;
     I_GrabMouse();

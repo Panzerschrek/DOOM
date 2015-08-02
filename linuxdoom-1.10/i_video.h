@@ -1,4 +1,4 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
@@ -30,6 +30,11 @@
 #pragma interface
 #endif
 
+
+// Called by D_DoomMain,
+// Reads settings, determine inner and outer screen resolution.
+// Called before V_Init and I_InitGraphics
+void I_PrepareGraphics (void);
 
 // Called by D_DoomMain,
 // determines the hardware configuration
