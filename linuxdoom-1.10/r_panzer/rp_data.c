@@ -423,6 +423,8 @@ static void R_32b_LoadSpritePicture(int num)
     // TODO - how about patch->->topoffset and patch->leftoffset ?
     sprite->width  = patch->width ;
     sprite->height = patch->height;
+    sprite->left_offset = patch->leftoffset;
+    sprite->top_offset  = patch->topoffset;
 
     pixel_count = 0;
     for( i = 0, x = sprite->width, y = sprite->height; x > 0 && y > 0; x>>= 1, y>>= 1, i++ )

@@ -81,7 +81,21 @@ typedef struct sky_texture_s
 } sky_texture_t;
 
 
-// sprite has some format, but different pixels order
-typedef wall_texture_t sprite_picture_t;
+typedef struct sprite_picture_s
+{
+    char	name[8];
+
+    int		width;
+    int		height;
+    int		left_offset;
+    int		top_offset;
+
+    // allocated memory for this texture and all mips
+    pixel_t*	raw_data;
+    // pointers to pixels of mip in allocated memory. mip[0] = raw_data
+    pixel_t*	mip[ RP_MAX_WALL_MIPS ];
+    int		max_mip;
+
+} sprite_picture_t;
 
 #endif//__RP_DEFS__

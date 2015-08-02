@@ -8,6 +8,7 @@
 
 #include "../m_fixed.h"
 #include "../p_setup.h"
+#include "../p_pspr.h"
 #include "../r_main.h"
 #include "../r_sky.h"
 #include "../r_things.h"
@@ -1012,8 +1013,6 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 
 void RP_DrawSubsectorSprites(subsector_t* sub)
 {
-    extern spritedef_t* sprites;
-
     mobj_t*		mob;
     spriteframe_t*	frame;
     sprite_picture_t*	sprite;
@@ -1192,6 +1191,66 @@ void RP_RenderBSPNode (int bspnum)
     RP_RenderBSPNode (bsp->children[side^1]);
 }
 
+void RP_DrawPlayerSprites(player_t *player)
+{
+    int			i;
+    pspdef_t*		psprite;
+    state_t*		state;
+    sprite_picture_t*	sprite;
+    int			x, y, x_begin, y_begin;
+    fixed_t		scaler, dx;
+    pixel_t*		framebuffer;
+
+    fixed_t		u, v, u_step, v_step, u_begin, v_begin;
+    fixed_t		sprite_width, sprite_height;
+    fixed_t		x_begin_f, y_begin_f;
+
+    framebuffer = VP_GetFramebuffer();
+
+    scaler = FRACUNIT * SCREENHEIGHT / ID_SCREENHEIGHT;
+    dx = SCREENWIDTH * FRACUNIT - FixedMul(ID_SCREENWIDTH *scaler, g_inv_y_scaler);
+    u_step = FixedDiv(g_y_scaler, scaler);
+    v_step = FixedDiv(FRACUNIT, scaler);
+
+    for (i = 0; i < NUMPSPRITES; i++)
+    {
+	psprite = &player->psprites[i];
+	state = psprite->state;
+	if (!state) continue;
+
+	sprite = GetSpritePicture( sprites[state->sprite].spriteframes[state->frame & FF_FRAMEMASK].lump[0] );
+
+	x_begin_f = psprite->sx - (sprite->left_offset<<FRACBITS);
+	x_begin_f = FixedMul( FixedMul(x_begin_f, scaler), g_inv_y_scaler ) + dx / 2;
+
+	y_begin_f = psprite->sy - (sprite->top_offset <<FRACBITS);
+	y_begin_f = FixedMul(y_begin_f, scaler);
+	y_begin_f -= 32 * menuscale * FRACUNIT / 2; // TODO - remove this magic
+
+	x_begin = FixedRoundToInt(x_begin_f);
+	if (x_begin < 0 ) x_begin = 0;
+	y_begin = FixedRoundToInt(y_begin_f);
+
+	u_begin = x_begin_f - (x_begin<<FRACBITS) + FRACUNIT/2;
+	v_begin = y_begin_f - (y_begin<<FRACBITS) + FRACUNIT/2;
+
+	sprite_width  = sprite->width  << FRACBITS;
+	sprite_height = sprite->height << FRACBITS;
+
+	for( y = y_begin, v = v_begin; v < sprite_height && y < SCREENHEIGHT; v += v_step, y++ )
+	{
+	    pixel_t pixel;
+	    pixel_t* src = sprite->mip[0] + (v>>FRACBITS) * sprite->width;
+	    pixel_t* dst = framebuffer + x_begin + y * SCREENWIDTH;
+	    for( x = x_begin, u = u_begin; u < sprite_width && x < SCREENWIDTH; u += u_step, dst++)
+	    {
+		pixel = src[u>>FRACBITS];
+		if( pixel.components[3] >= 128) *dst = pixel;
+	    }
+	}
+    }
+}
+
 void R_32b_RenderPlayerView (player_t *player)
 {
     int y, x;
@@ -1210,6 +1269,8 @@ void R_32b_RenderPlayerView (player_t *player)
     RP_PrepareSky(player);
 
     RP_RenderBSPNode(numnodes-1);
+
+    RP_DrawPlayerSprites(player);
 }
 
 // PANZER - STUBS
