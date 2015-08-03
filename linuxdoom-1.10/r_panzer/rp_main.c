@@ -8,6 +8,7 @@
 
 #include "../m_fixed.h"
 #include "../p_setup.h"
+#include "../p_pspr.h"
 #include "../r_main.h"
 #include "../r_sky.h"
 #include "../r_things.h"
@@ -51,6 +52,7 @@ static side_t*		g_cur_side;
 static wall_texture_t*	g_cur_wall_texture;
 static boolean		g_cur_wall_texture_transparent;
 static int		g_cur_column_light; // in range [0; 65536]
+static			boolean g_fullbright;
 
 static struct
 {
@@ -87,13 +89,21 @@ static struct
 static int	g_y_to_sky_u_table[ MAX_SCREENHEIGHT ];
 
 
-extern int	skyflatnum;
-extern int	skytexture;
+extern int		skyflatnum;
+extern int		skytexture;
+extern spritedef_t*	sprites;
+extern int		menuscale;
 
 
 // input - in range [0;255]
 static void SetLightLevel(int level, fixed_t z)
 {
+    if (g_fullbright)
+    {
+	g_cur_column_light = GetLightingGammaTable()[255 * 7 / 8]; // fullbright, but not so full
+	return;
+    }
+
     // TODO - invent magic for cool fake contrast, like in vanila
     (void)z;
     g_cur_column_light = GetLightingGammaTable()[level];
@@ -345,9 +355,6 @@ void RP_PrepareSky(player_t* player)
 		cur_x_tan = -cur_x_tan;
 	}
 
-	// TODO - tantoangle can not tangent > 1 and angle > 45deg
-	// handle this case
-
 	if (cur_x_tan <= FRACUNIT)
 	{
 	    tan_num = cur_x_tan >> (FRACBITS - SLOPEBITS);
@@ -430,7 +437,7 @@ void RP_VecMatMul( float* vec, float* mat, float* result )
 	result[i] = vec[0] * mat[i] + vec[1] * mat[i+4] + vec[2] * mat[i+8] + mat[i+12];
 }
 
-void RP_BuildViewMatrix(player_t *player)
+void RP_SetupView(player_t *player)
 {
     float		translate_matrix[16];
     float		rotate_matrix[16];
@@ -438,6 +445,10 @@ void RP_BuildViewMatrix(player_t *player)
     float		projection_matrix[16];
     float		tmp_mat[2][16];
     int			angle_num;
+
+
+    // infrared view or invulnerability
+    g_fullbright = player->fixedcolormap == 1 || player->fixedcolormap == 32;
 
     angle_num = ((ANG90 - player->mo->angle) >> ANGLETOFINESHIFT ) & FINEMASK;
 
@@ -505,7 +516,7 @@ void RP_BuildClipPlanes(player_t *player)
     g_clip_planes[0].dist -= RP_Z_NEAR_FIXED;
 }
 
-void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boolean draw_as_sky)
+void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 {
     float	vertex_z[4];
     fixed_t	screen_y[4];
@@ -543,23 +554,9 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boole
 	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
     }
 
-    if (draw_as_sky)
-    {
-	screen_vertex_t sky_polygon_vertices[4];
-
-	sky_polygon_vertices[0].x = g_cur_seg_data.screen_x[0];
-	sky_polygon_vertices[0].y = screen_y[0];
-	sky_polygon_vertices[1].x = g_cur_seg_data.screen_x[0];
-	sky_polygon_vertices[1].y = screen_y[1];
-	sky_polygon_vertices[2].x = g_cur_seg_data.screen_x[1];
-	sky_polygon_vertices[2].y = screen_y[3];
-	sky_polygon_vertices[3].x = g_cur_seg_data.screen_x[1];
-	sky_polygon_vertices[3].y = screen_y[2];
-
-	PreparePolygon(sky_polygon_vertices, 4, true);
-	RP_DrawSkyPolygon();
-	return;
-    }
+    // wall is not wisible on screen
+    if (screen_y[0] < 0 && screen_y[2] < 0 ) return;
+    if (screen_y[1] >= (SCREENHEIGHT<<FRACBITS) && screen_y[3] >= (SCREENHEIGHT<<FRACBITS) ) return;
 
     framebuffer = VP_GetFramebuffer();
     // some magic. correct just a bit light level, deend on orientation
@@ -684,6 +681,81 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boole
     } // for x
 }
 
+void PR_DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boolean draw_as_sky)
+{
+    /*
+    Because we draw walls using column-based algorithm,
+    each pixel in column hits new row of framebuffer.
+    This is wery bad on modern CPUs, because for each recording of pixel,
+    cpu read to cache hundreds and thousands bytes to CPU cache.
+    If we split walls, which hits a lot of framebuffer rows, perfomance will increase.
+    */
+    const int c_framebuffer_pixels_traversed = 128 * 1024;
+    const int c_min_allowed_dy = 64; // do not split to low on very wide screens
+
+    float	vertex_z[4];
+    fixed_t	screen_y[4];
+    int		i;
+    int		dy_left, dy_right, dy_max;
+    int		allowed_dy;
+    int		splits;
+    fixed_t	z_step;
+
+    allowed_dy = c_framebuffer_pixels_traversed / SCREENWIDTH;
+    if (allowed_dy < c_min_allowed_dy) allowed_dy = c_min_allowed_dy;
+
+    vertex_z[0] = FixedToFloat(z_min);
+    vertex_z[1] = FixedToFloat(z_max);
+    vertex_z[2] = FixedToFloat(z_min);
+    vertex_z[3] = FixedToFloat(z_max);
+
+    for( i = 0; i < 4; i++ )
+    {
+	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
+	screen_space_y /= g_cur_seg_data.screen_z[i>>1];
+	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
+    }
+
+    if (draw_as_sky)
+    {
+	screen_vertex_t sky_polygon_vertices[4];
+
+	sky_polygon_vertices[0].x = g_cur_seg_data.screen_x[0];
+	sky_polygon_vertices[0].y = screen_y[0];
+	sky_polygon_vertices[1].x = g_cur_seg_data.screen_x[0];
+	sky_polygon_vertices[1].y = screen_y[1];
+	sky_polygon_vertices[2].x = g_cur_seg_data.screen_x[1];
+	sky_polygon_vertices[2].y = screen_y[3];
+	sky_polygon_vertices[3].x = g_cur_seg_data.screen_x[1];
+	sky_polygon_vertices[3].y = screen_y[2];
+
+	PreparePolygon(sky_polygon_vertices, 4, true);
+	RP_DrawSkyPolygon();
+	return;
+    }
+
+    dy_left  = (screen_y[0] - screen_y[1]) >> FRACBITS;
+    dy_right = (screen_y[2] - screen_y[3]) >> FRACBITS;
+    dy_max = dy_left > dy_right ? dy_left : dy_right;
+
+    if (dy_max <= allowed_dy)
+	PR_DrawWallPart(top_tex_offset, z_min, z_max);
+    else
+    {
+	splits = dy_max / allowed_dy;
+	if (splits * allowed_dy < dy_max) splits++;
+
+	z_step = (z_max - z_min) / splits;
+	for( i = 0; i < splits; i++ )
+	{
+	    PR_DrawWallPart(
+		top_tex_offset + (splits - i - 1) * z_step,
+		z_min + i * z_step,
+		(i == splits - 1) ? z_max : (z_min + (i+1) * z_step));
+	}
+    }
+}
+
 void PR_DrawWall()
 {
     int		v_offset;
@@ -729,7 +801,7 @@ void PR_DrawWall()
 			g_cur_wall_texture->height << FRACBITS);
 	    else v_offset = 0;
 
-	    PR_DrawWallPart(
+	    PR_DrawSplitWallPart(
 		v_offset,
 		g_cur_seg->frontsector->floorheight,
 		g_cur_seg->backsector->floorheight,
@@ -753,7 +825,7 @@ void PR_DrawWall()
 			g_cur_seg->backsector->ceilingheight - g_cur_seg->frontsector->ceilingheight,
 			g_cur_wall_texture->height * FRACUNIT );
 
-	    PR_DrawWallPart(
+	    PR_DrawSplitWallPart(
 		v_offset,
 		g_cur_seg->backsector->ceilingheight,
 		g_cur_seg->frontsector->ceilingheight,
@@ -775,7 +847,7 @@ void PR_DrawWall()
 		    ? g_cur_seg->frontsector->floorheight
 		    : g_cur_seg->backsector->floorheight;
 
-		PR_DrawWallPart(
+		PR_DrawSplitWallPart(
 		    0,
 		    h,
 		    h + (g_cur_wall_texture->height << FRACBITS),
@@ -787,7 +859,7 @@ void PR_DrawWall()
 		    ? g_cur_seg->frontsector->ceilingheight
 		    : g_cur_seg->backsector->ceilingheight;
 
-		PR_DrawWallPart(
+		PR_DrawSplitWallPart(
 		    0,
 		    h - (g_cur_wall_texture->height << FRACBITS),
 		    h,
@@ -810,7 +882,7 @@ void PR_DrawWall()
 		    g_cur_wall_texture->height * FRACUNIT );
 	else v_offset = 0;
 
-	PR_DrawWallPart(
+	PR_DrawSplitWallPart(
 	    v_offset,
 	    g_cur_seg->frontsector->floorheight,
 	    g_cur_seg->frontsector->ceilingheight,
@@ -947,28 +1019,65 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
     }
 }
 
+
+// TODO - remove this funcs to separate file. Or all code for sprites to separate file.
+static fixed_t		g_spr_u;
+static fixed_t		g_spr_u_end;
+static fixed_t		g_spr_u_step;
+static pixel_t*		g_spr_dst;
+static pixel_t*		g_spr_src;
+static int		g_spr_mip_width_minus_one;
+
+void SpriteRowFunc()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
+	*g_spr_dst = BlendPixels( LightPixel( g_spr_src[g_spr_u>>FRACBITS] ), *g_spr_dst );
+}
+
+void SpriteRowFuncFlip()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
+	*g_spr_dst = BlendPixels( LightPixel( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u>>FRACBITS) ] ), *g_spr_dst );
+}
+
+void SpriteRowFuncSpectre()
+{
+    // avg func:   pixel.p = ( ((pixel.p ^ dst->p) & 0xFEFEFEFE) >> 1 ) + (pixel.p & dst->p);
+    // half brightness:   dst->p = (dst->p & 0xFEFEFEFE) >> 1
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
+	if( g_spr_src[ (g_spr_u >> FRACBITS) ].components[3] >= 128 )
+	    g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
+}
+
+void SpriteRowFuncSpectreFlip()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
+	if( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u >> FRACBITS) ].components[3] >= 128 )
+	    g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
+}
+
+
 void RP_DrawSubsectorSprites(subsector_t* sub)
 {
-    extern spritedef_t* sprites;
-
     mobj_t*		mob;
     spriteframe_t*	frame;
     sprite_picture_t*	sprite;
     int			angle_num;
+    void		(*spr_func)();
     pixel_t*		fb = VP_GetFramebuffer();
 
     mob = sub->sector->thinglist;
 
     while(mob)
     {
-	float pos[3];
-	float proj[3];
-	fixed_t z, sx, sy;
-	fixed_t u_step_on_z1;
-	fixed_t u, v, u_begin, v_begin, u_step, v_step, initial_u_step;
-	fixed_t sprite_width, sprite_height;
+	float	pos[3];
+	float	proj[3];
+	fixed_t	z, sx, sy;
+	fixed_t	u_step_on_z1;
+	fixed_t	v, u_begin, v_begin, u_end, v_end, u_step, v_step, initial_u_step;
+	fixed_t	sprite_width, sprite_height;
 	fixed_t	x_begin_f, y_begin_f;
-	int	x, y, x_begin, y_begin;
+	int	y, x_begin, y_begin;
 	int	mip, mip_u, mip_v;
 	int	cur_mip_width;
 
@@ -1038,26 +1147,25 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	u_begin = FixedMul((x_begin<<FRACBITS) - x_begin_f + FRACUNIT/2, u_step);
 	v_begin = FixedMul((y_begin<<FRACBITS) - y_begin_f + FRACUNIT/2, v_step);
 
-	for( y = y_begin, v = v_begin; y < SCREENHEIGHT && v < sprite_height; y++, v += v_step)
+	u_end = u_begin + (SCREENWIDTH  - x_begin) * u_step;
+	if (u_end > sprite_width ) u_end = sprite_width;
+	v_end = v_begin + (SCREENHEIGHT - y_begin) * v_step;
+	if (v_end > sprite_height) v_end = sprite_height;
+
+	if (mob->flags & MF_SHADOW)
+	    spr_func = frame->flip[angle_num] ? SpriteRowFuncSpectreFlip : SpriteRowFuncSpectre;
+	else
+	    spr_func = frame->flip[angle_num] ? SpriteRowFuncFlip : SpriteRowFunc;
+
+	g_spr_u_step = u_step;
+	g_spr_u_end = u_end;
+	g_spr_mip_width_minus_one = cur_mip_width - 1;
+	for( y = y_begin, v = v_begin; v < v_end; y++, v += v_step)
 	{
-	    pixel_t* src;
-	    pixel_t* dst;
-	    pixel_t pixel;
-	    src = sprite->mip[mip] + (v>>FRACBITS) * cur_mip_width;
-	    dst = fb + x_begin + y * SCREENWIDTH;
-	    // TODO - really blending? Maybe just alpha-test?
-	    if (frame->flip[angle_num])
-		for( x = x_begin, u = u_begin; x < SCREENWIDTH && u < sprite_width; x++, u += u_step, dst++)
-		{
-		    pixel = src[ (cur_mip_width - 1) - (u >> FRACBITS) ];
-		    *dst = BlendPixels(LightPixel(pixel), *dst);
-		}
-	    else
-		for( x = x_begin, u = u_begin; x < SCREENWIDTH && u < sprite_width; x++, u += u_step, dst++)
-		{
-		    pixel = src[ u >> FRACBITS ];
-		    *dst = BlendPixels(LightPixel(pixel), *dst);
-		}
+	    g_spr_u = u_begin;
+	    g_spr_dst = fb + x_begin + y * SCREENWIDTH;
+	    g_spr_src = sprite->mip[mip] + (v>>FRACBITS) * cur_mip_width;
+	    spr_func();
 	}
 
 	next_mob:
@@ -1129,6 +1237,138 @@ void RP_RenderBSPNode (int bspnum)
     RP_RenderBSPNode (bsp->children[side^1]);
 }
 
+void RP_DrawPlayerSprites(player_t *player)
+{
+    int			i;
+    pspdef_t*		psprite;
+    state_t*		state;
+    sprite_picture_t*	sprite;
+    int			y, x_begin, y_begin;
+    fixed_t		scaler, dx;
+    pixel_t*		framebuffer;
+
+    fixed_t		v, u_step, v_step, u_begin, v_begin, u_end, v_end;
+    fixed_t		sprite_width, sprite_height;
+    fixed_t		x_begin_f, y_begin_f;
+    void		(*spr_func)();
+
+    framebuffer = VP_GetFramebuffer();
+
+    scaler = FRACUNIT * SCREENHEIGHT / ID_SCREENHEIGHT;
+    dx = SCREENWIDTH * FRACUNIT - FixedMul(ID_SCREENWIDTH *scaler, g_inv_y_scaler);
+    u_step = FixedDiv(g_y_scaler, scaler);
+    v_step = FixedDiv(FRACUNIT, scaler);
+
+    for (i = 0; i < NUMPSPRITES; i++)
+    {
+	psprite = &player->psprites[i];
+	state = psprite->state;
+	if (!state) continue;
+
+	sprite = GetSpritePicture( sprites[state->sprite].spriteframes[state->frame & FF_FRAMEMASK].lump[0] );
+
+	x_begin_f = psprite->sx - (sprite->left_offset<<FRACBITS);
+	x_begin_f = FixedMul( FixedMul(x_begin_f, scaler), g_inv_y_scaler ) + dx / 2;
+
+	y_begin_f = psprite->sy - (sprite->top_offset <<FRACBITS);
+	y_begin_f = FixedMul(y_begin_f, scaler);
+	y_begin_f -= 32 * menuscale * FRACUNIT / 2; // TODO - remove this magic
+
+	x_begin = FixedRoundToInt(x_begin_f);
+	if (x_begin < 0 ) x_begin = 0;
+	y_begin = FixedRoundToInt(y_begin_f);
+
+	u_begin = x_begin_f - (x_begin<<FRACBITS) + FRACUNIT/2;
+	v_begin = y_begin_f - (y_begin<<FRACBITS) + FRACUNIT/2;
+
+	sprite_width  = sprite->width  << FRACBITS;
+	sprite_height = sprite->height << FRACBITS;
+
+	u_end = u_begin + (SCREENWIDTH  - x_begin) * u_step;
+	if (u_end > sprite_width ) u_end = sprite_width;
+	v_end = v_begin + (SCREENHEIGHT - y_begin) * v_step;
+	if (v_end > sprite_height) v_end = sprite_height;
+
+	SetLightLevel(255 * 15/16, FRACUNIT); // make darker just a bit
+
+	g_spr_u_step = u_step;
+	g_spr_u_end = u_end;
+	spr_func = (player->mo->flags&MF_SHADOW) ? SpriteRowFuncSpectre : SpriteRowFunc;
+
+	for( y = y_begin, v = v_begin; v < v_end; v += v_step, y++ )
+	{
+	    g_spr_u = u_begin;
+	    g_spr_dst = framebuffer + x_begin + y * SCREENWIDTH;
+	    g_spr_src = sprite->mip[0] + (v>>FRACBITS) * sprite->width;
+	    spr_func();
+	}
+    }
+}
+
+void RP_Postprocess(int colormap_num)
+{
+    pixel_t	pixel;
+    pixel_t*	fb = VP_GetFramebuffer();
+    pixel_t*	fb_end = fb + SCREENWIDTH * SCREENHEIGHT;
+    fixed_t	one_third = FRACUNIT / 3 + 1;
+
+    if (colormap_num == 0 || colormap_num == 1) // no colormap or fullbright
+        return;
+    else if (colormap_num == 32) // invulnerability
+    {
+	for( ; fb < fb_end; fb++ )
+	{
+	    pixel = *fb;
+	    pixel.components[0] = pixel.components[1] = pixel.components[2] =
+		((pixel.components[0] + pixel.components[1] + pixel.components[2]) * one_third) >> FRACBITS;
+	    fb->p = ~pixel.p;
+	}
+    }
+    // UNUSED. TODO - invent how to draw this
+    /*
+    else
+    {
+	pixel_t	blend_color;
+	int	color_premultiplied[4];
+	int	i;
+
+	if (colormap_num <= 8) // red - blood
+	{
+	    blend_color.components[0] = 0;
+	    blend_color.components[1] = 0;
+	    blend_color.components[2] = 255;
+	    blend_color.components[3] = (colormap_num - 1 + 1) * 255 * 11 / 100;
+	}
+	else if (colormap_num <= 12) // yellow - pickup
+	{
+	    blend_color.components[0] = 0;
+	    blend_color.components[1] = 255;
+	    blend_color.components[2] = 255;
+	    blend_color.components[3] = (colormap_num - 8 + 1) * 255 * 125 / 1000;
+	}
+	else // green - hazard suit
+	{
+	    blend_color.components[0] = 0;
+	    blend_color.components[1] = 255;
+	    blend_color.components[2] = 0;
+	    blend_color.components[3] = 255 * 125 / 1000;
+	}
+	blend_color.components[3] = 255 - blend_color.components[3];
+	for(i = 0; i < 3; i++)
+	    color_premultiplied[i] = blend_color.components[i] * (255-blend_color.components[3]);
+
+	    for( ; fb < fb_end; fb++ )
+	    {
+		pixel = *fb;
+		pixel.components[0] = (color_premultiplied[0] + pixel.components[0] * blend_color.components[3]) >> 8;
+		pixel.components[1] = (color_premultiplied[1] + pixel.components[1] * blend_color.components[3]) >> 8;
+		pixel.components[2] = (color_premultiplied[2] + pixel.components[2] * blend_color.components[3]) >> 8;
+		*fb = pixel;
+	    }
+    }
+    */
+}
+
 void R_32b_RenderPlayerView (player_t *player)
 {
     int y, x;
@@ -1142,11 +1382,15 @@ void R_32b_RenderPlayerView (player_t *player)
 	for( x = 0; x < SCREENWIDTH; x++, framebuffer++ )
 	    *framebuffer = conrast_colors[ ((x>>1) ^ (y>>1)) & 1 ];
 
-    RP_BuildViewMatrix(player);
+    RP_SetupView(player);
     RP_BuildClipPlanes(player);
     RP_PrepareSky(player);
 
     RP_RenderBSPNode(numnodes-1);
+
+    RP_DrawPlayerSprites(player);
+
+    RP_Postprocess(player->fixedcolormap);
 }
 
 // PANZER - STUBS
@@ -1157,7 +1401,7 @@ void R_32b_InitSprites (char** namelist)
     R_8b_InitSprites(namelist);
 }
 
-void R_32b_ClearSprites(){}
+void R_32b_ClearSprites(void){}
 
 void R_32b_InitInterface()
 {
