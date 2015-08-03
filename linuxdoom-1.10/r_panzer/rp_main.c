@@ -1019,26 +1019,65 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
     }
 }
 
+
+// TODO - remove this funcs to separate file. Or all code for sprites to separate file.
+static fixed_t		g_spr_u;
+static fixed_t		g_spr_u_end;
+static fixed_t		g_spr_u_step;
+static pixel_t*		g_spr_dst;
+static pixel_t*		g_spr_src;
+static int		g_spr_mip_width_minus_one;
+
+void SpriteRowFunc()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
+	*g_spr_dst = BlendPixels( LightPixel( g_spr_src[g_spr_u>>FRACBITS] ), *g_spr_dst );
+}
+
+void SpriteRowFuncFlip()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
+	*g_spr_dst = BlendPixels( LightPixel( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u>>FRACBITS) ] ), *g_spr_dst );
+}
+
+void SpriteRowFuncSpectre()
+{
+    // avg func:   pixel.p = ( ((pixel.p ^ dst->p) & 0xFEFEFEFE) >> 1 ) + (pixel.p & dst->p);
+    // half brightness:   dst->p = (dst->p & 0xFEFEFEFE) >> 1
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
+	if( g_spr_src[ (g_spr_u >> FRACBITS) ].components[3] >= 128 )
+	    g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
+}
+
+void SpriteRowFuncSpectreFlip()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
+	if( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u >> FRACBITS) ].components[3] >= 128 )
+	    g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
+}
+
+
 void RP_DrawSubsectorSprites(subsector_t* sub)
 {
     mobj_t*		mob;
     spriteframe_t*	frame;
     sprite_picture_t*	sprite;
     int			angle_num;
+    void		(*spr_func)();
     pixel_t*		fb = VP_GetFramebuffer();
 
     mob = sub->sector->thinglist;
 
     while(mob)
     {
-	float pos[3];
-	float proj[3];
-	fixed_t z, sx, sy;
-	fixed_t u_step_on_z1;
-	fixed_t u, v, u_begin, v_begin, u_step, v_step, initial_u_step;
-	fixed_t sprite_width, sprite_height;
+	float	pos[3];
+	float	proj[3];
+	fixed_t	z, sx, sy;
+	fixed_t	u_step_on_z1;
+	fixed_t	v, u_begin, v_begin, u_end, v_end, u_step, v_step, initial_u_step;
+	fixed_t	sprite_width, sprite_height;
 	fixed_t	x_begin_f, y_begin_f;
-	int	x, y, x_begin, y_begin;
+	int	y, x_begin, y_begin;
 	int	mip, mip_u, mip_v;
 	int	cur_mip_width;
 
@@ -1108,26 +1147,25 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	u_begin = FixedMul((x_begin<<FRACBITS) - x_begin_f + FRACUNIT/2, u_step);
 	v_begin = FixedMul((y_begin<<FRACBITS) - y_begin_f + FRACUNIT/2, v_step);
 
-	for( y = y_begin, v = v_begin; y < SCREENHEIGHT && v < sprite_height; y++, v += v_step)
+	u_end = u_begin + (SCREENWIDTH  - x_begin) * u_step;
+	if (u_end > sprite_width ) u_end = sprite_width;
+	v_end = v_begin + (SCREENHEIGHT - y_begin) * v_step;
+	if (v_end > sprite_height) v_end = sprite_height;
+
+	if (mob->flags & MF_SHADOW)
+	    spr_func = frame->flip[angle_num] ? SpriteRowFuncSpectreFlip : SpriteRowFuncSpectre;
+	else
+	    spr_func = frame->flip[angle_num] ? SpriteRowFuncFlip : SpriteRowFunc;
+
+	g_spr_u_step = u_step;
+	g_spr_u_end = u_end;
+	g_spr_mip_width_minus_one = cur_mip_width - 1;
+	for( y = y_begin, v = v_begin; v < v_end; y++, v += v_step)
 	{
-	    pixel_t* src;
-	    pixel_t* dst;
-	    pixel_t pixel;
-	    src = sprite->mip[mip] + (v>>FRACBITS) * cur_mip_width;
-	    dst = fb + x_begin + y * SCREENWIDTH;
-	    // TODO - really blending? Maybe just alpha-test?
-	    if (frame->flip[angle_num])
-		for( x = x_begin, u = u_begin; x < SCREENWIDTH && u < sprite_width; x++, u += u_step, dst++)
-		{
-		    pixel = src[ (cur_mip_width - 1) - (u >> FRACBITS) ];
-		    *dst = BlendPixels(LightPixel(pixel), *dst);
-		}
-	    else
-		for( x = x_begin, u = u_begin; x < SCREENWIDTH && u < sprite_width; x++, u += u_step, dst++)
-		{
-		    pixel = src[ u >> FRACBITS ];
-		    *dst = BlendPixels(LightPixel(pixel), *dst);
-		}
+	    g_spr_u = u_begin;
+	    g_spr_dst = fb + x_begin + y * SCREENWIDTH;
+	    g_spr_src = sprite->mip[mip] + (v>>FRACBITS) * cur_mip_width;
+	    spr_func();
 	}
 
 	next_mob:
@@ -1205,13 +1243,14 @@ void RP_DrawPlayerSprites(player_t *player)
     pspdef_t*		psprite;
     state_t*		state;
     sprite_picture_t*	sprite;
-    int			x, y, x_begin, y_begin;
+    int			y, x_begin, y_begin;
     fixed_t		scaler, dx;
     pixel_t*		framebuffer;
 
-    fixed_t		u, v, u_step, v_step, u_begin, v_begin;
+    fixed_t		v, u_step, v_step, u_begin, v_begin, u_end, v_end;
     fixed_t		sprite_width, sprite_height;
     fixed_t		x_begin_f, y_begin_f;
+    void		(*spr_func)();
 
     framebuffer = VP_GetFramebuffer();
 
@@ -1245,23 +1284,29 @@ void RP_DrawPlayerSprites(player_t *player)
 	sprite_width  = sprite->width  << FRACBITS;
 	sprite_height = sprite->height << FRACBITS;
 
-	for( y = y_begin, v = v_begin; v < sprite_height && y < SCREENHEIGHT; v += v_step, y++ )
+	u_end = u_begin + (SCREENWIDTH  - x_begin) * u_step;
+	if (u_end > sprite_width ) u_end = sprite_width;
+	v_end = v_begin + (SCREENHEIGHT - y_begin) * v_step;
+	if (v_end > sprite_height) v_end = sprite_height;
+
+	SetLightLevel(255 * 15/16, FRACUNIT); // make darker just a bit
+
+	g_spr_u_step = u_step;
+	g_spr_u_end = u_end;
+	spr_func = (player->mo->flags&MF_SHADOW) ? SpriteRowFuncSpectre : SpriteRowFunc;
+
+	for( y = y_begin, v = v_begin; v < v_end; v += v_step, y++ )
 	{
-	    pixel_t pixel;
-	    pixel_t* src = sprite->mip[0] + (v>>FRACBITS) * sprite->width;
-	    pixel_t* dst = framebuffer + x_begin + y * SCREENWIDTH;
-	    for( x = x_begin, u = u_begin; u < sprite_width && x < SCREENWIDTH; u += u_step, dst++)
-	    {
-		pixel = src[u>>FRACBITS];
-		if( pixel.components[3] >= 128) *dst = pixel;
-	    }
+	    g_spr_u = u_begin;
+	    g_spr_dst = framebuffer + x_begin + y * SCREENWIDTH;
+	    g_spr_src = sprite->mip[0] + (v>>FRACBITS) * sprite->width;
+	    spr_func();
 	}
     }
 }
 
 void RP_Postprocess(int colormap_num)
 {
-    int		primary_blend_colormap;
     pixel_t	pixel;
     pixel_t*	fb = VP_GetFramebuffer();
     pixel_t*	fb_end = fb + SCREENWIDTH * SCREENHEIGHT;
@@ -1356,7 +1401,7 @@ void R_32b_InitSprites (char** namelist)
     R_8b_InitSprites(namelist);
 }
 
-void R_32b_ClearSprites(){}
+void R_32b_ClearSprites(void){}
 
 void R_32b_InitInterface()
 {
