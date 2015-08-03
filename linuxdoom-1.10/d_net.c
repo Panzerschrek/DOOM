@@ -89,7 +89,7 @@ doomdata_t	reboundstore;
 //
 int NetbufferSize (void)
 {
-    return (int)&(((doomdata_t *)0)->cmds[netbuffer->numtics]);
+    return (uintptr_t)&(((doomdata_t *)0)->cmds[netbuffer->numtics]);
 }
 
 //
