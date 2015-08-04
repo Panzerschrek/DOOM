@@ -48,6 +48,11 @@ static sky_texture_t	g_sky_texture;
 
 static pixel_t		g_textures_palette[256];
 
+// counters for debugging
+static int		g_walls_textures_pixels_count = 0;
+static int		g_flats_textures_pixels_count = 0;
+static int		g_sprites_pictures_pixels_count = 0;
+
 // game uses this directly.
 extern int*		flattranslation;
 extern int*		texturetranslation;
@@ -296,7 +301,6 @@ static void LoadWallTexture(int texture_num)
 {
     wall_texture_t*		tex;
     wall_texture_info_t*	tex_info;
-    int				pixel_count;
     pixel_t*			dst;
     byte*			src;
     int				i;
@@ -312,15 +316,15 @@ static void LoadWallTexture(int texture_num)
     tex_info = &g_wall_textures_info[texture_num];
 
     // count pixels and mip count
-    pixel_count = 0;
+    tex->pixel_count = 0;
     for( i = 0, x = tex->width, y = tex->height; x > 0 && y > 0; x>>= 1, y>>= 1, i++ )
-	pixel_count += x * y;
+	tex->pixel_count += x * y;
     tex->max_mip = i - 1;
     if (tex->max_mip >= RP_MAX_WALL_MIPS ) tex->max_mip = RP_MAX_WALL_MIPS - 1;
 
     // allocate data
-    tex->raw_data = tex->mip[0] = malloc(sizeof(pixel_t) * pixel_count);
-    memset(tex->raw_data, 0, pixel_count * sizeof(pixel_t));
+    tex->raw_data = tex->mip[0] = malloc(sizeof(pixel_t) * tex->pixel_count);
+    memset(tex->raw_data, 0, tex->pixel_count * sizeof(pixel_t));
 
     // build texture from patches
     for( i = 0; i < tex_info->patch_count; i++ )
@@ -373,6 +377,20 @@ static void LoadWallTexture(int texture_num)
 	BuildWallMip(tex->mip[i-1], tex->mip[i], x, y );
 	offset += (x>>1) * (y>>1);
     }
+
+    g_walls_textures_pixels_count += tex->pixel_count;
+}
+
+static void FreeWallTexture(int num)
+{
+    wall_texture_t*	tex;
+
+    tex = &g_wall_textures[num];
+
+    free(tex->raw_data);
+    tex->raw_data = 0;
+
+    g_walls_textures_pixels_count -= tex->pixel_count;
 }
 
 static void LoadFlatTexture(int flatnum)
@@ -403,6 +421,20 @@ static void LoadFlatTexture(int flatnum)
 	BuildFlatMip(tex->mip[i-1], tex->mip[i], cur_size<<1, cur_size<<1);
 	offset += cur_size * cur_size;
     }
+
+    g_flats_textures_pixels_count += pixel_count;
+}
+
+static void FreeFlatTexture(int num)
+{
+    flat_texture_t*	tex;
+
+    tex = &g_flat_textures[num];
+
+    free(tex->raw_data);
+    tex->raw_data = 0;
+
+    g_flats_textures_pixels_count -= RP_FLAT_TEXTURE_SIZE * RP_FLAT_TEXTURE_SIZE * 4 / 3;
 }
 
 static void LoadSpritePicture(int num)
@@ -412,7 +444,6 @@ static void LoadSpritePicture(int num)
     column_t*		column;
     byte*		src;
     pixel_t*		dst;
-    int			pixel_count;
     int			i, x, y, count, offset;
 
     sprite = &g_sprites_pictures[num];
@@ -426,15 +457,15 @@ static void LoadSpritePicture(int num)
     sprite->left_offset = patch->leftoffset;
     sprite->top_offset  = patch->topoffset;
 
-    pixel_count = 0;
+    sprite->pixel_count = 0;
     for( i = 0, x = sprite->width, y = sprite->height; x > 0 && y > 0; x>>= 1, y>>= 1, i++ )
-	pixel_count += x * y;
+	sprite->pixel_count += x * y;
     sprite->max_mip = i - 1;
     if (sprite->max_mip >= RP_MAX_WALL_MIPS ) sprite->max_mip = RP_MAX_WALL_MIPS - 1;
 
-    sprite->raw_data = malloc(pixel_count * sizeof(pixel_t));
+    sprite->raw_data = malloc(sprite->pixel_count * sizeof(pixel_t));
     sprite->mip[0] = sprite->raw_data;
-    memset(sprite->raw_data, 0, pixel_count * sizeof(pixel_t));
+    memset(sprite->raw_data, 0, sprite->pixel_count * sizeof(pixel_t));
 
     for (x = 0; x < sprite->width; x++)
     {
@@ -463,6 +494,8 @@ static void LoadSpritePicture(int num)
 	BuildFlatMip(sprite->mip[i-1], sprite->mip[i], x, y );
 	offset += (x>>1) * (y>>1);
     }
+
+    g_sprites_pictures_pixels_count += sprite->pixel_count;
 }
 
 static void PrecacheWallsTextures()
@@ -483,14 +516,8 @@ static void PrecacheWallsTextures()
     {
 	if (g_wall_textures[i].used && !g_wall_textures[i].raw_data)
 	    LoadWallTexture(i);
-	else
-	{
-	    if (g_wall_textures[i].raw_data)
-	    {
-		free(g_wall_textures[i].raw_data);
-		g_wall_textures[i].raw_data = NULL;
-	    }
-	}
+	else if (g_wall_textures[i].raw_data)
+	    FreeWallTexture(i);
     }
 }
 
@@ -511,14 +538,8 @@ static void PrecacheFlatsTextures()
     {
 	if (g_flat_textures[i].used && !g_flat_textures[i].raw_data)
 	    LoadFlatTexture(i);
-	else
-	{
-	    if (g_flat_textures[i].raw_data)
-	    {
-		free(g_flat_textures[i].raw_data);
-		g_flat_textures[i].raw_data = NULL;
-	    }
-	}
+	else if (g_flat_textures[i].raw_data)
+	    FreeFlatTexture(i);
     }
 }
 
