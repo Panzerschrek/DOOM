@@ -100,13 +100,13 @@ static void SetLightLevel(int level, fixed_t z)
 {
     if (g_fullbright)
     {
-	g_cur_column_light = GetLightingGammaTable()[255 * 7 / 8]; // fullbright, but not so full
+	g_cur_column_light = RP_GetLightingGammaTable()[255 * 7 / 8]; // fullbright, but not so full
 	return;
     }
 
     // TODO - invent magic for cool fake contrast, like in vanila
     (void)z;
-    g_cur_column_light = GetLightingGammaTable()[level];
+    g_cur_column_light = RP_GetLightingGammaTable()[level];
 }
 
 // uses g_cur_column_light
@@ -203,7 +203,7 @@ static boolean ClipCurSeg()
 
     for( i = 0; i < 3; i++ )
     {
-    	dot[0] =
+	dot[0] =
 	    FixedMul(g_cur_seg_data.v[0].x, g_clip_planes[i].n[0]) +
 	    FixedMul(g_cur_seg_data.v[0].y, g_clip_planes[i].n[1]) +
 	    g_clip_planes[i].dist;
@@ -247,8 +247,8 @@ static void ClipCurSubsector(int subsector_num)
     full_subsector_t*	full_subsector;
     vertex_t*		full_subsector_vertices;
 
-    full_subsector = R_32b_GetFullSubsectors() + subsector_num;
-    full_subsector_vertices = R_32b_GetFullSubsectorsVertices() + full_subsector->first_vertex;
+    full_subsector = RP_GetFullSubsectors() + subsector_num;
+    full_subsector_vertices = RP_GetFullSubsectorsVertices() + full_subsector->first_vertex;
 
     g_cur_subsector_data.vertex_count = full_subsector->numvertices;
     for( i = 0; i < full_subsector->numvertices; i++ )
@@ -257,7 +257,7 @@ static void ClipCurSubsector(int subsector_num)
     for( i = 0; i < 3; i++ )
     {
 	g_cur_subsector_data.vertex_count =
-	    R_32b_ClipPolygon(
+	    RP_ClipPolygon(
 		g_cur_subsector_data.clipped_vertices,
 		g_cur_subsector_data.vertex_count,
 		&g_clip_planes[i]);
@@ -329,7 +329,7 @@ static void PreparePolygon(screen_vertex_t* vertices, int vertex_count, boolean 
     }
 }
 
-void RP_PrepareSky(player_t* player)
+static void PrepareSky(player_t* player)
 {
     int		x;
     fixed_t 	sign, cur_x_tan;
@@ -338,7 +338,7 @@ void RP_PrepareSky(player_t* player)
     int		pixel_num;
     int		sky_tex_pixels;
 
-    sky_tex_pixels = ID_SKY_TEXTURE_REPEATS * GetSkyTexture()->width;
+    sky_tex_pixels = ID_SKY_TEXTURE_REPEATS * RP_GetSkyTexture()->width;
 
     tan_scaler = -FixedDiv(FRACUNIT, finetangent[RP_HALF_FOV_X >> ANGLETOFINESHIFT]);
 
@@ -367,13 +367,13 @@ void RP_PrepareSky(player_t* player)
 	}
 
 	final_angle_num = ((player->mo->angle>>ANGLETOFINESHIFT) - angle_num) & FINEMASK;
-	pixel_num = (final_angle_num * sky_tex_pixels / FINEANGLES) % GetSkyTexture()->width;
+	pixel_num = (final_angle_num * sky_tex_pixels / FINEANGLES) % RP_GetSkyTexture()->width;
 
 	g_y_to_sky_u_table[x] = pixel_num;
     }
 }
 
-void RP_DrawSkyPolygon()
+static void DrawSkyPolygon()
 {
     int			y;
     int			x, x_begin, x_end;
@@ -383,7 +383,7 @@ void RP_DrawSkyPolygon()
     pixel_t*		src;
     int		v;
 
-    texture = GetSkyTexture();
+    texture = RP_GetSkyTexture();
     framebuffer = VP_GetFramebuffer();
     src = texture->data;
 
@@ -407,7 +407,7 @@ void RP_DrawSkyPolygon()
     }
 }
 
-void RP_MatMul(const float* mat0, const float* mat1, float* result)
+static void MatMul(const float* mat0, const float* mat1, float* result)
 {
     int i, j, k;
 
@@ -420,7 +420,7 @@ void RP_MatMul(const float* mat0, const float* mat1, float* result)
 	}
 }
 
-void RP_MatIdentity(float* mat)
+static void MatIdentity(float* mat)
 {
     int i;
 
@@ -430,14 +430,14 @@ void RP_MatIdentity(float* mat)
     mat[10] = mat[15] = 1.0f;
 }
 
-void RP_VecMatMul( float* vec, float* mat, float* result )
+static void VecMatMul( float* vec, float* mat, float* result )
 {
     int i;
     for( i = 0; i < 3; i++ )
 	result[i] = vec[0] * mat[i] + vec[1] * mat[i+4] + vec[2] * mat[i+8] + mat[i+12];
 }
 
-void RP_SetupView(player_t *player)
+static void SetupView(player_t* player)
 {
     float		translate_matrix[16];
     float		rotate_matrix[16];
@@ -458,24 +458,24 @@ void RP_SetupView(player_t *player)
     g_view_angle = (player->mo->angle >> ANGLETOFINESHIFT ) & FINEMASK;
     g_half_fov_tan = -finetangent[RP_HALF_FOV_X >> ANGLETOFINESHIFT];
 
-    RP_MatIdentity(translate_matrix);
+    MatIdentity(translate_matrix);
     translate_matrix[12] = - FixedToFloat(player->mo->x);
     translate_matrix[13] = - FixedToFloat(player->mo->y);
     translate_matrix[14] = - FixedToFloat(player->viewz);
 
-    RP_MatIdentity(rotate_matrix);
+    MatIdentity(rotate_matrix);
     rotate_matrix[0] =  FixedToFloat(finecosine[ angle_num ]);
     rotate_matrix[4] = -FixedToFloat(finesine  [ angle_num ]);
     rotate_matrix[1] =  FixedToFloat(finesine  [ angle_num ]);
     rotate_matrix[5] =  FixedToFloat(finecosine[ angle_num ]);
 
-    RP_MatIdentity(basis_change_matrix);
+    MatIdentity(basis_change_matrix);
     basis_change_matrix[ 5] = 0.0f;
     basis_change_matrix[ 6] = 1.0f;
     basis_change_matrix[ 9] = -1.0f;
     basis_change_matrix[10] = 0.0f;
 
-    RP_MatIdentity(projection_matrix);
+    MatIdentity(projection_matrix);
     // TODO: Why minus tangent?
     projection_matrix[0] = FixedToFloat(-finetangent[RP_HALF_FOV_X >> ANGLETOFINESHIFT]);
     projection_matrix[5] = projection_matrix[0] * (((float)SCREENWIDTH) / ((float)SCREENHEIGHT));
@@ -484,12 +484,12 @@ void RP_SetupView(player_t *player)
     g_inv_y_scaler = (ID_SCREENHEIGHT << FRACBITS) / ID_CORRECT_SCREENHEIGHT;
     projection_matrix[5] = projection_matrix[5] * ((float)ID_CORRECT_SCREENHEIGHT)/ ((float)ID_SCREENHEIGHT);
 
-    RP_MatMul( translate_matrix, rotate_matrix, tmp_mat[0] );
-    RP_MatMul( tmp_mat[0], basis_change_matrix, tmp_mat[1] );
-    RP_MatMul( tmp_mat[1], projection_matrix, g_view_matrix );
+    MatMul( translate_matrix, rotate_matrix, tmp_mat[0] );
+    MatMul( tmp_mat[0], basis_change_matrix, tmp_mat[1] );
+    MatMul( tmp_mat[1], projection_matrix, g_view_matrix );
 }
 
-void RP_BuildClipPlanes(player_t *player)
+static void BuildClipPlanes(player_t *player)
 {
     int ang;
     int angles[3];
@@ -516,7 +516,7 @@ void RP_BuildClipPlanes(player_t *player)
     g_clip_planes[0].dist -= RP_Z_NEAR_FIXED;
 }
 
-void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
+static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 {
     float	vertex_z[4];
     fixed_t	screen_y[4];
@@ -681,7 +681,7 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
     } // for x
 }
 
-void PR_DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boolean draw_as_sky)
+static void DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boolean draw_as_sky)
 {
     /*
     Because we draw walls using column-based algorithm,
@@ -730,7 +730,7 @@ void PR_DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, 
 	sky_polygon_vertices[3].y = screen_y[2];
 
 	PreparePolygon(sky_polygon_vertices, 4, true);
-	RP_DrawSkyPolygon();
+	DrawSkyPolygon();
 	return;
     }
 
@@ -739,7 +739,7 @@ void PR_DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, 
     dy_max = dy_left > dy_right ? dy_left : dy_right;
 
     if (dy_max <= allowed_dy)
-	PR_DrawWallPart(top_tex_offset, z_min, z_max);
+	DrawWallPart(top_tex_offset, z_min, z_max);
     else
     {
 	splits = dy_max / allowed_dy;
@@ -748,7 +748,7 @@ void PR_DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, 
 	z_step = (z_max - z_min) / splits;
 	for( i = 0; i < splits; i++ )
 	{
-	    PR_DrawWallPart(
+	    DrawWallPart(
 		top_tex_offset + (splits - i - 1) * z_step,
 		z_min + i * z_step,
 		(i == splits - 1) ? z_max : (z_min + (i+1) * z_step));
@@ -756,7 +756,7 @@ void PR_DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, 
     }
 }
 
-void PR_DrawWall()
+static void DrawWall()
 {
     int		v_offset;
     fixed_t	seg_normal[2];
@@ -791,7 +791,7 @@ void PR_DrawWall()
 	{
 	    ProjectCurSeg(); seg_projected = true;
 
-	    g_cur_wall_texture = GetWallTexture(texturetranslation[g_cur_side->bottomtexture]);
+	    g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_side->bottomtexture]);
 	    g_cur_wall_texture_transparent = false;
 
 	    if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
@@ -801,7 +801,7 @@ void PR_DrawWall()
 			g_cur_wall_texture->height << FRACBITS);
 	    else v_offset = 0;
 
-	    PR_DrawSplitWallPart(
+	    DrawSplitWallPart(
 		v_offset,
 		g_cur_seg->frontsector->floorheight,
 		g_cur_seg->backsector->floorheight,
@@ -814,7 +814,7 @@ void PR_DrawWall()
 	    if(!seg_projected) ProjectCurSeg();
 	    seg_projected = true;
 
-	    g_cur_wall_texture = GetWallTexture(texturetranslation[g_cur_side->toptexture]);
+	    g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_side->toptexture]);
 	    g_cur_wall_texture_transparent = false;
 
 	    if (g_cur_seg->linedef->flags & ML_DONTPEGTOP)
@@ -825,7 +825,7 @@ void PR_DrawWall()
 			g_cur_seg->backsector->ceilingheight - g_cur_seg->frontsector->ceilingheight,
 			g_cur_wall_texture->height * FRACUNIT );
 
-	    PR_DrawSplitWallPart(
+	    DrawSplitWallPart(
 		v_offset,
 		g_cur_seg->backsector->ceilingheight,
 		g_cur_seg->frontsector->ceilingheight,
@@ -838,7 +838,7 @@ void PR_DrawWall()
 	    if(!seg_projected) ProjectCurSeg();
 	    seg_projected = true;
 
-	    g_cur_wall_texture = GetWallTexture(texturetranslation[g_cur_side->midtexture]);
+	    g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_side->midtexture]);
 	    g_cur_wall_texture_transparent = true;
 
 	    if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
@@ -847,7 +847,7 @@ void PR_DrawWall()
 		    ? g_cur_seg->frontsector->floorheight
 		    : g_cur_seg->backsector->floorheight;
 
-		PR_DrawSplitWallPart(
+		DrawSplitWallPart(
 		    0,
 		    h,
 		    h + (g_cur_wall_texture->height << FRACBITS),
@@ -859,7 +859,7 @@ void PR_DrawWall()
 		    ? g_cur_seg->frontsector->ceilingheight
 		    : g_cur_seg->backsector->ceilingheight;
 
-		PR_DrawSplitWallPart(
+		DrawSplitWallPart(
 		    0,
 		    h - (g_cur_wall_texture->height << FRACBITS),
 		    h,
@@ -872,7 +872,7 @@ void PR_DrawWall()
 	if(!seg_projected) ProjectCurSeg();
 	seg_projected = true;
 
-	g_cur_wall_texture = GetWallTexture(texturetranslation[g_cur_side->midtexture]);
+	g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_side->midtexture]);
 	g_cur_wall_texture_transparent = false;
 
 	if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
@@ -882,7 +882,7 @@ void PR_DrawWall()
 		    g_cur_wall_texture->height * FRACUNIT );
 	else v_offset = 0;
 
-	PR_DrawSplitWallPart(
+	DrawSplitWallPart(
 	    v_offset,
 	    g_cur_seg->frontsector->floorheight,
 	    g_cur_seg->frontsector->ceilingheight,
@@ -890,7 +890,7 @@ void PR_DrawWall()
     }
 }
 
-void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
+static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
 {
     int			i;
     subsector_t*	subsector;
@@ -921,7 +921,7 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	f_vertex[1] = FixedToFloat(g_cur_subsector_data.clipped_vertices[i].y);
 	f_vertex[2] = FixedToFloat(height);
 
-	RP_VecMatMul(f_vertex, g_view_matrix, proj);
+	VecMatMul(f_vertex, g_view_matrix, proj);
 
 	proj[0] /= proj[2];
 	proj[1] /= proj[2];
@@ -935,14 +935,14 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 
     if (texture_num == skyflatnum)
     {
-	RP_DrawSkyPolygon();
+	DrawSkyPolygon();
 	return;
     }
 
     top_vertex    = &vertices_proj[g_cur_screen_polygon.top_vertex_index   ];
     bottom_vertex = &vertices_proj[g_cur_screen_polygon.bottom_vertex_index];
 
-    texture = GetFlatTexture(texture_num);
+    texture = RP_GetFlatTexture(texture_num);
 
     dy = bottom_vertex->y - top_vertex->y;
     part_step = FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, dy);
@@ -1028,19 +1028,19 @@ static pixel_t*		g_spr_dst;
 static pixel_t*		g_spr_src;
 static int		g_spr_mip_width_minus_one;
 
-void SpriteRowFunc()
+static void SpriteRowFunc()
 {
     for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
 	*g_spr_dst = BlendPixels( LightPixel( g_spr_src[g_spr_u>>FRACBITS] ), *g_spr_dst );
 }
 
-void SpriteRowFuncFlip()
+static void SpriteRowFuncFlip()
 {
     for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
 	*g_spr_dst = BlendPixels( LightPixel( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u>>FRACBITS) ] ), *g_spr_dst );
 }
 
-void SpriteRowFuncSpectre()
+static void SpriteRowFuncSpectre()
 {
     // avg func:   pixel.p = ( ((pixel.p ^ dst->p) & 0xFEFEFEFE) >> 1 ) + (pixel.p & dst->p);
     // half brightness:   dst->p = (dst->p & 0xFEFEFEFE) >> 1
@@ -1049,7 +1049,7 @@ void SpriteRowFuncSpectre()
 	    g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
 }
 
-void SpriteRowFuncSpectreFlip()
+static void SpriteRowFuncSpectreFlip()
 {
     for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
 	if( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u >> FRACBITS) ].components[3] >= 128 )
@@ -1057,7 +1057,7 @@ void SpriteRowFuncSpectreFlip()
 }
 
 
-void RP_DrawSubsectorSprites(subsector_t* sub)
+static void DrawSubsectorSprites(subsector_t* sub)
 {
     mobj_t*		mob;
     spriteframe_t*	frame;
@@ -1101,13 +1101,13 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	    cross = FixedMul(dir_to_mob[1], mob_dir[0]) - FixedMul(dir_to_mob[0], mob_dir[1]);
 	    angle = atan2(FixedToFloat(cross), FixedToFloat(dot)) + pi*3.0f;
 	    angle_num = ((int)((8.0f*(angle + pi/8.0f)) / (2.0f * pi))) & 7;
-	    sprite = GetSpritePicture(frame->lump[angle_num]);
+	    sprite = RP_GetSpritePicture(frame->lump[angle_num]);
 	}
 
 	pos[0] = FixedToFloat(mob->x);
 	pos[1] = FixedToFloat(mob->y);
 	pos[2] = FixedToFloat(mob->z + FRACUNIT * sprite->height);
-	RP_VecMatMul(pos, g_view_matrix, proj);
+	VecMatMul(pos, g_view_matrix, proj);
 
 	if (proj[2] < RP_Z_NEAR_FLOAT) goto next_mob;
 	proj[0] /= proj[2];
@@ -1173,7 +1173,7 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
     }
 }
 
-void RP_Subsector(int num)
+static void Subsector(int num)
 {
     subsector_t*	sub;
     int			line_seg;
@@ -1184,7 +1184,7 @@ void RP_Subsector(int num)
     for( line_seg = sub->firstline; line_seg < sub->numlines + sub->firstline; line_seg++ )
     {
     	g_cur_seg = &segs[ line_seg ];
-	PR_DrawWall();
+	DrawWall();
     }
     subsector_clipped = false;
 
@@ -1193,23 +1193,23 @@ void RP_Subsector(int num)
 	ClipCurSubsector(num);
 	subsector_clipped = true;
 	if (g_cur_subsector_data.vertex_count > 0)
-	    PR_DrawSubsectorFlat( num, true  );
+	    DrawSubsectorFlat( num, true  );
     }
     if (g_view_pos[2] < sub->sector->ceilingheight)
     {
 	if (!subsector_clipped) ClipCurSubsector(num);
 	if (g_cur_subsector_data.vertex_count > 0)
-	    PR_DrawSubsectorFlat( num, false );
+	    DrawSubsectorFlat( num, false );
     }
 
-    RP_DrawSubsectorSprites(sub);
+    DrawSubsectorSprites(sub);
 }
 //
 // RenderBSPNode
 // Renders all subsectors below a given node,
 //  traversing subtree recursively.
 // Just call with BSP root.
-void RP_RenderBSPNode (int bspnum)
+static void RenderBSPNode(int bspnum)
 {
     node_t*	bsp;
     int		side;
@@ -1218,9 +1218,9 @@ void RP_RenderBSPNode (int bspnum)
     if (bspnum & NF_SUBSECTOR)
     {
 	if (bspnum == -1)
-	    RP_Subsector (0);
+	    Subsector (0);
 	else
-	    RP_Subsector (bspnum&(~NF_SUBSECTOR));
+	    Subsector (bspnum&(~NF_SUBSECTOR));
 	return;
     }
 
@@ -1230,14 +1230,14 @@ void RP_RenderBSPNode (int bspnum)
     side = 1 ^ R_PointOnSide (g_view_pos[0], g_view_pos[1], bsp);
 
     // Recursively divide front space.
-    RP_RenderBSPNode (bsp->children[side]);
+    RenderBSPNode (bsp->children[side]);
 
     // Possibly divide back space.
     //if (R_CheckBBox (bsp->bbox[side^1]))
-    RP_RenderBSPNode (bsp->children[side^1]);
+    RenderBSPNode (bsp->children[side^1]);
 }
 
-void RP_DrawPlayerSprites(player_t *player)
+static void DrawPlayerSprites(player_t *player)
 {
     int			i;
     pspdef_t*		psprite;
@@ -1265,7 +1265,7 @@ void RP_DrawPlayerSprites(player_t *player)
 	state = psprite->state;
 	if (!state) continue;
 
-	sprite = GetSpritePicture( sprites[state->sprite].spriteframes[state->frame & FF_FRAMEMASK].lump[0] );
+	sprite = RP_GetSpritePicture( sprites[state->sprite].spriteframes[state->frame & FF_FRAMEMASK].lump[0] );
 
 	x_begin_f = psprite->sx - (sprite->left_offset<<FRACBITS);
 	x_begin_f = FixedMul( FixedMul(x_begin_f, scaler), g_inv_y_scaler ) + dx / 2;
@@ -1305,7 +1305,7 @@ void RP_DrawPlayerSprites(player_t *player)
     }
 }
 
-void RP_Postprocess(int colormap_num)
+static void Postprocess(int colormap_num)
 {
     pixel_t	pixel;
     pixel_t*	fb = VP_GetFramebuffer();
@@ -1369,7 +1369,7 @@ void RP_Postprocess(int colormap_num)
     */
 }
 
-void R_32b_RenderPlayerView (player_t *player)
+static void R_32b_RenderPlayerView(player_t* player)
 {
     int y, x;
     pixel_t conrast_colors[2];
@@ -1382,15 +1382,15 @@ void R_32b_RenderPlayerView (player_t *player)
 	for( x = 0; x < SCREENWIDTH; x++, framebuffer++ )
 	    *framebuffer = conrast_colors[ ((x>>1) ^ (y>>1)) & 1 ];
 
-    RP_SetupView(player);
-    RP_BuildClipPlanes(player);
-    RP_PrepareSky(player);
+    SetupView(player);
+    BuildClipPlanes(player);
+    PrepareSky(player);
 
-    RP_RenderBSPNode(numnodes-1);
+    RenderBSPNode(numnodes-1);
 
-    RP_DrawPlayerSprites(player);
+    DrawPlayerSprites(player);
 
-    RP_Postprocess(player->fixedcolormap);
+    Postprocess(player->fixedcolormap);
 }
 
 // PANZER - STUBS
@@ -1401,6 +1401,7 @@ void R_32b_InitSprites (char** namelist)
     R_8b_InitSprites(namelist);
 }
 
+//TODO - implement this
 void R_32b_ClearSprites(void){}
 
 void R_32b_InitInterface()

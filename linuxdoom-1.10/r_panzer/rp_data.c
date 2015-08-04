@@ -130,7 +130,7 @@ static void BuildSkyTextue(wall_texture_t* src_wall_texture)
 	    g_sky_texture.data[ x + y * g_sky_texture.width ] = src_wall_texture->mip[0][ y + x * g_sky_texture.height ];
 }
 
-static void R_32b_InitPalette()
+static void InitPalette()
 {
     int		i;
     int		j;
@@ -149,7 +149,7 @@ static void R_32b_InitPalette()
 
 }
 
-static void RP_InitWallsTextures()
+static void InitWallsTextures()
 {
     int*		maptex_data[2];
     int			maptex_count[2];
@@ -239,7 +239,7 @@ static void RP_InitWallsTextures()
 	texturetranslation[i] = i;
 }
 
-static void RP_InitFlatsTextures()
+static void InitFlatsTextures()
 {
     int		i;
     int		last_flat;
@@ -258,12 +258,12 @@ static void RP_InitFlatsTextures()
 	flattranslation[i] = i;
 }
 
-static void PR_InitSkyTexture()
+static void InitSkyTexture()
 {
     g_sky_texture.data = NULL;
 }
 
-static void RP_InitSpritesPictures()
+static void InitSpritesPictures()
 {
     int	i;
 
@@ -277,7 +277,7 @@ static void RP_InitSpritesPictures()
         g_sprites_pictures[i].raw_data = NULL;
 }
 
-static void RP_InitLightingGammaTable()
+static void InitLightingGammaTable()
 {
     int i;
     // TODO - make 1, when fake contrast will added
@@ -292,7 +292,7 @@ static void RP_InitLightingGammaTable()
     }
 }
 
-static void R_32b_LoadWallTexture(int texture_num)
+static void LoadWallTexture(int texture_num)
 {
     wall_texture_t*		tex;
     wall_texture_info_t*	tex_info;
@@ -375,7 +375,7 @@ static void R_32b_LoadWallTexture(int texture_num)
     }
 }
 
-static void R_32b_LoadFlatTexture(int flatnum)
+static void LoadFlatTexture(int flatnum)
 {
     byte*		raw_data;
     flat_texture_t*	tex;
@@ -405,7 +405,7 @@ static void R_32b_LoadFlatTexture(int flatnum)
     }
 }
 
-static void R_32b_LoadSpritePicture(int num)
+static void LoadSpritePicture(int num)
 {
     sprite_picture_t*	sprite;
     patch_t*		patch;
@@ -465,7 +465,7 @@ static void R_32b_LoadSpritePicture(int num)
     }
 }
 
-void R_32b_PrecacheWallsTextures()
+static void PrecacheWallsTextures()
 {
     int		i;
 
@@ -482,7 +482,7 @@ void R_32b_PrecacheWallsTextures()
     for( i = 0; i < g_wall_textures_count; i++ )
     {
 	if (g_wall_textures[i].used && !g_wall_textures[i].raw_data)
-	    R_32b_LoadWallTexture(i);
+	    LoadWallTexture(i);
 	else
 	{
 	    if (g_wall_textures[i].raw_data)
@@ -494,7 +494,7 @@ void R_32b_PrecacheWallsTextures()
     }
 }
 
-void R_32b_PrecacheFlatsTextures()
+static void PrecacheFlatsTextures()
 {
     int		i;
 
@@ -510,7 +510,7 @@ void R_32b_PrecacheFlatsTextures()
     for( i = 0; i < g_flat_textures_count; i++ )
     {
 	if (g_flat_textures[i].used && !g_flat_textures[i].raw_data)
-	    R_32b_LoadFlatTexture(i);
+	    LoadFlatTexture(i);
 	else
 	{
 	    if (g_flat_textures[i].raw_data)
@@ -524,24 +524,24 @@ void R_32b_PrecacheFlatsTextures()
 
 void R_32b_PrecacheLevel()
 {
-    R_32b_PrecacheWallsTextures();
-    R_32b_PrecacheFlatsTextures();
+    PrecacheWallsTextures();
+    PrecacheFlatsTextures();
 
-    BuildSkyTextue(GetWallTexture(skytexture));
+    BuildSkyTextue(RP_GetWallTexture(skytexture));
 
-    R_32b_BuildFullSubsectors();
+    RP_BuildFullSubsectors();
 }
 
 void R_32b_InitData ()
 {
-    R_32b_InitPalette();
-    RP_InitWallsTextures();
-    RP_InitFlatsTextures();
-    PR_InitSkyTexture();
+    InitPalette();
+    InitWallsTextures();
+    InitFlatsTextures();
+    InitSkyTexture();
 
-    RP_InitSpritesPictures();
+    InitSpritesPictures();
 
-    RP_InitLightingGammaTable();
+    InitLightingGammaTable();
 }
 
 int R_32b_FlatNumForName(char* name)
@@ -589,38 +589,38 @@ int R_32b_TextureNumForName(char* name)
     return i;
 }
 
-wall_texture_t* GetWallTexture(int num)
+wall_texture_t* RP_GetWallTexture(int num)
 {
     wall_texture_t* tex = &g_wall_textures[num];
     if (!tex->raw_data)
-	R_32b_LoadWallTexture(num);
+	LoadWallTexture(num);
 
     return tex;
 }
 
-flat_texture_t* GetFlatTexture(int num)
+flat_texture_t* RP_GetFlatTexture(int num)
 {
     flat_texture_t* tex = &g_flat_textures[num];
     if (!tex->raw_data)
-	R_32b_LoadFlatTexture(num);
+	LoadFlatTexture(num);
 
     return tex;
 }
 
-sprite_picture_t* GetSpritePicture(int num)
+sprite_picture_t* RP_GetSpritePicture(int num)
 {
     sprite_picture_t* s = &g_sprites_pictures[num];
     if (!s->raw_data)
-        R_32b_LoadSpritePicture(num);
+        LoadSpritePicture(num);
     return s;
 }
 
-sky_texture_t* GetSkyTexture()
+sky_texture_t* RP_GetSkyTexture()
 {
     return &g_sky_texture;
 }
 
-int* GetLightingGammaTable()
+int* RP_GetLightingGammaTable()
 {
     return g_lighting_gamma_table;
 }
