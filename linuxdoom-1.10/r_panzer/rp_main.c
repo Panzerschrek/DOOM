@@ -14,6 +14,7 @@
 #include "../r_things.h"
 #include "../tables.h"
 #include "../v_video.h"
+#include "../z_zone.h"
 
 // special value for inv_z and u/z interpolations
 #define PR_SEG_PART_BITS 4
@@ -36,6 +37,28 @@ typedef struct screen_vertex_s
     fixed_t	y;
     fixed_t	z;
 } screen_vertex_t;
+
+typedef struct pixel_range_s
+{
+    short minmax[2];
+} pixel_range_t;
+
+typedef struct draw_sprite_s
+{
+    sprite_picture_t*		sprite;
+
+    int				x_begin;
+    int				x_end;
+    int				y_begin;
+
+    // texture coordinates on x_begin and x_end
+    fixed_t			u_begin;
+    fixed_t			v_begin;
+    fixed_t			u_step;
+    // v_step calculates later, using g_y_scaler
+
+    pixel_range_t*		pixel_range;
+} draw_sprite_t;
 
 static float		g_view_matrix[16];
 static fixed_t		g_view_pos[3];
@@ -75,18 +98,28 @@ static struct
 
 static struct
 {
-    //TODO - remove static limit
-    int		x_min[ MAX_SCREENHEIGHT ];
-    int		x_max[ MAX_SCREENHEIGHT ];
-    int		y_min;
-    int		y_max;
+    // array with size SCREENWIDTH
+    pixel_range_t	*x;
+    int			y_min;
+    int			y_max;
 
-    int		top_vertex_index;
-    int		bottom_vertex_index;
+    int			top_vertex_index;
+    int			bottom_vertex_index;
 } g_cur_screen_polygon;
 
-//TODO - remove static limit
-static int	g_y_to_sky_u_table[ MAX_SCREENHEIGHT ];
+// array with size SCREENWIDTH
+static int*	g_x_to_sky_u_table;
+
+
+/*
+SPRITES
+*/
+static draw_sprite_t*	g_draw_sprites;
+static int		g_max_draw_sprites;			// g_draw_sprites capacity
+static pixel_range_t*	g_draw_sprites_pixel_ranges;		// main array for wraw sprites pixel ranges
+static int		g_draw_sprites_max_pixel_ranges;	// capacity
+static int		g_next_draw_sprite_index;
+static int		g_next_draw_sprite_pixel_range_index;
 
 
 extern int		skyflatnum;
@@ -269,7 +302,7 @@ static void PreparePolygon(screen_vertex_t* vertices, int vertex_count, boolean 
 {
     int		i, cur_i, next_i;
     int		tmp;
-    int*	side;
+    int		side_ind;
     int 	y_begin;
     int		y_end;
     int		y;
@@ -294,9 +327,9 @@ static void PreparePolygon(screen_vertex_t* vertices, int vertex_count, boolean 
 	    tmp = next_i;
 	    next_i = cur_i;
 	    cur_i = tmp;
-	    side = direction ? g_cur_screen_polygon.x_min : g_cur_screen_polygon.x_max;
+	    side_ind = direction ? 0 : 1;
 	}
-	else side = direction ? g_cur_screen_polygon.x_max : g_cur_screen_polygon.x_min;
+	else side_ind = direction ? 1 : 0;
 
 	x_step = FixedDiv(vertices[next_i].x - vertices[cur_i].x, dy);
 	x = vertices[cur_i].x;
@@ -311,7 +344,7 @@ static void PreparePolygon(screen_vertex_t* vertices, int vertex_count, boolean 
 
 	while (y < y_end)
 	{
-	    side[y] = FixedRoundToInt(x);
+	    g_cur_screen_polygon.x[y].minmax[side_ind] = FixedRoundToInt(x);
 	    x+= x_step;
 	    y++;
 	}
@@ -369,7 +402,7 @@ static void PrepareSky(player_t* player)
 	final_angle_num = ((player->mo->angle>>ANGLETOFINESHIFT) - angle_num) & FINEMASK;
 	pixel_num = (final_angle_num * sky_tex_pixels / FINEANGLES) % RP_GetSkyTexture()->width;
 
-	g_y_to_sky_u_table[x] = pixel_num;
+	g_x_to_sky_u_table[x] = pixel_num;
     }
 }
 
@@ -391,10 +424,10 @@ static void DrawSkyPolygon()
 
     for (y = g_cur_screen_polygon.y_min; y < g_cur_screen_polygon.y_max; y++)
     {
-	x_begin = g_cur_screen_polygon.x_min[y];
+	x_begin = g_cur_screen_polygon.x[y].minmax[0];
 	if (x_begin < 0) x_begin = 0;
 
-	x_end = g_cur_screen_polygon.x_max[y];
+	x_end = g_cur_screen_polygon.x[y].minmax[1];
 	if (x_end > SCREENWIDTH) x_end = SCREENWIDTH;
 
 	dst = framebuffer + x_begin + y * SCREENWIDTH;
@@ -403,7 +436,7 @@ static void DrawSkyPolygon()
 	src = texture->data + (v % texture->height) * texture->width;
 
 	for (x = x_begin; x < x_end; x++, dst++)
-	    *dst = src[ g_y_to_sky_u_table[x] ];
+	    *dst = src[ g_x_to_sky_u_table[x] ];
     }
 }
 
@@ -981,9 +1014,9 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	y_mip =
 	    IntLog2Floor((FixedMul(FixedDiv(inv_z_scaled_step, inv_z_scaled), z) / PR_FLAT_MIP_SCALER) >> FRACBITS);
 
-	x_begin = g_cur_screen_polygon.x_min[y];
+	x_begin = g_cur_screen_polygon.x[y].minmax[0];
 	if (x_begin < 0 ) x_begin = 0;
-	x_end = g_cur_screen_polygon.x_max[y];
+	x_end = g_cur_screen_polygon.x[y].minmax[1];
 	if( x_end > SCREENWIDTH) x_end = SCREENWIDTH;
 	dst = VP_GetFramebuffer() + x_begin + y * SCREENWIDTH;
 
@@ -1425,10 +1458,18 @@ void R_32b_InitInterface()
     R_CheckTextureNumForName = R_32b_CheckTextureNumForName;
 }
 
+static void InitStaticData()
+{
+    g_cur_screen_polygon.x = Z_Malloc(SCREENWIDTH * sizeof(pixel_range_t), PU_STATIC, NULL);
+    g_x_to_sky_u_table = Z_Malloc(SCREENWIDTH * sizeof(int), PU_STATIC, NULL);
+}
+
 void RP_Init()
 {
     void R_32b_InitData(void);
 
     R_32b_InitInterface();
     R_32b_InitData();
+
+    InitStaticData();
 }
