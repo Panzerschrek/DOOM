@@ -47,6 +47,7 @@ typedef struct draw_sprite_s
 {
     sprite_picture_t*		sprite;
 
+    fixed_t			z;
     int				x_begin;
     int				x_end;
     int				y_begin;
@@ -55,8 +56,10 @@ typedef struct draw_sprite_s
     fixed_t			u_begin;
     fixed_t			v_begin;
     fixed_t			u_step;
-    // v_step calculates later, using g_y_scaler
+    fixed_t			v_step;
 
+    int				light_level;
+    void			(*draw_func)();
     pixel_range_t*		pixel_range;
 } draw_sprite_t;
 
@@ -108,18 +111,23 @@ static struct
 } g_cur_screen_polygon;
 
 // array with size SCREENWIDTH
-static int*	g_x_to_sky_u_table;
+static int*		g_x_to_sky_u_table;
 
+// array with size SCREENWIDTH
+static pixel_range_t*	g_occlusion_buffer;
 
-/*
-SPRITES
-*/
-static draw_sprite_t*	g_draw_sprites;
-static int		g_max_draw_sprites;			// g_draw_sprites capacity
-static pixel_range_t*	g_draw_sprites_pixel_ranges;		// main array for wraw sprites pixel ranges
-static int		g_draw_sprites_max_pixel_ranges;	// capacity
-static int		g_next_draw_sprite_index;
-static int		g_next_draw_sprite_pixel_range_index;
+static struct
+{
+    draw_sprite_t*	sprites;
+    int			capacity;
+    int			count;
+
+    draw_sprite_t**	sort_sprites[2];
+
+    pixel_range_t*	pixel_ranges;
+    int			pixel_ranges_capacity;
+    int			next_pixel_range_index;
+} g_draw_sprites;
 
 
 extern int		skyflatnum;
@@ -1089,15 +1097,136 @@ static void SpriteRowFuncSpectreFlip()
 	    g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
 }
 
+static void DrawSprite(draw_sprite_t* dsprite)
+{
+    sprite_picture_t*	sprite;
+    fixed_t		v, u_end, v_end;
+    fixed_t		sprite_width, sprite_height;
+    int			cur_mip_width;
+    int			y, mip;
+    void		(*spr_func)();
+    pixel_t*		fb;
 
-static void DrawSubsectorSprites(subsector_t* sub)
+    sprite = dsprite->sprite;
+
+    SetLightLevel(dsprite->light_level, dsprite->z);
+    spr_func = dsprite->draw_func;
+
+    sprite_width  = sprite->width  << FRACBITS;
+    sprite_height = sprite->height << FRACBITS;
+
+    mip = IntLog2Floor(dsprite->v_step >> FRACBITS);
+    if (mip > sprite->max_mip) mip = sprite->max_mip;
+
+    u_end = dsprite->u_begin + (SCREENWIDTH  - dsprite->x_begin) * dsprite->u_step;
+    if (u_end > sprite_width ) u_end = sprite_width;
+    v_end = dsprite->v_begin + (SCREENHEIGHT - dsprite->y_begin) * dsprite->v_step;
+    if (v_end > sprite_height) v_end = sprite_height;
+
+    dsprite->u_begin >>= mip;
+    dsprite->v_begin >>= mip;
+    dsprite->u_step >>= mip;
+    dsprite->v_step >>= mip;
+    u_end  >>= mip;
+    v_end  >>= mip;
+
+    fb = VP_GetFramebuffer() + dsprite->x_begin;
+    cur_mip_width = sprite->width >> mip;
+
+    g_spr_u_step = dsprite->u_step;
+    g_spr_u_end = u_end;
+    g_spr_mip_width_minus_one = cur_mip_width - 1;
+
+    for( y = dsprite->y_begin, v = dsprite->v_begin; v < v_end; y++, v += dsprite->v_step)
+    {
+	g_spr_u = dsprite->u_begin;
+	g_spr_dst = fb + y * SCREENWIDTH;
+	g_spr_src = sprite->mip[mip] + (v>>FRACBITS) * cur_mip_width;
+	spr_func();
+    }
+}
+
+// ascending sorting - near to far
+// TODO - optimize this
+static void SortSprites_r(draw_sprite_t** in, draw_sprite_t** tmp, int count)
+{
+    int			half;
+    int			p[2], p_end[2], out_p;
+
+    if (count <= 1 )
+	return;
+    if (count == 2)
+    {
+	if (in[0]->z > in[1]->z)
+	{
+	    draw_sprite_t* tmp = in[0];
+	    in[0] = in[1];
+	    in[1] = tmp;
+	}
+	return;
+    }
+
+    half = count >> 1;
+
+    SortSprites_r(in, tmp, half);
+    SortSprites_r(in + half, tmp + half, count - half);
+
+    p[0] = 0;
+    p[1]= half;
+    p_end[0] = half;
+    p_end[1] = count;
+    out_p = 0;
+    while (out_p < count)
+    {
+	if (p[0] == p_end[0])
+	{
+	    tmp[out_p] = in[p[1]]; p[1]++;
+	}
+	else if (p[1] == p_end[1])
+	{
+	    tmp[out_p] = in[p[0]]; p[0]++;
+	}
+	else
+	{
+	    if (in[p[0]]->z < in[p[1]]->z)
+	    {
+		tmp[out_p] = in[p[0]]; p[0]++;
+	    }
+	    else
+	    {
+		tmp[out_p] = in[p[1]]; p[1]++;
+	    }
+	}
+	out_p++;
+    }
+
+    memcpy(in, tmp, count * sizeof(draw_sprite_t*));
+}
+
+static void DrawSprites()
+{
+    int i;
+
+    for( i = 0; i < g_draw_sprites.count; i++ )
+	g_draw_sprites.sort_sprites[0][i] = &g_draw_sprites.sprites[i];
+
+    SortSprites_r( g_draw_sprites.sort_sprites[0], g_draw_sprites.sort_sprites[1], g_draw_sprites.count);
+
+    for( i = g_draw_sprites.count - 1; i >= 0; i--)
+	DrawSprite(g_draw_sprites.sort_sprites[0][i]);
+}
+
+static void AddSubsectorSprites(subsector_t* sub)
 {
     mobj_t*		mob;
     spriteframe_t*	frame;
     sprite_picture_t*	sprite;
     int			angle_num;
-    void		(*spr_func)();
+    draw_sprite_t*	dsprite;
+    fixed_t		u_step_on_z1;
     pixel_t*		fb = VP_GetFramebuffer();
+
+    u_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
 
     mob = sub->sector->thinglist;
 
@@ -1106,13 +1235,10 @@ static void DrawSubsectorSprites(subsector_t* sub)
 	float	pos[3];
 	float	proj[3];
 	fixed_t	z, sx, sy;
-	fixed_t	u_step_on_z1;
-	fixed_t	v, u_begin, v_begin, u_end, v_end, u_step, v_step, initial_u_step;
-	fixed_t	sprite_width, sprite_height;
 	fixed_t	x_begin_f, y_begin_f;
-	int	y, x_begin, y_begin;
-	int	mip, mip_u, mip_v;
-	int	cur_mip_width;
+
+	if (g_draw_sprites.count == g_draw_sprites.capacity) // no space for srites anymore
+	    return;
 
 	if(mob->subsector != sub) goto next_mob;
 
@@ -1150,56 +1276,40 @@ static void DrawSubsectorSprites(subsector_t* sub)
 	sx = FloatToFixed((proj[0] + 1.0f ) * ((float) SCREENWIDTH ) * 0.5f );
 	sy = FloatToFixed((proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f );
 
-	u_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
+	dsprite = g_draw_sprites.sprites + g_draw_sprites.count;
+	g_draw_sprites.count++;
 
-	u_step = FixedMul(u_step_on_z1, z);
-	initial_u_step = u_step;
-	v_step = FixedMul(u_step, g_inv_y_scaler);
+	dsprite->u_step = FixedMul(u_step_on_z1, z);
+	dsprite->v_step = FixedMul(dsprite->u_step, g_inv_y_scaler);
 
-	mip_u = IntLog2Floor(u_step >> FRACBITS);
-	mip_v = IntLog2Floor(v_step >> FRACBITS);
-	mip = mip_u > mip_v ? mip_u : mip_v;
-	if (mip > sprite->max_mip) mip = sprite->max_mip;
-
-	sprite_width  = (sprite->width >>mip) << FRACBITS;
-	sprite_height = (sprite->height>>mip) << FRACBITS;
-
-	u_step >>= mip; v_step >>= mip;
-	cur_mip_width = sprite->width >> mip;
-
-	x_begin_f = sx - FixedDiv((sprite->width<<FRACBITS)/2, initial_u_step);
+	x_begin_f = sx - FixedDiv((sprite->width<<FRACBITS)/2, dsprite->u_step);
 	y_begin_f = sy;
-	x_begin = FixedRoundToInt(x_begin_f);
-	y_begin = FixedRoundToInt(y_begin_f);
+	dsprite->x_begin = FixedRoundToInt(x_begin_f);
+	dsprite->y_begin = FixedRoundToInt(y_begin_f);
 
-	SetLightLevel((mob->frame & FF_FULLBRIGHT) ? 255 : sub->sector->lightlevel, z);
+	if (dsprite->x_begin < 0)
+	{
+	    dsprite->u_begin += - dsprite->x_begin * dsprite->u_step;
+	    dsprite->x_begin = 0;
+	}
+	if (dsprite->y_begin < 0)
+	{
+	    dsprite->v_begin += - dsprite->y_begin * dsprite->v_step;
+	    dsprite->y_begin = 0;
+	}
 
-	if (x_begin < 0) x_begin = 0;
-	if (y_begin < 0) y_begin = 0;
-
-	u_begin = FixedMul((x_begin<<FRACBITS) - x_begin_f + FRACUNIT/2, u_step);
-	v_begin = FixedMul((y_begin<<FRACBITS) - y_begin_f + FRACUNIT/2, v_step);
-
-	u_end = u_begin + (SCREENWIDTH  - x_begin) * u_step;
-	if (u_end > sprite_width ) u_end = sprite_width;
-	v_end = v_begin + (SCREENHEIGHT - y_begin) * v_step;
-	if (v_end > sprite_height) v_end = sprite_height;
+	dsprite->u_begin = FixedMul((dsprite->x_begin<<FRACBITS) - x_begin_f + FRACUNIT/2, dsprite->u_step);
+	dsprite->v_begin = FixedMul((dsprite->y_begin<<FRACBITS) - y_begin_f + FRACUNIT/2, dsprite->v_step);
 
 	if (mob->flags & MF_SHADOW)
-	    spr_func = frame->flip[angle_num] ? SpriteRowFuncSpectreFlip : SpriteRowFuncSpectre;
+	    dsprite->draw_func = frame->flip[angle_num] ? SpriteRowFuncSpectreFlip : SpriteRowFuncSpectre;
 	else
-	    spr_func = frame->flip[angle_num] ? SpriteRowFuncFlip : SpriteRowFunc;
+	    dsprite->draw_func = frame->flip[angle_num] ? SpriteRowFuncFlip : SpriteRowFunc;
 
-	g_spr_u_step = u_step;
-	g_spr_u_end = u_end;
-	g_spr_mip_width_minus_one = cur_mip_width - 1;
-	for( y = y_begin, v = v_begin; v < v_end; y++, v += v_step)
-	{
-	    g_spr_u = u_begin;
-	    g_spr_dst = fb + x_begin + y * SCREENWIDTH;
-	    g_spr_src = sprite->mip[mip] + (v>>FRACBITS) * cur_mip_width;
-	    spr_func();
-	}
+	dsprite->sprite = sprite;
+	dsprite->z = z;
+	dsprite->x_end = 0;
+	dsprite->light_level = (mob->frame & FF_FULLBRIGHT) ? 255 : sub->sector->lightlevel;
 
 	next_mob:
 	mob = mob->snext;
@@ -1235,25 +1345,28 @@ static void Subsector(int num)
 	    DrawSubsectorFlat( num, false );
     }
 
-    DrawSubsectorSprites(sub);
+    AddSubsectorSprites(sub);
 }
 //
 // RenderBSPNode
 // Renders all subsectors below a given node,
 //  traversing subtree recursively.
 // Just call with BSP root.
-static void RenderBSPNode(int bspnum)
+static void RenderBSPNode(int bspnum, boolean for_sprites)
 {
     node_t*	bsp;
     int		side;
+    int		subsector_num;
 
     // Found a subsector?
     if (bspnum & NF_SUBSECTOR)
     {
-	if (bspnum == -1)
-	    Subsector (0);
+	subsector_num = bspnum == -1 ? 0 : bspnum&(~NF_SUBSECTOR);
+	
+	if (for_sprites)
+	    AddSubsectorSprites(&subsectors[subsector_num]);
 	else
-	    Subsector (bspnum&(~NF_SUBSECTOR));
+	    Subsector(subsector_num);
 	return;
     }
 
@@ -1261,13 +1374,10 @@ static void RenderBSPNode(int bspnum)
 
     // Decide which side the view point is on.
     side = 1 ^ R_PointOnSide (g_view_pos[0], g_view_pos[1], bsp);
+    if (for_sprites) side ^= 1;
 
-    // Recursively divide front space.
-    RenderBSPNode (bsp->children[side]);
-
-    // Possibly divide back space.
-    //if (R_CheckBBox (bsp->bbox[side^1]))
-    RenderBSPNode (bsp->children[side^1]);
+    RenderBSPNode (bsp->children[side], for_sprites);
+    RenderBSPNode (bsp->children[side^1], for_sprites);
 }
 
 static void DrawPlayerSprites(player_t *player)
@@ -1404,7 +1514,7 @@ static void Postprocess(int colormap_num)
 
 static void R_32b_RenderPlayerView(player_t* player)
 {
-    int y, x;
+   /* int y, x;
     pixel_t conrast_colors[2];
     pixel_t* framebuffer = VP_GetFramebuffer();
 
@@ -1413,14 +1523,26 @@ static void R_32b_RenderPlayerView(player_t* player)
 
     for( y = 0; y < SCREENHEIGHT; y++ )
 	for( x = 0; x < SCREENWIDTH; x++, framebuffer++ )
-	    *framebuffer = conrast_colors[ ((x>>1) ^ (y>>1)) & 1 ];
+	    *framebuffer = conrast_colors[ ((x>>1) ^ (y>>1)) & 1 ];*/
+
+    g_draw_sprites.count = 0;
+    {
+	int i;
+	for( i = 0; i < SCREENWIDTH; i++ )
+	{
+	    g_occlusion_buffer[i].minmax[0] = 0;
+	    g_occlusion_buffer[i].minmax[1] = SCREENHEIGHT;
+	}
+    }
 
     SetupView(player);
     BuildClipPlanes(player);
     PrepareSky(player);
 
-    RenderBSPNode(numnodes-1);
+    RenderBSPNode(numnodes-1, false);
+    RenderBSPNode(numnodes-1, true);
 
+    DrawSprites();
     DrawPlayerSprites(player);
 
     Postprocess(player->fixedcolormap);
@@ -1462,6 +1584,13 @@ static void InitStaticData()
 {
     g_cur_screen_polygon.x = Z_Malloc(SCREENWIDTH * sizeof(pixel_range_t), PU_STATIC, NULL);
     g_x_to_sky_u_table = Z_Malloc(SCREENWIDTH * sizeof(int), PU_STATIC, NULL);
+    g_occlusion_buffer = Z_Malloc(SCREENWIDTH * sizeof(pixel_range_t), PU_STATIC, NULL);
+
+    g_draw_sprites.capacity = 512;
+    g_draw_sprites.sprites = Z_Malloc(g_draw_sprites.capacity * sizeof(draw_sprite_t), PU_STATIC, NULL);
+
+    g_draw_sprites.sort_sprites[0] = Z_Malloc(g_draw_sprites.capacity * sizeof(draw_sprite_t*), PU_STATIC, NULL);
+    g_draw_sprites.sort_sprites[1] = Z_Malloc(g_draw_sprites.capacity * sizeof(draw_sprite_t*), PU_STATIC, NULL);
 }
 
 void RP_Init()
