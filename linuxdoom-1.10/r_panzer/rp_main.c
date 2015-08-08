@@ -1386,21 +1386,14 @@ static void DrawPlayerSprites(player_t *player)
     pspdef_t*		psprite;
     state_t*		state;
     sprite_picture_t*	sprite;
-    int			y, x_begin, y_begin;
     fixed_t		scaler, dx;
-    pixel_t*		framebuffer;
-
-    fixed_t		v, u_step, v_step, u_begin, v_begin, u_end, v_end;
-    fixed_t		sprite_width, sprite_height;
     fixed_t		x_begin_f, y_begin_f;
-    void		(*spr_func)();
-
-    framebuffer = VP_GetFramebuffer();
+    draw_sprite_t	dsprite;
 
     scaler = FRACUNIT * SCREENHEIGHT / ID_SCREENHEIGHT;
     dx = SCREENWIDTH * FRACUNIT - FixedMul(ID_SCREENWIDTH *scaler, g_inv_y_scaler);
-    u_step = FixedDiv(g_y_scaler, scaler);
-    v_step = FixedDiv(FRACUNIT, scaler);
+    dsprite.u_step = FixedDiv(g_y_scaler, scaler);
+    dsprite.v_step = FixedDiv(FRACUNIT, scaler);
 
     for (i = 0; i < NUMPSPRITES; i++)
     {
@@ -1417,34 +1410,19 @@ static void DrawPlayerSprites(player_t *player)
 	y_begin_f = FixedMul(y_begin_f, scaler);
 	y_begin_f -= 32 * menuscale * FRACUNIT / 2; // TODO - remove this magic
 
-	x_begin = FixedRoundToInt(x_begin_f);
-	if (x_begin < 0 ) x_begin = 0;
-	y_begin = FixedRoundToInt(y_begin_f);
+	dsprite.x_begin = FixedRoundToInt(x_begin_f);
+	if (dsprite.x_begin < 0 ) dsprite.x_begin = 0;
+	dsprite.y_begin = FixedRoundToInt(y_begin_f);
 
-	u_begin = x_begin_f - (x_begin<<FRACBITS) + FRACUNIT/2;
-	v_begin = y_begin_f - (y_begin<<FRACBITS) + FRACUNIT/2;
+	dsprite.u_begin = x_begin_f - (dsprite.x_begin<<FRACBITS) + FRACUNIT/2;
+	dsprite.v_begin = y_begin_f - (dsprite.y_begin<<FRACBITS) + FRACUNIT/2;
 
-	sprite_width  = sprite->width  << FRACBITS;
-	sprite_height = sprite->height << FRACBITS;
-
-	u_end = u_begin + (SCREENWIDTH  - x_begin) * u_step;
-	if (u_end > sprite_width ) u_end = sprite_width;
-	v_end = v_begin + (SCREENHEIGHT - y_begin) * v_step;
-	if (v_end > sprite_height) v_end = sprite_height;
-
-	SetLightLevel(255 * 15/16, FRACUNIT); // make darker just a bit
-
-	g_spr_u_step = u_step;
-	g_spr_u_end = u_end;
-	spr_func = (player->mo->flags&MF_SHADOW) ? SpriteRowFuncSpectre : SpriteRowFunc;
-
-	for( y = y_begin, v = v_begin; v < v_end; v += v_step, y++ )
-	{
-	    g_spr_u = u_begin;
-	    g_spr_dst = framebuffer + x_begin + y * SCREENWIDTH;
-	    g_spr_src = sprite->mip[0] + (v>>FRACBITS) * sprite->width;
-	    spr_func();
-	}
+	dsprite.x_end = 0;
+	dsprite.z = FRACUNIT;
+	dsprite.light_level = 255 * 15/16;
+	dsprite.sprite = sprite;
+	dsprite.draw_func = (player->mo->flags&MF_SHADOW) ? SpriteRowFuncSpectre : SpriteRowFunc;
+	DrawSprite(&dsprite);
     }
 }
 
