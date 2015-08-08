@@ -797,7 +797,7 @@ static void DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_m
     }
 }
 
-static boolean IsBackSector()
+static boolean IsBackSegment()
 {
     fixed_t	seg_normal[2];
     fixed_t	vec_to_seg[2];
@@ -822,7 +822,7 @@ static void DrawWall()
     boolean	seg_projected = false;
 
     if( ClipCurSeg() ) return;
-    if (IsBackSector()) return;
+    if (IsBackSegment()) return;
 
     g_cur_side = g_cur_seg->sidedef;
 
@@ -1122,7 +1122,7 @@ static void DrawSprite(draw_sprite_t* dsprite)
     mip = IntLog2Floor(dsprite->v_step >> FRACBITS);
     if (mip > sprite->max_mip) mip = sprite->max_mip;
 
-    u_end = dsprite->u_begin + (SCREENWIDTH  - dsprite->x_begin) * dsprite->u_step;
+    u_end = dsprite->u_begin + (dsprite->x_end - dsprite->x_begin) * dsprite->u_step;
     if (u_end > sprite_width ) u_end = sprite_width;
     v_end = dsprite->v_begin + (SCREENHEIGHT - dsprite->y_begin) * dsprite->v_step;
     if (v_end > sprite_height) v_end = sprite_height;
@@ -1312,8 +1312,24 @@ static void AddSubsectorSprites(subsector_t* sub)
 
 	dsprite->sprite = sprite;
 	dsprite->z = z;
-	dsprite->x_end = 0;
+	dsprite->x_end = SCREENWIDTH;
 	dsprite->light_level = (mob->frame & FF_FULLBRIGHT) ? 255 : sub->sector->lightlevel;
+
+	while(dsprite->x_begin < SCREENWIDTH)
+	{
+	    if (g_occlusion_buffer[dsprite->x_begin].minmax[0] >= g_occlusion_buffer[dsprite->x_begin].minmax[1])
+	    {
+		dsprite->x_begin ++; dsprite->u_begin += dsprite->u_step;
+	    }
+	    else break;
+	}
+	while (dsprite->x_begin >= 0)
+	{
+	    if (g_occlusion_buffer[dsprite->x_end-1].minmax[0] >= g_occlusion_buffer[dsprite->x_end-1].minmax[1])
+		dsprite->x_end --;
+	    else break;
+	}
+
 
 	next_mob:
 	mob = mob->snext;
@@ -1348,8 +1364,6 @@ static void Subsector(int num)
 	if (g_cur_subsector_data.vertex_count > 0)
 	    DrawSubsectorFlat( num, false );
     }
-
-    AddSubsectorSprites(sub);
 }
 
 static void GenWallPartSilouette(fixed_t z_min, fixed_t z_max, int left_vertex_index, int silouette)
@@ -1365,10 +1379,14 @@ static void GenWallPartSilouette(fixed_t z_min, fixed_t z_max, int left_vertex_i
 
     right_vertex_index = left_vertex_index ^ 1;
 
-     for( i = 0; i < 4; i++ )
+    vertex_z[0] = FixedToFloat(z_min);
+    vertex_z[1] = FixedToFloat(z_max);
+    vertex_z[2] = FixedToFloat(z_min);
+    vertex_z[3] = FixedToFloat(z_max);
+    for( i = 0; i < 4; i++ )
     {
 	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
-	screen_space_y /= g_cur_seg_data.screen_z[i>>1];
+	screen_space_y /= g_cur_seg_data.screen_z[(i>>1)];
 	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
     }
 
@@ -1377,37 +1395,38 @@ static void GenWallPartSilouette(fixed_t z_min, fixed_t z_max, int left_vertex_i
 
     x_begin = FixedRoundToInt(g_cur_seg_data.screen_x[ left_vertex_index]);
     x_end   = FixedRoundToInt(g_cur_seg_data.screen_x[right_vertex_index]);
-
     if (x_begin < 0 ) x_begin = 0;
     if (x_end > SCREENWIDTH) x_end = SCREENWIDTH;
 
     ddx = (x_begin<<FRACBITS) + FRACUNIT/2 - g_cur_seg_data.screen_x[left_vertex_index];
 
-    top_dy =    FixedDiv(screen_y[right_vertex_index+1] - screen_y[left_vertex_index+1], dx);
-    bottom_dy = FixedDiv(screen_y[right_vertex_index+0] - screen_y[left_vertex_index+0], dx);
+    top_dy =    FixedDiv(screen_y[right_vertex_index*2+1] - screen_y[left_vertex_index*2+1], dx);
+    bottom_dy = FixedDiv(screen_y[right_vertex_index*2+0] - screen_y[left_vertex_index*2+0], dx);
 
-    top_y =    screen_y[left_vertex_index+1] + FixedMul(ddx, top_dy   );
-    bottom_y = screen_y[left_vertex_index+0] + FixedMul(ddx, bottom_dy);
+    top_y =    screen_y[left_vertex_index*2+1] + FixedMul(ddx, top_dy   );
+    bottom_y = screen_y[left_vertex_index*2+0] + FixedMul(ddx, bottom_dy);
 
     x = x_begin;
     if (silouette == SIL_BOTH)
 	while(x < x_end)
 	{
-	    g_occlusion_buffer[x].minmax[0] = g_occlusion_buffer[x].minmax[1] = 0;
+	    g_occlusion_buffer[x].minmax[0] = g_occlusion_buffer[x].minmax[1] = SCREENHEIGHT / 2;
 	    x++;
 	}
-    else if (silouette == SIL_TOP)
+    else if (silouette == SIL_BOTTOM)
 	while(x < x_end)
 	{
 	    y = FixedRoundToInt(top_y);
-	    if (g_occlusion_buffer[x].minmax[0] < y) g_occlusion_buffer[x].minmax[0] = y;
+	    if (g_occlusion_buffer[x].minmax[1] > y) g_occlusion_buffer[x].minmax[1] = y;
+	    if (y >= 0 && y < SCREENHEIGHT) V_DrawPixel(x, y, 160); // YELLOW
 	    top_y += top_dy; x++;
 	}
     else
 	while(x < x_end)
 	{
 	    y = FixedRoundToInt(bottom_y);
-	    if (g_occlusion_buffer[x].minmax[1] > y) g_occlusion_buffer[x].minmax[1] = y;
+	    if (g_occlusion_buffer[x].minmax[0] < y) g_occlusion_buffer[x].minmax[0] = y;
+	    if (y >= 0 && y < SCREENHEIGHT) V_DrawPixel(x, y, 112); // GREEN
 	    bottom_y += bottom_dy; x++;
 	}
 }
@@ -1416,8 +1435,8 @@ static void GenSegSilouette(boolean back)
 {
     int left_vertex_index;
 
+    if (IsBackSegment() ^ back) return;
     if (ClipCurSeg()) return;
-    if (IsBackSector() ^ back) return;
 
     ProjectCurSeg();
 
@@ -1529,7 +1548,7 @@ static void DrawPlayerSprites(player_t *player)
 	dsprite.u_begin = x_begin_f - (dsprite.x_begin<<FRACBITS) + FRACUNIT/2;
 	dsprite.v_begin = y_begin_f - (dsprite.y_begin<<FRACBITS) + FRACUNIT/2;
 
-	dsprite.x_end = 0;
+	dsprite.x_end = SCREENWIDTH;
 	dsprite.z = FRACUNIT;
 	dsprite.light_level = 255 * 15/16;
 	dsprite.sprite = sprite;
