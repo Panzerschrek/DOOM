@@ -797,20 +797,12 @@ static void DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_m
     }
 }
 
-static void DrawWall()
+static boolean IsBackSector()
 {
-    int		v_offset;
     fixed_t	seg_normal[2];
     fixed_t	vec_to_seg[2];
     fixed_t	normal_angle;
     fixed_t	dot_product;
-    fixed_t	h;
-    boolean	seg_projected = false;
-
-    if(g_cur_seg->frontsector == g_cur_seg->backsector) return;
-    if( ClipCurSeg() ) return;
-
-    g_cur_side = g_cur_seg->sidedef;
 
     normal_angle = ((ANG90 + g_cur_seg->angle) >> ANGLETOFINESHIFT) & FINEMASK;
     seg_normal[0] = finecosine[ normal_angle ];
@@ -820,7 +812,19 @@ static void DrawWall()
     vec_to_seg[1] = g_cur_seg->v1->y - g_view_pos[1];
 
     dot_product = FixedMul(seg_normal[0], vec_to_seg[0] ) + FixedMul(seg_normal[1], vec_to_seg[1] );
-    if (dot_product <= 0 ) return;
+    return dot_product <= 0;
+}
+
+static void DrawWall()
+{
+    int		v_offset;
+    fixed_t	h;
+    boolean	seg_projected = false;
+
+    if( ClipCurSeg() ) return;
+    if (IsBackSector()) return;
+
+    g_cur_side = g_cur_seg->sidedef;
 
     if(g_cur_seg->frontsector && g_cur_seg->backsector && (g_cur_seg->linedef->flags & ML_TWOSIDED))
     {
@@ -1347,6 +1351,114 @@ static void Subsector(int num)
 
     AddSubsectorSprites(sub);
 }
+
+static void GenWallPartSilouette(fixed_t z_min, fixed_t z_max, int left_vertex_index, int silouette)
+{
+    float	vertex_z[4];
+    fixed_t	screen_y[4];
+    int		i;
+
+    int		right_vertex_index;
+    int		x, y, x_begin, x_end;
+    fixed_t	dx, ddx;
+    fixed_t	top_dy, bottom_dy, top_y, bottom_y;
+
+    right_vertex_index = left_vertex_index ^ 1;
+
+     for( i = 0; i < 4; i++ )
+    {
+	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
+	screen_space_y /= g_cur_seg_data.screen_z[i>>1];
+	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
+    }
+
+    dx = g_cur_seg_data.screen_x[right_vertex_index] - g_cur_seg_data.screen_x[left_vertex_index];
+    if (dx <= 0) return;
+
+    x_begin = FixedRoundToInt(g_cur_seg_data.screen_x[ left_vertex_index]);
+    x_end   = FixedRoundToInt(g_cur_seg_data.screen_x[right_vertex_index]);
+
+    if (x_begin < 0 ) x_begin = 0;
+    if (x_end > SCREENWIDTH) x_end = SCREENWIDTH;
+
+    ddx = (x_begin<<FRACBITS) + FRACUNIT/2 - g_cur_seg_data.screen_x[left_vertex_index];
+
+    top_dy =    FixedDiv(screen_y[right_vertex_index+1] - screen_y[left_vertex_index+1], dx);
+    bottom_dy = FixedDiv(screen_y[right_vertex_index+0] - screen_y[left_vertex_index+0], dx);
+
+    top_y =    screen_y[left_vertex_index+1] + FixedMul(ddx, top_dy   );
+    bottom_y = screen_y[left_vertex_index+0] + FixedMul(ddx, bottom_dy);
+
+    x = x_begin;
+    if (silouette == SIL_BOTH)
+	while(x < x_end)
+	{
+	    g_occlusion_buffer[x].minmax[0] = g_occlusion_buffer[x].minmax[1] = 0;
+	    x++;
+	}
+    else if (silouette == SIL_TOP)
+	while(x < x_end)
+	{
+	    y = FixedRoundToInt(top_y);
+	    if (g_occlusion_buffer[x].minmax[0] < y) g_occlusion_buffer[x].minmax[0] = y;
+	    top_y += top_dy; x++;
+	}
+    else
+	while(x < x_end)
+	{
+	    y = FixedRoundToInt(bottom_y);
+	    if (g_occlusion_buffer[x].minmax[1] > y) g_occlusion_buffer[x].minmax[1] = y;
+	    bottom_y += bottom_dy; x++;
+	}
+}
+
+static void GenSegSilouette(boolean back)
+{
+    int left_vertex_index;
+
+    if (ClipCurSeg()) return;
+    if (IsBackSector() ^ back) return;
+
+    ProjectCurSeg();
+
+    left_vertex_index = back ? 1 : 0;
+
+    if (g_cur_seg->frontsector && g_cur_seg->backsector  && (g_cur_seg->linedef->flags & ML_TWOSIDED))
+    {
+	if (g_cur_seg->frontsector->floorheight < g_cur_seg->backsector->floorheight)
+	    GenWallPartSilouette(g_cur_seg->frontsector->floorheight, g_cur_seg->backsector->floorheight, left_vertex_index, SIL_BOTTOM);
+
+	if (g_cur_seg->frontsector->ceilingheight > g_cur_seg->backsector->ceilingheight)
+	    GenWallPartSilouette(g_cur_seg->backsector->ceilingheight, g_cur_seg->frontsector->ceilingheight, left_vertex_index, SIL_TOP);
+    }
+    else if (g_cur_seg->frontsector)
+    {
+	// solid wall
+	GenWallPartSilouette(g_cur_seg->frontsector->floorheight, g_cur_seg->frontsector->ceilingheight, left_vertex_index, SIL_BOTH);
+    }
+}
+
+static void GenSubsectorSilhouette(int num)
+{
+    subsector_t*	sub;
+    int			line_seg;
+
+    sub = &subsectors[num];
+
+    for( line_seg = sub->firstline; line_seg < sub->numlines + sub->firstline; line_seg++ )
+    {
+    	g_cur_seg = &segs[ line_seg ];
+	GenSegSilouette(true);
+    }
+
+    AddSubsectorSprites(sub);
+
+    for( line_seg = sub->firstline; line_seg < sub->numlines + sub->firstline; line_seg++ )
+    {
+    	g_cur_seg = &segs[ line_seg ];
+	GenSegSilouette(false);
+    }
+}
 //
 // RenderBSPNode
 // Renders all subsectors below a given node,
@@ -1364,7 +1476,7 @@ static void RenderBSPNode(int bspnum, boolean for_sprites)
 	subsector_num = bspnum == -1 ? 0 : bspnum&(~NF_SUBSECTOR);
 	
 	if (for_sprites)
-	    AddSubsectorSprites(&subsectors[subsector_num]);
+	    GenSubsectorSilhouette(subsector_num);
 	else
 	    Subsector(subsector_num);
 	return;
