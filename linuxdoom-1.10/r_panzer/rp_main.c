@@ -1318,7 +1318,6 @@ static void AddSubsectorSprites(subsector_t* sub)
 	float	proj[3];
 	fixed_t	z, sx, sy;
 	fixed_t	x_begin_f, x_end_f, y_begin_f;
-	fixed_t	half_screen_sprite_width;
 
 	if(mob->subsector != sub) goto next_mob;
 
@@ -1348,7 +1347,7 @@ static void AddSubsectorSprites(subsector_t* sub)
 
 	pos[0] = FixedToFloat(mob->x);
 	pos[1] = FixedToFloat(mob->y);
-	pos[2] = FixedToFloat(mob->z + FRACUNIT * sprite->height);
+	pos[2] = FixedToFloat(mob->z + FRACUNIT * sprite->top_offset);
 	VecMatMul(pos, g_view_matrix, proj);
 
 	if (proj[2] < RP_Z_NEAR_FLOAT) goto next_mob;
@@ -1364,9 +1363,8 @@ static void AddSubsectorSprites(subsector_t* sub)
 	dsprite->u_step = FixedMul(u_step_on_z1, z);
 	dsprite->v_step = FixedMul(dsprite->u_step, g_inv_y_scaler);
 
-	half_screen_sprite_width = FixedDiv((sprite->width<<FRACBITS)/2, dsprite->u_step);
-	x_begin_f = sx - half_screen_sprite_width;
-	x_end_f = sx + half_screen_sprite_width;
+	x_begin_f = sx - FixedDiv(sprite->left_offset << FRACBITS, dsprite->u_step);
+	x_end_f = x_begin_f + FixedDiv(sprite->width << FRACBITS, dsprite->u_step);
 	y_begin_f = sy;
 	dsprite->x_begin = FixedRoundToInt(x_begin_f);
 	dsprite->y_begin = FixedRoundToInt(y_begin_f);
