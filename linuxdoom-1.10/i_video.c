@@ -64,6 +64,7 @@ enum
     COMPONENT_R,
     COMPONENT_G,
     COMPONENT_B,
+    COMPONENT_A,
 };
 
 struct
@@ -76,7 +77,7 @@ struct
 
     struct
     {
-	int component_index[3];
+	int component_index[4];
     } pixel_format;
 
     int		current_display;
@@ -171,6 +172,69 @@ int sdllatemousebutton(int button)
 	case SDL_BUTTON_MIDDLE: return 2;
 	default: return 3;
     };
+}
+
+static void SetupWindowIcon()
+{
+    patch_t*	patch;
+    pixel_t*	data;
+    pixel_t	*fb, *pal;
+    int		x, y, w, h;
+    SDL_Surface	*surface;
+
+    patch = W_CacheLumpName("M_SKULL1", PU_CACHE);
+
+    w = patch->width - patch->leftoffset;
+    h = patch->height - patch->topoffset;
+
+    data = Z_Malloc(w * h * sizeof(pixel_t), PU_STATIC, NULL);
+
+    if (v_32bit)
+    {
+	fb = VP_GetFramebuffer();
+
+	// mark as invisible
+	for( y = 0; y < h; y++ )
+	    for( x = 0; x < w; x++ )
+		fb[x + y * SCREENWIDTH].p = 0;
+
+	V_DrawPatch(0, 0, patch);
+
+	for( y = 0; y < h; y++ )
+	    for( x = 0; x < w; x++ )
+		data[x + y * w] = fb[ x + y * SCREENWIDTH ];
+    }
+    else
+    {
+	pal = VP_GetPaletteStorage();
+
+	// mark as invisible
+	for( y = 0; y < h; y++ )
+	    for( x = 0; x < w; x++ )
+		screens[0][x + y * SCREENWIDTH] = 251;
+
+	V_DrawPatch(0, 0, patch);
+	for( y = 0; y < h; y++ )
+	    for( x = 0; x < w; x++ )
+	    {
+		byte ind = screens[0][ x + y * SCREENWIDTH ];
+		data[x + y * w].p = ind == 251 ? 0 : pal[ind].p;
+	    }
+    }
+
+    surface = SDL_CreateRGBSurfaceFrom(
+	data,
+	w, h,
+	32, w * 4,
+	0xFF << (sdl.pixel_format.component_index[COMPONENT_R] * 8),
+	0xFF << (sdl.pixel_format.component_index[COMPONENT_G] * 8),
+	0xFF << (sdl.pixel_format.component_index[COMPONENT_B] * 8),
+	0xFF << (sdl.pixel_format.component_index[COMPONENT_A] * 8));
+
+    SDL_SetWindowIcon(sdl.window, surface);
+    SDL_FreeSurface(surface);
+
+    Z_Free(data);
 }
 
 void I_GrabMouse (void)
@@ -476,6 +540,11 @@ void I_InitGraphics(void)
     else if (pixel_format->Bmask ==   0xFF0000) sdl.pixel_format.component_index[ COMPONENT_B ] = 2;
     else if (pixel_format->Bmask == 0xFF000000) sdl.pixel_format.component_index[ COMPONENT_B ] = 3;
     else sdl.pixel_format.component_index[ COMPONENT_B ] = -1;
+         if (pixel_format->Amask ==       0xFF) sdl.pixel_format.component_index[ COMPONENT_A ] = 0;
+    else if (pixel_format->Amask ==     0xFF00) sdl.pixel_format.component_index[ COMPONENT_A ] = 1;
+    else if (pixel_format->Amask ==   0xFF0000) sdl.pixel_format.component_index[ COMPONENT_A ] = 2;
+    else if (pixel_format->Amask == 0xFF000000) sdl.pixel_format.component_index[ COMPONENT_A ] = 3;
+    else sdl.pixel_format.component_index[ COMPONENT_A ] = 3;
 
    if ( sdl.pixel_format.component_index[ COMPONENT_R ] == -1 ||
 	sdl.pixel_format.component_index[ COMPONENT_G ] == -1 ||
@@ -501,4 +570,6 @@ void I_InitGraphics(void)
 
     g_palette_lump_num = W_GetNumForName("PLAYPAL");
     I_SetPalette(-1);
+
+    SetupWindowIcon();
 }
