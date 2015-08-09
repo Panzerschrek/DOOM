@@ -1736,13 +1736,14 @@ boolean M_Responder (event_t* ev)
 	    M_QuitDOOM(0);
 	    return true;
 
-	  case KEY_F11:           // gamma toggle
+	  // PANZER - disable this
+	  /*case KEY_F11:           // gamma toggle
 	    usegamma++;
 	    if (usegamma > 4)
 		usegamma = 0;
 	    players[consoleplayer].message = gammamsg[usegamma];
 	    I_SetPalette (0);
-	    return true;
+	    return true;*/
 
 	}
 
