@@ -59,8 +59,10 @@ typedef struct draw_sprite_s
     fixed_t			v_step;
 
     int				light_level;
-    void			(*draw_func)();
     pixel_range_t*		pixel_range;
+
+    boolean			is_spectre;
+    boolean			is_flipped;
 } draw_sprite_t;
 
 static float		g_view_matrix[16];
@@ -1072,6 +1074,12 @@ static fixed_t		g_spr_u_step;
 static pixel_t*		g_spr_dst;
 static pixel_t*		g_spr_src;
 static int		g_spr_mip_width_minus_one;
+static pixel_range_t*	g_spr_pixel_range;
+static int		g_spr_y;
+
+/*
+WITHOUT OCCLUSION TEST
+*/
 
 static void SpriteRowFunc()
 {
@@ -1101,6 +1109,68 @@ static void SpriteRowFuncSpectreFlip()
 	    g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
 }
 
+/*
+WITH OCCLUSION TEST
+*/
+
+static void SpriteRowFuncTest()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++, g_spr_pixel_range++ )
+	if (g_spr_y >= g_spr_pixel_range->minmax[0] && g_spr_y < g_spr_pixel_range->minmax[1])
+	    *g_spr_dst = BlendPixels( LightPixel( g_spr_src[g_spr_u>>FRACBITS] ), *g_spr_dst );
+}
+
+static void SpriteRowFuncTestFlip()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++, g_spr_pixel_range++ )
+	if (g_spr_y >= g_spr_pixel_range->minmax[0] && g_spr_y < g_spr_pixel_range->minmax[1])
+	    *g_spr_dst = BlendPixels( LightPixel( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u>>FRACBITS) ] ), *g_spr_dst );
+}
+
+static void SpriteRowFuncTestSpectre()
+{
+    // avg func:   pixel.p = ( ((pixel.p ^ dst->p) & 0xFEFEFEFE) >> 1 ) + (pixel.p & dst->p);
+    // half brightness:   dst->p = (dst->p & 0xFEFEFEFE) >> 1
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++, g_spr_pixel_range++ )
+	if (g_spr_y >= g_spr_pixel_range->minmax[0] && g_spr_y < g_spr_pixel_range->minmax[1])
+	    if( g_spr_src[ (g_spr_u >> FRACBITS) ].components[3] >= 128 )
+		g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
+}
+
+static void SpriteRowFuncTestSpectreFlip()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++, g_spr_pixel_range++ )
+	if (g_spr_y >= g_spr_pixel_range->minmax[0] && g_spr_y < g_spr_pixel_range->minmax[1])
+	    if( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u >> FRACBITS) ].components[3] >= 128 )
+		g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
+}
+
+
+// Addressing: g_sprites_funcs[is_test][is_spectre][is_flip]
+static void (*g_sprites_funcs[2][2][2])() =
+{
+    {
+	{
+	    SpriteRowFunc,
+	    SpriteRowFuncFlip
+	},
+	{
+	    SpriteRowFuncSpectre,
+	    SpriteRowFuncSpectreFlip
+	}
+    },
+    {
+	{
+	    SpriteRowFuncTest,
+	    SpriteRowFuncTestFlip
+	},
+	{
+	    SpriteRowFuncTestSpectre,
+	    SpriteRowFuncTestSpectreFlip
+	}
+    }
+};
+
 static void DrawSprite(draw_sprite_t* dsprite)
 {
     sprite_picture_t*	sprite;
@@ -1108,13 +1178,17 @@ static void DrawSprite(draw_sprite_t* dsprite)
     fixed_t		sprite_width, sprite_height;
     int			cur_mip_width;
     int			y, mip;
-    void		(*spr_func)();
+    void		(*spr_func_test)();
+    void		(*spr_func_no_test)();
     pixel_t*		fb;
 
     sprite = dsprite->sprite;
 
     SetLightLevel(dsprite->light_level, dsprite->z);
-    spr_func = dsprite->draw_func;
+
+    spr_func_test    = g_sprites_funcs[1][dsprite->is_spectre ? 1 : 0][dsprite->is_flipped ? 1 : 0];
+    spr_func_no_test = g_sprites_funcs[0][dsprite->is_spectre ? 1 : 0][dsprite->is_flipped ? 1 : 0];
+    if (!dsprite->pixel_range) spr_func_test = spr_func_no_test;
 
     sprite_width  = sprite->width  << FRACBITS;
     sprite_height = sprite->height << FRACBITS;
@@ -1143,10 +1217,13 @@ static void DrawSprite(draw_sprite_t* dsprite)
 
     for( y = dsprite->y_begin, v = dsprite->v_begin; v < v_end; y++, v += dsprite->v_step)
     {
+	g_spr_y = y;
 	g_spr_u = dsprite->u_begin;
 	g_spr_dst = fb + y * SCREENWIDTH;
+	g_spr_pixel_range = dsprite->pixel_range;
 	g_spr_src = sprite->mip[mip] + (v>>FRACBITS) * cur_mip_width;
-	spr_func();
+	// TODO - add check for necessity of testing
+	spr_func_test();
     }
 }
 
@@ -1228,7 +1305,7 @@ static void AddSubsectorSprites(subsector_t* sub)
     int			angle_num;
     draw_sprite_t*	dsprite;
     fixed_t		u_step_on_z1;
-    pixel_t*		fb = VP_GetFramebuffer();
+    int			dx, i;
 
     u_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
 
@@ -1239,12 +1316,13 @@ static void AddSubsectorSprites(subsector_t* sub)
 	float	pos[3];
 	float	proj[3];
 	fixed_t	z, sx, sy;
-	fixed_t	x_begin_f, y_begin_f;
+	fixed_t	x_begin_f, x_end_f, y_begin_f;
+	fixed_t	half_screen_sprite_width;
+
+	if(mob->subsector != sub) goto next_mob;
 
 	if (g_draw_sprites.count == g_draw_sprites.capacity) // no space for srites anymore
 	    return;
-
-	if(mob->subsector != sub) goto next_mob;
 
 	frame = &sprites[mob->sprite].spriteframes[mob->frame & FF_FRAMEMASK];
 	{ // TODO - make it easier
@@ -1281,12 +1359,13 @@ static void AddSubsectorSprites(subsector_t* sub)
 	sy = FloatToFixed((proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f );
 
 	dsprite = g_draw_sprites.sprites + g_draw_sprites.count;
-	g_draw_sprites.count++;
 
 	dsprite->u_step = FixedMul(u_step_on_z1, z);
 	dsprite->v_step = FixedMul(dsprite->u_step, g_inv_y_scaler);
 
-	x_begin_f = sx - FixedDiv((sprite->width<<FRACBITS)/2, dsprite->u_step);
+	half_screen_sprite_width = FixedDiv((sprite->width<<FRACBITS)/2, dsprite->u_step);
+	x_begin_f = sx - half_screen_sprite_width;
+	x_end_f = sx + half_screen_sprite_width;
 	y_begin_f = sy;
 	dsprite->x_begin = FixedRoundToInt(x_begin_f);
 	dsprite->y_begin = FixedRoundToInt(y_begin_f);
@@ -1301,35 +1380,47 @@ static void AddSubsectorSprites(subsector_t* sub)
 	    dsprite->v_begin += - dsprite->y_begin * dsprite->v_step;
 	    dsprite->y_begin = 0;
 	}
+	dsprite->x_end = FixedRoundToInt(x_end_f);
+	if (dsprite->x_end > SCREENWIDTH) dsprite->x_end = SCREENWIDTH;
 
 	dsprite->u_begin = FixedMul((dsprite->x_begin<<FRACBITS) - x_begin_f + FRACUNIT/2, dsprite->u_step);
 	dsprite->v_begin = FixedMul((dsprite->y_begin<<FRACBITS) - y_begin_f + FRACUNIT/2, dsprite->v_step);
 
-	if (mob->flags & MF_SHADOW)
-	    dsprite->draw_func = frame->flip[angle_num] ? SpriteRowFuncSpectreFlip : SpriteRowFuncSpectre;
-	else
-	    dsprite->draw_func = frame->flip[angle_num] ? SpriteRowFuncFlip : SpriteRowFunc;
-
-	dsprite->sprite = sprite;
-	dsprite->z = z;
-	dsprite->x_end = SCREENWIDTH;
-	dsprite->light_level = (mob->frame & FF_FULLBRIGHT) ? 255 : sub->sector->lightlevel;
-
-	while(dsprite->x_begin < SCREENWIDTH)
+	while(dsprite->x_begin < dsprite->x_end)
 	{
-	    if (g_occlusion_buffer[dsprite->x_begin].minmax[0] >= g_occlusion_buffer[dsprite->x_begin].minmax[1])
+	    if (g_occlusion_buffer[dsprite->x_begin].minmax[1] <= g_occlusion_buffer[dsprite->x_begin].minmax[0])
 	    {
-		dsprite->x_begin ++; dsprite->u_begin += dsprite->u_step;
+		dsprite->x_begin++; dsprite->u_begin += dsprite->u_step;
 	    }
 	    else break;
 	}
-	while (dsprite->x_begin >= 0)
+	while (dsprite->x_end > dsprite->x_begin)
 	{
-	    if (g_occlusion_buffer[dsprite->x_end-1].minmax[0] >= g_occlusion_buffer[dsprite->x_end-1].minmax[1])
-		dsprite->x_end --;
+	    if (g_occlusion_buffer[dsprite->x_end-1].minmax[1] <= g_occlusion_buffer[dsprite->x_end-1].minmax[0])
+		dsprite->x_end--;
 	    else break;
 	}
+	dx = dsprite->x_end - dsprite->x_begin;
+	if (dx <= 0) goto next_mob;
 
+	if (dx + g_draw_sprites.next_pixel_range_index < g_draw_sprites.pixel_ranges_capacity)
+	{
+	    dsprite->pixel_range = g_draw_sprites.pixel_ranges + g_draw_sprites.next_pixel_range_index;
+	    g_draw_sprites.next_pixel_range_index += dx;
+	    for( i = 0; i < dx; i++ )
+		dsprite->pixel_range[i] = g_occlusion_buffer[i + dsprite->x_begin];
+	}
+	else goto next_mob; // no space for pixel ranges
+
+	dsprite->is_spectre = mob->flags & MF_SHADOW;
+	dsprite->is_flipped = frame->flip[angle_num];
+
+	dsprite->sprite = sprite;
+	dsprite->z = z;
+	dsprite->light_level = (mob->frame & FF_FULLBRIGHT) ? 255 : sub->sector->lightlevel;
+
+	// finaly, add drawsprite
+	g_draw_sprites.count++;
 
 	next_mob:
 	mob = mob->snext;
@@ -1418,7 +1509,7 @@ static void GenWallPartSilouette(fixed_t z_min, fixed_t z_max, int left_vertex_i
 	{
 	    y = FixedRoundToInt(top_y);
 	    if (g_occlusion_buffer[x].minmax[1] > y) g_occlusion_buffer[x].minmax[1] = y;
-	    if (y >= 0 && y < SCREENHEIGHT) V_DrawPixel(x, y, 160); // YELLOW
+	    //if (y >= 0 && y < SCREENHEIGHT) V_DrawPixel(x, y, 160); // YELLOW
 	    top_y += top_dy; x++;
 	}
     else
@@ -1426,7 +1517,7 @@ static void GenWallPartSilouette(fixed_t z_min, fixed_t z_max, int left_vertex_i
 	{
 	    y = FixedRoundToInt(bottom_y);
 	    if (g_occlusion_buffer[x].minmax[0] < y) g_occlusion_buffer[x].minmax[0] = y;
-	    if (y >= 0 && y < SCREENHEIGHT) V_DrawPixel(x, y, 112); // GREEN
+	    //if (y >= 0 && y < SCREENHEIGHT) V_DrawPixel(x, y, 112); // GREEN
 	    bottom_y += bottom_dy; x++;
 	}
 }
@@ -1552,7 +1643,9 @@ static void DrawPlayerSprites(player_t *player)
 	dsprite.z = FRACUNIT;
 	dsprite.light_level = 255 * 15/16;
 	dsprite.sprite = sprite;
-	dsprite.draw_func = (player->mo->flags&MF_SHADOW) ? SpriteRowFuncSpectre : SpriteRowFunc;
+	dsprite.pixel_range = NULL;
+	dsprite.is_spectre = player->mo->flags&MF_SHADOW;
+	dsprite.is_flipped = false;
 	DrawSprite(&dsprite);
     }
 }
@@ -1634,7 +1727,6 @@ static void R_32b_RenderPlayerView(player_t* player)
 	for( x = 0; x < SCREENWIDTH; x++, framebuffer++ )
 	    *framebuffer = conrast_colors[ ((x>>1) ^ (y>>1)) & 1 ];*/
 
-    g_draw_sprites.count = 0;
     {
 	int i;
 	for( i = 0; i < SCREENWIDTH; i++ )
@@ -1642,6 +1734,9 @@ static void R_32b_RenderPlayerView(player_t* player)
 	    g_occlusion_buffer[i].minmax[0] = 0;
 	    g_occlusion_buffer[i].minmax[1] = SCREENHEIGHT;
 	}
+
+	g_draw_sprites.count = 0;
+	g_draw_sprites.next_pixel_range_index = 0;
     }
 
     SetupView(player);
@@ -1700,6 +1795,9 @@ static void InitStaticData()
 
     g_draw_sprites.sort_sprites[0] = Z_Malloc(g_draw_sprites.capacity * sizeof(draw_sprite_t*), PU_STATIC, NULL);
     g_draw_sprites.sort_sprites[1] = Z_Malloc(g_draw_sprites.capacity * sizeof(draw_sprite_t*), PU_STATIC, NULL);
+
+    g_draw_sprites.pixel_ranges_capacity = SCREENWIDTH * 12;
+    g_draw_sprites.pixel_ranges = Z_Malloc(g_draw_sprites.pixel_ranges_capacity * sizeof(pixel_range_t), PU_STATIC, NULL);
 }
 
 void RP_Init()
