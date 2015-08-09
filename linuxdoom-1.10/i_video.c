@@ -367,7 +367,7 @@ void I_SetPalette (int palette_num)
     if (!v_32bit || palette_num == -1)
     {
 	if (palette_num == -1) palette_num = 0;
-	palette = W_CacheLumpNum(g_palette_lump_num, PU_STATIC) + 768 * palette_num;
+	palette = ((byte*)W_CacheLumpNum(g_palette_lump_num, PU_STATIC)) + 768 * palette_num;
 
 	for( i = 0; i < 256; i++ )
 	{

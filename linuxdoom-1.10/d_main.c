@@ -34,8 +34,6 @@ static const char rcsid[] = "$Id: d_main.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 #include <stdlib.h>
 #include <stdio.h>
 
-#define R_OK 0
-
 #include "doomdef.h"
 #include "doomstat.h"
 
@@ -383,8 +381,6 @@ void D_DoomLoop (void)
 	printf ("debug output to: %s\n",filename);
 	debugfile = fopen (filename,"w");
     }
-
-    I_InitGraphics ();
 
     while (1)
     {
@@ -1178,7 +1174,6 @@ void D_DoomMain (void)
     printf ("W_Init: Init WADfiles.\n");
     W_InitMultipleFiles (wadfiles);
 
-
     // Check for -file in shareware
     if (modifiedgame)
     {
@@ -1270,6 +1265,9 @@ void D_DoomMain (void)
     printf ("ST_Init: Init status bar.\n");
     ST_Init ();
 
+    printf ("I_InitGraphics: Initialize system graphics.\n");
+    I_InitGraphics();
+
     // check for a driver that wants intermission stats
     p = M_CheckParm ("-statcopy");
     if (p && p<myargc-1)
@@ -1314,7 +1312,6 @@ void D_DoomMain (void)
 	    sprintf(file, SAVEGAMENAME"%c.dsg",myargv[p+1][0]);
 	G_LoadGame (file);
     }
-
 
     if ( gameaction != ga_loadgame )
     {
