@@ -3,11 +3,11 @@
 
 #include "rp_defs.h"
 
-void			R_32b_BuildFullSubsectors();
+void			RP_BuildFullSubsectors();
 
-vertex_t*		R_32b_GetFullSubsectorsVertices();
-full_subsector_t*	R_32b_GetFullSubsectors();
+vertex_t*		RP_GetFullSubsectorsVertices();
+full_subsector_t*	RP_GetFullSubsectors();
 
-int R_32b_ClipPolygon(vertex_t* vertices, int vertex_count, clip_plane_t* plane);
+int RP_ClipPolygon(vertex_t* vertices, int vertex_count, clip_plane_t* plane);
 
 #endif//PLANE

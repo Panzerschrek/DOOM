@@ -14,6 +14,7 @@
 #include "../r_things.h"
 #include "../tables.h"
 #include "../v_video.h"
+#include "../z_zone.h"
 
 // special value for inv_z and u/z interpolations
 #define PR_SEG_PART_BITS 4
@@ -36,6 +37,33 @@ typedef struct screen_vertex_s
     fixed_t	y;
     fixed_t	z;
 } screen_vertex_t;
+
+typedef struct pixel_range_s
+{
+    short minmax[2];
+} pixel_range_t;
+
+typedef struct draw_sprite_s
+{
+    sprite_picture_t*		sprite;
+
+    fixed_t			z;
+    int				x_begin;
+    int				x_end;
+    int				y_begin;
+
+    // texture coordinates on x_begin and x_end
+    fixed_t			u_begin;
+    fixed_t			v_begin;
+    fixed_t			u_step;
+    fixed_t			v_step;
+
+    int				light_level;
+    pixel_range_t*		pixel_range;
+
+    boolean			is_spectre;
+    boolean			is_flipped;
+} draw_sprite_t;
 
 static float		g_view_matrix[16];
 static fixed_t		g_view_pos[3];
@@ -75,18 +103,33 @@ static struct
 
 static struct
 {
-    //TODO - remove static limit
-    int		x_min[ MAX_SCREENHEIGHT ];
-    int		x_max[ MAX_SCREENHEIGHT ];
-    int		y_min;
-    int		y_max;
+    // array with size SCREENWIDTH
+    pixel_range_t	*x;
+    int			y_min;
+    int			y_max;
 
-    int		top_vertex_index;
-    int		bottom_vertex_index;
+    int			top_vertex_index;
+    int			bottom_vertex_index;
 } g_cur_screen_polygon;
 
-//TODO - remove static limit
-static int	g_y_to_sky_u_table[ MAX_SCREENHEIGHT ];
+// array with size SCREENWIDTH
+static int*		g_x_to_sky_u_table;
+
+// array with size SCREENWIDTH
+static pixel_range_t*	g_occlusion_buffer;
+
+static struct
+{
+    draw_sprite_t*	sprites;
+    int			capacity;
+    int			count;
+
+    draw_sprite_t**	sort_sprites[2];
+
+    pixel_range_t*	pixel_ranges;
+    int			pixel_ranges_capacity;
+    int			next_pixel_range_index;
+} g_draw_sprites;
 
 
 extern int		skyflatnum;
@@ -100,13 +143,13 @@ static void SetLightLevel(int level, fixed_t z)
 {
     if (g_fullbright)
     {
-	g_cur_column_light = GetLightingGammaTable()[255 * 7 / 8]; // fullbright, but not so full
+	g_cur_column_light = RP_GetLightingGammaTable()[255 * 7 / 8]; // fullbright, but not so full
 	return;
     }
 
     // TODO - invent magic for cool fake contrast, like in vanila
     (void)z;
-    g_cur_column_light = GetLightingGammaTable()[level];
+    g_cur_column_light = RP_GetLightingGammaTable()[level];
 }
 
 // uses g_cur_column_light
@@ -203,7 +246,7 @@ static boolean ClipCurSeg()
 
     for( i = 0; i < 3; i++ )
     {
-    	dot[0] =
+	dot[0] =
 	    FixedMul(g_cur_seg_data.v[0].x, g_clip_planes[i].n[0]) +
 	    FixedMul(g_cur_seg_data.v[0].y, g_clip_planes[i].n[1]) +
 	    g_clip_planes[i].dist;
@@ -247,8 +290,8 @@ static void ClipCurSubsector(int subsector_num)
     full_subsector_t*	full_subsector;
     vertex_t*		full_subsector_vertices;
 
-    full_subsector = R_32b_GetFullSubsectors() + subsector_num;
-    full_subsector_vertices = R_32b_GetFullSubsectorsVertices() + full_subsector->first_vertex;
+    full_subsector = RP_GetFullSubsectors() + subsector_num;
+    full_subsector_vertices = RP_GetFullSubsectorsVertices() + full_subsector->first_vertex;
 
     g_cur_subsector_data.vertex_count = full_subsector->numvertices;
     for( i = 0; i < full_subsector->numvertices; i++ )
@@ -257,7 +300,7 @@ static void ClipCurSubsector(int subsector_num)
     for( i = 0; i < 3; i++ )
     {
 	g_cur_subsector_data.vertex_count =
-	    R_32b_ClipPolygon(
+	    RP_ClipPolygon(
 		g_cur_subsector_data.clipped_vertices,
 		g_cur_subsector_data.vertex_count,
 		&g_clip_planes[i]);
@@ -269,7 +312,7 @@ static void PreparePolygon(screen_vertex_t* vertices, int vertex_count, boolean 
 {
     int		i, cur_i, next_i;
     int		tmp;
-    int*	side;
+    int		side_ind;
     int 	y_begin;
     int		y_end;
     int		y;
@@ -294,9 +337,9 @@ static void PreparePolygon(screen_vertex_t* vertices, int vertex_count, boolean 
 	    tmp = next_i;
 	    next_i = cur_i;
 	    cur_i = tmp;
-	    side = direction ? g_cur_screen_polygon.x_min : g_cur_screen_polygon.x_max;
+	    side_ind = direction ? 0 : 1;
 	}
-	else side = direction ? g_cur_screen_polygon.x_max : g_cur_screen_polygon.x_min;
+	else side_ind = direction ? 1 : 0;
 
 	x_step = FixedDiv(vertices[next_i].x - vertices[cur_i].x, dy);
 	x = vertices[cur_i].x;
@@ -311,7 +354,7 @@ static void PreparePolygon(screen_vertex_t* vertices, int vertex_count, boolean 
 
 	while (y < y_end)
 	{
-	    side[y] = FixedRoundToInt(x);
+	    g_cur_screen_polygon.x[y].minmax[side_ind] = FixedRoundToInt(x);
 	    x+= x_step;
 	    y++;
 	}
@@ -329,7 +372,7 @@ static void PreparePolygon(screen_vertex_t* vertices, int vertex_count, boolean 
     }
 }
 
-void RP_PrepareSky(player_t* player)
+static void PrepareSky(player_t* player)
 {
     int		x;
     fixed_t 	sign, cur_x_tan;
@@ -338,7 +381,7 @@ void RP_PrepareSky(player_t* player)
     int		pixel_num;
     int		sky_tex_pixels;
 
-    sky_tex_pixels = ID_SKY_TEXTURE_REPEATS * GetSkyTexture()->width;
+    sky_tex_pixels = ID_SKY_TEXTURE_REPEATS * RP_GetSkyTexture()->width;
 
     tan_scaler = -FixedDiv(FRACUNIT, finetangent[RP_HALF_FOV_X >> ANGLETOFINESHIFT]);
 
@@ -367,13 +410,13 @@ void RP_PrepareSky(player_t* player)
 	}
 
 	final_angle_num = ((player->mo->angle>>ANGLETOFINESHIFT) - angle_num) & FINEMASK;
-	pixel_num = (final_angle_num * sky_tex_pixels / FINEANGLES) % GetSkyTexture()->width;
+	pixel_num = (final_angle_num * sky_tex_pixels / FINEANGLES) % RP_GetSkyTexture()->width;
 
-	g_y_to_sky_u_table[x] = pixel_num;
+	g_x_to_sky_u_table[x] = pixel_num;
     }
 }
 
-void RP_DrawSkyPolygon()
+static void DrawSkyPolygon()
 {
     int			y;
     int			x, x_begin, x_end;
@@ -383,7 +426,7 @@ void RP_DrawSkyPolygon()
     pixel_t*		src;
     int		v;
 
-    texture = GetSkyTexture();
+    texture = RP_GetSkyTexture();
     framebuffer = VP_GetFramebuffer();
     src = texture->data;
 
@@ -391,10 +434,10 @@ void RP_DrawSkyPolygon()
 
     for (y = g_cur_screen_polygon.y_min; y < g_cur_screen_polygon.y_max; y++)
     {
-	x_begin = g_cur_screen_polygon.x_min[y];
+	x_begin = g_cur_screen_polygon.x[y].minmax[0];
 	if (x_begin < 0) x_begin = 0;
 
-	x_end = g_cur_screen_polygon.x_max[y];
+	x_end = g_cur_screen_polygon.x[y].minmax[1];
 	if (x_end > SCREENWIDTH) x_end = SCREENWIDTH;
 
 	dst = framebuffer + x_begin + y * SCREENWIDTH;
@@ -403,11 +446,11 @@ void RP_DrawSkyPolygon()
 	src = texture->data + (v % texture->height) * texture->width;
 
 	for (x = x_begin; x < x_end; x++, dst++)
-	    *dst = src[ g_y_to_sky_u_table[x] ];
+	    *dst = src[ g_x_to_sky_u_table[x] ];
     }
 }
 
-void RP_MatMul(const float* mat0, const float* mat1, float* result)
+static void MatMul(const float* mat0, const float* mat1, float* result)
 {
     int i, j, k;
 
@@ -420,7 +463,7 @@ void RP_MatMul(const float* mat0, const float* mat1, float* result)
 	}
 }
 
-void RP_MatIdentity(float* mat)
+static void MatIdentity(float* mat)
 {
     int i;
 
@@ -430,14 +473,14 @@ void RP_MatIdentity(float* mat)
     mat[10] = mat[15] = 1.0f;
 }
 
-void RP_VecMatMul( float* vec, float* mat, float* result )
+static void VecMatMul( float* vec, float* mat, float* result )
 {
     int i;
     for( i = 0; i < 3; i++ )
 	result[i] = vec[0] * mat[i] + vec[1] * mat[i+4] + vec[2] * mat[i+8] + mat[i+12];
 }
 
-void RP_SetupView(player_t *player)
+static void SetupView(player_t* player)
 {
     float		translate_matrix[16];
     float		rotate_matrix[16];
@@ -458,24 +501,24 @@ void RP_SetupView(player_t *player)
     g_view_angle = (player->mo->angle >> ANGLETOFINESHIFT ) & FINEMASK;
     g_half_fov_tan = -finetangent[RP_HALF_FOV_X >> ANGLETOFINESHIFT];
 
-    RP_MatIdentity(translate_matrix);
+    MatIdentity(translate_matrix);
     translate_matrix[12] = - FixedToFloat(player->mo->x);
     translate_matrix[13] = - FixedToFloat(player->mo->y);
     translate_matrix[14] = - FixedToFloat(player->viewz);
 
-    RP_MatIdentity(rotate_matrix);
+    MatIdentity(rotate_matrix);
     rotate_matrix[0] =  FixedToFloat(finecosine[ angle_num ]);
     rotate_matrix[4] = -FixedToFloat(finesine  [ angle_num ]);
     rotate_matrix[1] =  FixedToFloat(finesine  [ angle_num ]);
     rotate_matrix[5] =  FixedToFloat(finecosine[ angle_num ]);
 
-    RP_MatIdentity(basis_change_matrix);
+    MatIdentity(basis_change_matrix);
     basis_change_matrix[ 5] = 0.0f;
     basis_change_matrix[ 6] = 1.0f;
     basis_change_matrix[ 9] = -1.0f;
     basis_change_matrix[10] = 0.0f;
 
-    RP_MatIdentity(projection_matrix);
+    MatIdentity(projection_matrix);
     // TODO: Why minus tangent?
     projection_matrix[0] = FixedToFloat(-finetangent[RP_HALF_FOV_X >> ANGLETOFINESHIFT]);
     projection_matrix[5] = projection_matrix[0] * (((float)SCREENWIDTH) / ((float)SCREENHEIGHT));
@@ -484,12 +527,12 @@ void RP_SetupView(player_t *player)
     g_inv_y_scaler = (ID_SCREENHEIGHT << FRACBITS) / ID_CORRECT_SCREENHEIGHT;
     projection_matrix[5] = projection_matrix[5] * ((float)ID_CORRECT_SCREENHEIGHT)/ ((float)ID_SCREENHEIGHT);
 
-    RP_MatMul( translate_matrix, rotate_matrix, tmp_mat[0] );
-    RP_MatMul( tmp_mat[0], basis_change_matrix, tmp_mat[1] );
-    RP_MatMul( tmp_mat[1], projection_matrix, g_view_matrix );
+    MatMul( translate_matrix, rotate_matrix, tmp_mat[0] );
+    MatMul( tmp_mat[0], basis_change_matrix, tmp_mat[1] );
+    MatMul( tmp_mat[1], projection_matrix, g_view_matrix );
 }
 
-void RP_BuildClipPlanes(player_t *player)
+static void BuildClipPlanes(player_t *player)
 {
     int ang;
     int angles[3];
@@ -516,7 +559,7 @@ void RP_BuildClipPlanes(player_t *player)
     g_clip_planes[0].dist -= RP_Z_NEAR_FIXED;
 }
 
-void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
+static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 {
     float	vertex_z[4];
     fixed_t	screen_y[4];
@@ -681,7 +724,7 @@ void PR_DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
     } // for x
 }
 
-void PR_DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boolean draw_as_sky)
+static void DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boolean draw_as_sky)
 {
     /*
     Because we draw walls using column-based algorithm,
@@ -730,7 +773,7 @@ void PR_DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, 
 	sky_polygon_vertices[3].y = screen_y[2];
 
 	PreparePolygon(sky_polygon_vertices, 4, true);
-	RP_DrawSkyPolygon();
+	DrawSkyPolygon();
 	return;
     }
 
@@ -739,7 +782,7 @@ void PR_DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, 
     dy_max = dy_left > dy_right ? dy_left : dy_right;
 
     if (dy_max <= allowed_dy)
-	PR_DrawWallPart(top_tex_offset, z_min, z_max);
+	DrawWallPart(top_tex_offset, z_min, z_max);
     else
     {
 	splits = dy_max / allowed_dy;
@@ -748,7 +791,7 @@ void PR_DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, 
 	z_step = (z_max - z_min) / splits;
 	for( i = 0; i < splits; i++ )
 	{
-	    PR_DrawWallPart(
+	    DrawWallPart(
 		top_tex_offset + (splits - i - 1) * z_step,
 		z_min + i * z_step,
 		(i == splits - 1) ? z_max : (z_min + (i+1) * z_step));
@@ -756,20 +799,12 @@ void PR_DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, 
     }
 }
 
-void PR_DrawWall()
+static boolean IsBackSegment()
 {
-    int		v_offset;
     fixed_t	seg_normal[2];
     fixed_t	vec_to_seg[2];
     fixed_t	normal_angle;
     fixed_t	dot_product;
-    fixed_t	h;
-    boolean	seg_projected = false;
-
-    if(g_cur_seg->frontsector == g_cur_seg->backsector) return;
-    if( ClipCurSeg() ) return;
-
-    g_cur_side = g_cur_seg->sidedef;
 
     normal_angle = ((ANG90 + g_cur_seg->angle) >> ANGLETOFINESHIFT) & FINEMASK;
     seg_normal[0] = finecosine[ normal_angle ];
@@ -779,7 +814,19 @@ void PR_DrawWall()
     vec_to_seg[1] = g_cur_seg->v1->y - g_view_pos[1];
 
     dot_product = FixedMul(seg_normal[0], vec_to_seg[0] ) + FixedMul(seg_normal[1], vec_to_seg[1] );
-    if (dot_product <= 0 ) return;
+    return dot_product <= 0;
+}
+
+static void DrawWall()
+{
+    int		v_offset;
+    fixed_t	h;
+    boolean	seg_projected = false;
+
+    if( ClipCurSeg() ) return;
+    if (IsBackSegment()) return;
+
+    g_cur_side = g_cur_seg->sidedef;
 
     if(g_cur_seg->frontsector && g_cur_seg->backsector && (g_cur_seg->linedef->flags & ML_TWOSIDED))
     {
@@ -791,7 +838,7 @@ void PR_DrawWall()
 	{
 	    ProjectCurSeg(); seg_projected = true;
 
-	    g_cur_wall_texture = GetWallTexture(texturetranslation[g_cur_side->bottomtexture]);
+	    g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_side->bottomtexture]);
 	    g_cur_wall_texture_transparent = false;
 
 	    if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
@@ -801,7 +848,7 @@ void PR_DrawWall()
 			g_cur_wall_texture->height << FRACBITS);
 	    else v_offset = 0;
 
-	    PR_DrawSplitWallPart(
+	    DrawSplitWallPart(
 		v_offset,
 		g_cur_seg->frontsector->floorheight,
 		g_cur_seg->backsector->floorheight,
@@ -814,7 +861,7 @@ void PR_DrawWall()
 	    if(!seg_projected) ProjectCurSeg();
 	    seg_projected = true;
 
-	    g_cur_wall_texture = GetWallTexture(texturetranslation[g_cur_side->toptexture]);
+	    g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_side->toptexture]);
 	    g_cur_wall_texture_transparent = false;
 
 	    if (g_cur_seg->linedef->flags & ML_DONTPEGTOP)
@@ -825,7 +872,7 @@ void PR_DrawWall()
 			g_cur_seg->backsector->ceilingheight - g_cur_seg->frontsector->ceilingheight,
 			g_cur_wall_texture->height * FRACUNIT );
 
-	    PR_DrawSplitWallPart(
+	    DrawSplitWallPart(
 		v_offset,
 		g_cur_seg->backsector->ceilingheight,
 		g_cur_seg->frontsector->ceilingheight,
@@ -838,7 +885,7 @@ void PR_DrawWall()
 	    if(!seg_projected) ProjectCurSeg();
 	    seg_projected = true;
 
-	    g_cur_wall_texture = GetWallTexture(texturetranslation[g_cur_side->midtexture]);
+	    g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_side->midtexture]);
 	    g_cur_wall_texture_transparent = true;
 
 	    if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
@@ -847,7 +894,7 @@ void PR_DrawWall()
 		    ? g_cur_seg->frontsector->floorheight
 		    : g_cur_seg->backsector->floorheight;
 
-		PR_DrawSplitWallPart(
+		DrawSplitWallPart(
 		    0,
 		    h,
 		    h + (g_cur_wall_texture->height << FRACBITS),
@@ -859,7 +906,7 @@ void PR_DrawWall()
 		    ? g_cur_seg->frontsector->ceilingheight
 		    : g_cur_seg->backsector->ceilingheight;
 
-		PR_DrawSplitWallPart(
+		DrawSplitWallPart(
 		    0,
 		    h - (g_cur_wall_texture->height << FRACBITS),
 		    h,
@@ -872,7 +919,7 @@ void PR_DrawWall()
 	if(!seg_projected) ProjectCurSeg();
 	seg_projected = true;
 
-	g_cur_wall_texture = GetWallTexture(texturetranslation[g_cur_side->midtexture]);
+	g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_side->midtexture]);
 	g_cur_wall_texture_transparent = false;
 
 	if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
@@ -882,7 +929,7 @@ void PR_DrawWall()
 		    g_cur_wall_texture->height * FRACUNIT );
 	else v_offset = 0;
 
-	PR_DrawSplitWallPart(
+	DrawSplitWallPart(
 	    v_offset,
 	    g_cur_seg->frontsector->floorheight,
 	    g_cur_seg->frontsector->ceilingheight,
@@ -890,7 +937,7 @@ void PR_DrawWall()
     }
 }
 
-void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
+static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
 {
     int			i;
     subsector_t*	subsector;
@@ -921,7 +968,7 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	f_vertex[1] = FixedToFloat(g_cur_subsector_data.clipped_vertices[i].y);
 	f_vertex[2] = FixedToFloat(height);
 
-	RP_VecMatMul(f_vertex, g_view_matrix, proj);
+	VecMatMul(f_vertex, g_view_matrix, proj);
 
 	proj[0] /= proj[2];
 	proj[1] /= proj[2];
@@ -935,14 +982,14 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 
     if (texture_num == skyflatnum)
     {
-	RP_DrawSkyPolygon();
+	DrawSkyPolygon();
 	return;
     }
 
     top_vertex    = &vertices_proj[g_cur_screen_polygon.top_vertex_index   ];
     bottom_vertex = &vertices_proj[g_cur_screen_polygon.bottom_vertex_index];
 
-    texture = GetFlatTexture(texture_num);
+    texture = RP_GetFlatTexture(texture_num);
 
     dy = bottom_vertex->y - top_vertex->y;
     part_step = FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, dy);
@@ -981,9 +1028,9 @@ void PR_DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	y_mip =
 	    IntLog2Floor((FixedMul(FixedDiv(inv_z_scaled_step, inv_z_scaled), z) / PR_FLAT_MIP_SCALER) >> FRACBITS);
 
-	x_begin = g_cur_screen_polygon.x_min[y];
+	x_begin = g_cur_screen_polygon.x[y].minmax[0];
 	if (x_begin < 0 ) x_begin = 0;
-	x_end = g_cur_screen_polygon.x_max[y];
+	x_end = g_cur_screen_polygon.x[y].minmax[1];
 	if( x_end > SCREENWIDTH) x_end = SCREENWIDTH;
 	dst = VP_GetFramebuffer() + x_begin + y * SCREENWIDTH;
 
@@ -1027,20 +1074,26 @@ static fixed_t		g_spr_u_step;
 static pixel_t*		g_spr_dst;
 static pixel_t*		g_spr_src;
 static int		g_spr_mip_width_minus_one;
+static pixel_range_t*	g_spr_pixel_range;
+static int		g_spr_y;
 
-void SpriteRowFunc()
+/*
+WITHOUT OCCLUSION TEST
+*/
+
+static void SpriteRowFunc()
 {
     for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
 	*g_spr_dst = BlendPixels( LightPixel( g_spr_src[g_spr_u>>FRACBITS] ), *g_spr_dst );
 }
 
-void SpriteRowFuncFlip()
+static void SpriteRowFuncFlip()
 {
     for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
 	*g_spr_dst = BlendPixels( LightPixel( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u>>FRACBITS) ] ), *g_spr_dst );
 }
 
-void SpriteRowFuncSpectre()
+static void SpriteRowFuncSpectre()
 {
     // avg func:   pixel.p = ( ((pixel.p ^ dst->p) & 0xFEFEFEFE) >> 1 ) + (pixel.p & dst->p);
     // half brightness:   dst->p = (dst->p & 0xFEFEFEFE) >> 1
@@ -1049,22 +1102,212 @@ void SpriteRowFuncSpectre()
 	    g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
 }
 
-void SpriteRowFuncSpectreFlip()
+static void SpriteRowFuncSpectreFlip()
 {
     for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
 	if( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u >> FRACBITS) ].components[3] >= 128 )
 	    g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
 }
 
+/*
+WITH OCCLUSION TEST
+*/
 
-void RP_DrawSubsectorSprites(subsector_t* sub)
+static void SpriteRowFuncTest()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++, g_spr_pixel_range++ )
+	if (g_spr_y >= g_spr_pixel_range->minmax[0] && g_spr_y < g_spr_pixel_range->minmax[1])
+	    *g_spr_dst = BlendPixels( LightPixel( g_spr_src[g_spr_u>>FRACBITS] ), *g_spr_dst );
+}
+
+static void SpriteRowFuncTestFlip()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++, g_spr_pixel_range++ )
+	if (g_spr_y >= g_spr_pixel_range->minmax[0] && g_spr_y < g_spr_pixel_range->minmax[1])
+	    *g_spr_dst = BlendPixels( LightPixel( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u>>FRACBITS) ] ), *g_spr_dst );
+}
+
+static void SpriteRowFuncTestSpectre()
+{
+    // avg func:   pixel.p = ( ((pixel.p ^ dst->p) & 0xFEFEFEFE) >> 1 ) + (pixel.p & dst->p);
+    // half brightness:   dst->p = (dst->p & 0xFEFEFEFE) >> 1
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++, g_spr_pixel_range++ )
+	if (g_spr_y >= g_spr_pixel_range->minmax[0] && g_spr_y < g_spr_pixel_range->minmax[1])
+	    if( g_spr_src[ (g_spr_u >> FRACBITS) ].components[3] >= 128 )
+		g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
+}
+
+static void SpriteRowFuncTestSpectreFlip()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++, g_spr_pixel_range++ )
+	if (g_spr_y >= g_spr_pixel_range->minmax[0] && g_spr_y < g_spr_pixel_range->minmax[1])
+	    if( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u >> FRACBITS) ].components[3] >= 128 )
+		g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
+}
+
+
+// Addressing: g_sprites_funcs[is_test][is_spectre][is_flip]
+static void (*g_sprites_funcs[2][2][2])() =
+{
+    {
+	{
+	    SpriteRowFunc,
+	    SpriteRowFuncFlip
+	},
+	{
+	    SpriteRowFuncSpectre,
+	    SpriteRowFuncSpectreFlip
+	}
+    },
+    {
+	{
+	    SpriteRowFuncTest,
+	    SpriteRowFuncTestFlip
+	},
+	{
+	    SpriteRowFuncTestSpectre,
+	    SpriteRowFuncTestSpectreFlip
+	}
+    }
+};
+
+static void DrawSprite(draw_sprite_t* dsprite)
+{
+    sprite_picture_t*	sprite;
+    fixed_t		v, u_end, v_end;
+    fixed_t		sprite_width, sprite_height;
+    int			cur_mip_width;
+    int			y, mip;
+    void		(*spr_func_test)();
+    void		(*spr_func_no_test)();
+    pixel_t*		fb;
+
+    sprite = dsprite->sprite;
+
+    SetLightLevel(dsprite->light_level, dsprite->z);
+
+    spr_func_test    = g_sprites_funcs[1][dsprite->is_spectre ? 1 : 0][dsprite->is_flipped ? 1 : 0];
+    spr_func_no_test = g_sprites_funcs[0][dsprite->is_spectre ? 1 : 0][dsprite->is_flipped ? 1 : 0];
+    if (!dsprite->pixel_range) spr_func_test = spr_func_no_test;
+
+    sprite_width  = sprite->width  << FRACBITS;
+    sprite_height = sprite->height << FRACBITS;
+
+    mip = IntLog2Floor(dsprite->v_step >> FRACBITS);
+    if (mip > sprite->max_mip) mip = sprite->max_mip;
+
+    u_end = dsprite->u_begin + (dsprite->x_end - dsprite->x_begin) * dsprite->u_step;
+    if (u_end > sprite_width ) u_end = sprite_width;
+    v_end = dsprite->v_begin + (SCREENHEIGHT - dsprite->y_begin) * dsprite->v_step;
+    if (v_end > sprite_height) v_end = sprite_height;
+
+    dsprite->u_begin >>= mip;
+    dsprite->v_begin >>= mip;
+    dsprite->u_step >>= mip;
+    dsprite->v_step >>= mip;
+    u_end  >>= mip;
+    v_end  >>= mip;
+
+    fb = VP_GetFramebuffer() + dsprite->x_begin;
+    cur_mip_width = sprite->width >> mip;
+
+    g_spr_u_step = dsprite->u_step;
+    g_spr_u_end = u_end;
+    g_spr_mip_width_minus_one = cur_mip_width - 1;
+
+    for( y = dsprite->y_begin, v = dsprite->v_begin; v < v_end; y++, v += dsprite->v_step)
+    {
+	g_spr_y = y;
+	g_spr_u = dsprite->u_begin;
+	g_spr_dst = fb + y * SCREENWIDTH;
+	g_spr_pixel_range = dsprite->pixel_range;
+	g_spr_src = sprite->mip[mip] + (v>>FRACBITS) * cur_mip_width;
+	// TODO - add check for necessity of testing
+	spr_func_test();
+    }
+}
+
+// ascending sorting - near to far
+// TODO - optimize this
+static void SortSprites_r(draw_sprite_t** in, draw_sprite_t** tmp, int count)
+{
+    int			half;
+    int			p[2], p_end[2], out_p;
+
+    if (count <= 1 )
+	return;
+    if (count == 2)
+    {
+	if (in[0]->z > in[1]->z)
+	{
+	    draw_sprite_t* tmp = in[0];
+	    in[0] = in[1];
+	    in[1] = tmp;
+	}
+	return;
+    }
+
+    half = count >> 1;
+
+    SortSprites_r(in, tmp, half);
+    SortSprites_r(in + half, tmp + half, count - half);
+
+    p[0] = 0;
+    p[1]= half;
+    p_end[0] = half;
+    p_end[1] = count;
+    out_p = 0;
+    while (out_p < count)
+    {
+	if (p[0] == p_end[0])
+	{
+	    tmp[out_p] = in[p[1]]; p[1]++;
+	}
+	else if (p[1] == p_end[1])
+	{
+	    tmp[out_p] = in[p[0]]; p[0]++;
+	}
+	else
+	{
+	    if (in[p[0]]->z < in[p[1]]->z)
+	    {
+		tmp[out_p] = in[p[0]]; p[0]++;
+	    }
+	    else
+	    {
+		tmp[out_p] = in[p[1]]; p[1]++;
+	    }
+	}
+	out_p++;
+    }
+
+    memcpy(in, tmp, count * sizeof(draw_sprite_t*));
+}
+
+static void DrawSprites()
+{
+    int i;
+
+    for( i = 0; i < g_draw_sprites.count; i++ )
+	g_draw_sprites.sort_sprites[0][i] = &g_draw_sprites.sprites[i];
+
+    SortSprites_r( g_draw_sprites.sort_sprites[0], g_draw_sprites.sort_sprites[1], g_draw_sprites.count);
+
+    for( i = g_draw_sprites.count - 1; i >= 0; i--)
+	DrawSprite(g_draw_sprites.sort_sprites[0][i]);
+}
+
+static void AddSubsectorSprites(subsector_t* sub)
 {
     mobj_t*		mob;
     spriteframe_t*	frame;
     sprite_picture_t*	sprite;
     int			angle_num;
-    void		(*spr_func)();
-    pixel_t*		fb = VP_GetFramebuffer();
+    draw_sprite_t*	dsprite;
+    fixed_t		u_step_on_z1;
+    int			dx, i;
+
+    u_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
 
     mob = sub->sector->thinglist;
 
@@ -1073,15 +1316,13 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	float	pos[3];
 	float	proj[3];
 	fixed_t	z, sx, sy;
-	fixed_t	u_step_on_z1;
-	fixed_t	v, u_begin, v_begin, u_end, v_end, u_step, v_step, initial_u_step;
-	fixed_t	sprite_width, sprite_height;
-	fixed_t	x_begin_f, y_begin_f;
-	int	y, x_begin, y_begin;
-	int	mip, mip_u, mip_v;
-	int	cur_mip_width;
+	fixed_t	x_begin_f, x_end_f, y_begin_f;
+	fixed_t	half_screen_sprite_width;
 
 	if(mob->subsector != sub) goto next_mob;
+
+	if (g_draw_sprites.count == g_draw_sprites.capacity) // no space for srites anymore
+	    return;
 
 	frame = &sprites[mob->sprite].spriteframes[mob->frame & FF_FRAMEMASK];
 	{ // TODO - make it easier
@@ -1101,13 +1342,13 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	    cross = FixedMul(dir_to_mob[1], mob_dir[0]) - FixedMul(dir_to_mob[0], mob_dir[1]);
 	    angle = atan2(FixedToFloat(cross), FixedToFloat(dot)) + pi*3.0f;
 	    angle_num = ((int)((8.0f*(angle + pi/8.0f)) / (2.0f * pi))) & 7;
-	    sprite = GetSpritePicture(frame->lump[angle_num]);
+	    sprite = RP_GetSpritePicture(frame->lump[angle_num]);
 	}
 
 	pos[0] = FixedToFloat(mob->x);
 	pos[1] = FixedToFloat(mob->y);
 	pos[2] = FixedToFloat(mob->z + FRACUNIT * sprite->height);
-	RP_VecMatMul(pos, g_view_matrix, proj);
+	VecMatMul(pos, g_view_matrix, proj);
 
 	if (proj[2] < RP_Z_NEAR_FLOAT) goto next_mob;
 	proj[0] /= proj[2];
@@ -1117,63 +1358,76 @@ void RP_DrawSubsectorSprites(subsector_t* sub)
 	sx = FloatToFixed((proj[0] + 1.0f ) * ((float) SCREENWIDTH ) * 0.5f );
 	sy = FloatToFixed((proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f );
 
-	u_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
+	dsprite = g_draw_sprites.sprites + g_draw_sprites.count;
 
-	u_step = FixedMul(u_step_on_z1, z);
-	initial_u_step = u_step;
-	v_step = FixedMul(u_step, g_inv_y_scaler);
+	dsprite->u_step = FixedMul(u_step_on_z1, z);
+	dsprite->v_step = FixedMul(dsprite->u_step, g_inv_y_scaler);
 
-	mip_u = IntLog2Floor(u_step >> FRACBITS);
-	mip_v = IntLog2Floor(v_step >> FRACBITS);
-	mip = mip_u > mip_v ? mip_u : mip_v;
-	if (mip > sprite->max_mip) mip = sprite->max_mip;
-
-	sprite_width  = (sprite->width >>mip) << FRACBITS;
-	sprite_height = (sprite->height>>mip) << FRACBITS;
-
-	u_step >>= mip; v_step >>= mip;
-	cur_mip_width = sprite->width >> mip;
-
-	x_begin_f = sx - FixedDiv((sprite->width<<FRACBITS)/2, initial_u_step);
+	half_screen_sprite_width = FixedDiv((sprite->width<<FRACBITS)/2, dsprite->u_step);
+	x_begin_f = sx - half_screen_sprite_width;
+	x_end_f = sx + half_screen_sprite_width;
 	y_begin_f = sy;
-	x_begin = FixedRoundToInt(x_begin_f);
-	y_begin = FixedRoundToInt(y_begin_f);
+	dsprite->x_begin = FixedRoundToInt(x_begin_f);
+	dsprite->y_begin = FixedRoundToInt(y_begin_f);
 
-	SetLightLevel((mob->frame & FF_FULLBRIGHT) ? 255 : sub->sector->lightlevel, z);
-
-	if (x_begin < 0) x_begin = 0;
-	if (y_begin < 0) y_begin = 0;
-
-	u_begin = FixedMul((x_begin<<FRACBITS) - x_begin_f + FRACUNIT/2, u_step);
-	v_begin = FixedMul((y_begin<<FRACBITS) - y_begin_f + FRACUNIT/2, v_step);
-
-	u_end = u_begin + (SCREENWIDTH  - x_begin) * u_step;
-	if (u_end > sprite_width ) u_end = sprite_width;
-	v_end = v_begin + (SCREENHEIGHT - y_begin) * v_step;
-	if (v_end > sprite_height) v_end = sprite_height;
-
-	if (mob->flags & MF_SHADOW)
-	    spr_func = frame->flip[angle_num] ? SpriteRowFuncSpectreFlip : SpriteRowFuncSpectre;
-	else
-	    spr_func = frame->flip[angle_num] ? SpriteRowFuncFlip : SpriteRowFunc;
-
-	g_spr_u_step = u_step;
-	g_spr_u_end = u_end;
-	g_spr_mip_width_minus_one = cur_mip_width - 1;
-	for( y = y_begin, v = v_begin; v < v_end; y++, v += v_step)
+	if (dsprite->x_begin < 0)
 	{
-	    g_spr_u = u_begin;
-	    g_spr_dst = fb + x_begin + y * SCREENWIDTH;
-	    g_spr_src = sprite->mip[mip] + (v>>FRACBITS) * cur_mip_width;
-	    spr_func();
+	    dsprite->u_begin += - dsprite->x_begin * dsprite->u_step;
+	    dsprite->x_begin = 0;
 	}
+	if (dsprite->y_begin < 0)
+	{
+	    dsprite->v_begin += - dsprite->y_begin * dsprite->v_step;
+	    dsprite->y_begin = 0;
+	}
+	dsprite->x_end = FixedRoundToInt(x_end_f);
+	if (dsprite->x_end > SCREENWIDTH) dsprite->x_end = SCREENWIDTH;
+
+	dsprite->u_begin = FixedMul((dsprite->x_begin<<FRACBITS) - x_begin_f + FRACUNIT/2, dsprite->u_step);
+	dsprite->v_begin = FixedMul((dsprite->y_begin<<FRACBITS) - y_begin_f + FRACUNIT/2, dsprite->v_step);
+
+	while(dsprite->x_begin < dsprite->x_end)
+	{
+	    if (g_occlusion_buffer[dsprite->x_begin].minmax[1] <= g_occlusion_buffer[dsprite->x_begin].minmax[0])
+	    {
+		dsprite->x_begin++; dsprite->u_begin += dsprite->u_step;
+	    }
+	    else break;
+	}
+	while (dsprite->x_end > dsprite->x_begin)
+	{
+	    if (g_occlusion_buffer[dsprite->x_end-1].minmax[1] <= g_occlusion_buffer[dsprite->x_end-1].minmax[0])
+		dsprite->x_end--;
+	    else break;
+	}
+	dx = dsprite->x_end - dsprite->x_begin;
+	if (dx <= 0) goto next_mob;
+
+	if (dx + g_draw_sprites.next_pixel_range_index < g_draw_sprites.pixel_ranges_capacity)
+	{
+	    dsprite->pixel_range = g_draw_sprites.pixel_ranges + g_draw_sprites.next_pixel_range_index;
+	    g_draw_sprites.next_pixel_range_index += dx;
+	    for( i = 0; i < dx; i++ )
+		dsprite->pixel_range[i] = g_occlusion_buffer[i + dsprite->x_begin];
+	}
+	else goto next_mob; // no space for pixel ranges
+
+	dsprite->is_spectre = mob->flags & MF_SHADOW;
+	dsprite->is_flipped = frame->flip[angle_num];
+
+	dsprite->sprite = sprite;
+	dsprite->z = z;
+	dsprite->light_level = (mob->frame & FF_FULLBRIGHT) ? 255 : sub->sector->lightlevel;
+
+	// finaly, add drawsprite
+	g_draw_sprites.count++;
 
 	next_mob:
 	mob = mob->snext;
     }
 }
 
-void RP_Subsector(int num)
+static void Subsector(int num)
 {
     subsector_t*	sub;
     int			line_seg;
@@ -1184,7 +1438,7 @@ void RP_Subsector(int num)
     for( line_seg = sub->firstline; line_seg < sub->numlines + sub->firstline; line_seg++ )
     {
     	g_cur_seg = &segs[ line_seg ];
-	PR_DrawWall();
+	DrawWall();
     }
     subsector_clipped = false;
 
@@ -1193,34 +1447,148 @@ void RP_Subsector(int num)
 	ClipCurSubsector(num);
 	subsector_clipped = true;
 	if (g_cur_subsector_data.vertex_count > 0)
-	    PR_DrawSubsectorFlat( num, true  );
+	    DrawSubsectorFlat( num, true  );
     }
     if (g_view_pos[2] < sub->sector->ceilingheight)
     {
 	if (!subsector_clipped) ClipCurSubsector(num);
 	if (g_cur_subsector_data.vertex_count > 0)
-	    PR_DrawSubsectorFlat( num, false );
+	    DrawSubsectorFlat( num, false );
+    }
+}
+
+static void GenWallPartSilouette(fixed_t z_min, fixed_t z_max, int left_vertex_index, int silouette)
+{
+    float	vertex_z[4];
+    fixed_t	screen_y[4];
+    int		i;
+
+    int		right_vertex_index;
+    int		x, y, x_begin, x_end;
+    fixed_t	dx, ddx;
+    fixed_t	top_dy, bottom_dy, top_y, bottom_y;
+
+    right_vertex_index = left_vertex_index ^ 1;
+
+    vertex_z[0] = FixedToFloat(z_min);
+    vertex_z[1] = FixedToFloat(z_max);
+    vertex_z[2] = FixedToFloat(z_min);
+    vertex_z[3] = FixedToFloat(z_max);
+    for( i = 0; i < 4; i++ )
+    {
+	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
+	screen_space_y /= g_cur_seg_data.screen_z[(i>>1)];
+	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
     }
 
-    RP_DrawSubsectorSprites(sub);
+    dx = g_cur_seg_data.screen_x[right_vertex_index] - g_cur_seg_data.screen_x[left_vertex_index];
+    if (dx <= 0) return;
+
+    x_begin = FixedRoundToInt(g_cur_seg_data.screen_x[ left_vertex_index]);
+    x_end   = FixedRoundToInt(g_cur_seg_data.screen_x[right_vertex_index]);
+    if (x_begin < 0 ) x_begin = 0;
+    if (x_end > SCREENWIDTH) x_end = SCREENWIDTH;
+
+    ddx = (x_begin<<FRACBITS) + FRACUNIT/2 - g_cur_seg_data.screen_x[left_vertex_index];
+
+    top_dy =    FixedDiv(screen_y[right_vertex_index*2+1] - screen_y[left_vertex_index*2+1], dx);
+    bottom_dy = FixedDiv(screen_y[right_vertex_index*2+0] - screen_y[left_vertex_index*2+0], dx);
+
+    top_y =    screen_y[left_vertex_index*2+1] + FixedMul(ddx, top_dy   );
+    bottom_y = screen_y[left_vertex_index*2+0] + FixedMul(ddx, bottom_dy);
+
+    x = x_begin;
+    if (silouette == SIL_BOTH)
+	while(x < x_end)
+	{
+	    g_occlusion_buffer[x].minmax[0] = g_occlusion_buffer[x].minmax[1] = SCREENHEIGHT / 2;
+	    x++;
+	}
+    else if (silouette == SIL_BOTTOM)
+	while(x < x_end)
+	{
+	    y = FixedRoundToInt(top_y);
+	    if (g_occlusion_buffer[x].minmax[1] > y) g_occlusion_buffer[x].minmax[1] = y;
+	    //if (y >= 0 && y < SCREENHEIGHT) V_DrawPixel(x, y, 160); // YELLOW
+	    top_y += top_dy; x++;
+	}
+    else
+	while(x < x_end)
+	{
+	    y = FixedRoundToInt(bottom_y);
+	    if (g_occlusion_buffer[x].minmax[0] < y) g_occlusion_buffer[x].minmax[0] = y;
+	    //if (y >= 0 && y < SCREENHEIGHT) V_DrawPixel(x, y, 112); // GREEN
+	    bottom_y += bottom_dy; x++;
+	}
+}
+
+static void GenSegSilouette(boolean back)
+{
+    int left_vertex_index;
+
+    if (IsBackSegment() ^ back) return;
+    if (ClipCurSeg()) return;
+
+    ProjectCurSeg();
+
+    left_vertex_index = back ? 1 : 0;
+
+    if (g_cur_seg->frontsector && g_cur_seg->backsector  && (g_cur_seg->linedef->flags & ML_TWOSIDED))
+    {
+	if (g_cur_seg->frontsector->floorheight < g_cur_seg->backsector->floorheight)
+	    GenWallPartSilouette(g_cur_seg->frontsector->floorheight, g_cur_seg->backsector->floorheight, left_vertex_index, SIL_BOTTOM);
+
+	if (g_cur_seg->frontsector->ceilingheight > g_cur_seg->backsector->ceilingheight)
+	    GenWallPartSilouette(g_cur_seg->backsector->ceilingheight, g_cur_seg->frontsector->ceilingheight, left_vertex_index, SIL_TOP);
+    }
+    else if (g_cur_seg->frontsector)
+    {
+	// solid wall
+	GenWallPartSilouette(g_cur_seg->frontsector->floorheight, g_cur_seg->frontsector->ceilingheight, left_vertex_index, SIL_BOTH);
+    }
+}
+
+static void GenSubsectorSilhouette(int num)
+{
+    subsector_t*	sub;
+    int			line_seg;
+
+    sub = &subsectors[num];
+
+    for( line_seg = sub->firstline; line_seg < sub->numlines + sub->firstline; line_seg++ )
+    {
+    	g_cur_seg = &segs[ line_seg ];
+	GenSegSilouette(true);
+    }
+
+    AddSubsectorSprites(sub);
+
+    for( line_seg = sub->firstline; line_seg < sub->numlines + sub->firstline; line_seg++ )
+    {
+    	g_cur_seg = &segs[ line_seg ];
+	GenSegSilouette(false);
+    }
 }
 //
 // RenderBSPNode
 // Renders all subsectors below a given node,
 //  traversing subtree recursively.
 // Just call with BSP root.
-void RP_RenderBSPNode (int bspnum)
+static void RenderBSPNode(int bspnum, boolean for_sprites)
 {
     node_t*	bsp;
     int		side;
+    int		subsector_num;
 
     // Found a subsector?
     if (bspnum & NF_SUBSECTOR)
     {
-	if (bspnum == -1)
-	    RP_Subsector (0);
+	subsector_num = bspnum == -1 ? 0 : bspnum&(~NF_SUBSECTOR);
+	
+	if (for_sprites)
+	    GenSubsectorSilhouette(subsector_num);
 	else
-	    RP_Subsector (bspnum&(~NF_SUBSECTOR));
+	    Subsector(subsector_num);
 	return;
     }
 
@@ -1228,36 +1596,26 @@ void RP_RenderBSPNode (int bspnum)
 
     // Decide which side the view point is on.
     side = 1 ^ R_PointOnSide (g_view_pos[0], g_view_pos[1], bsp);
+    if (for_sprites) side ^= 1;
 
-    // Recursively divide front space.
-    RP_RenderBSPNode (bsp->children[side]);
-
-    // Possibly divide back space.
-    //if (R_CheckBBox (bsp->bbox[side^1]))
-    RP_RenderBSPNode (bsp->children[side^1]);
+    RenderBSPNode (bsp->children[side], for_sprites);
+    RenderBSPNode (bsp->children[side^1], for_sprites);
 }
 
-void RP_DrawPlayerSprites(player_t *player)
+static void DrawPlayerSprites(player_t *player)
 {
     int			i;
     pspdef_t*		psprite;
     state_t*		state;
     sprite_picture_t*	sprite;
-    int			y, x_begin, y_begin;
     fixed_t		scaler, dx;
-    pixel_t*		framebuffer;
-
-    fixed_t		v, u_step, v_step, u_begin, v_begin, u_end, v_end;
-    fixed_t		sprite_width, sprite_height;
     fixed_t		x_begin_f, y_begin_f;
-    void		(*spr_func)();
-
-    framebuffer = VP_GetFramebuffer();
+    draw_sprite_t	dsprite;
 
     scaler = FRACUNIT * SCREENHEIGHT / ID_SCREENHEIGHT;
     dx = SCREENWIDTH * FRACUNIT - FixedMul(ID_SCREENWIDTH *scaler, g_inv_y_scaler);
-    u_step = FixedDiv(g_y_scaler, scaler);
-    v_step = FixedDiv(FRACUNIT, scaler);
+    dsprite.u_step = FixedDiv(g_y_scaler, scaler);
+    dsprite.v_step = FixedDiv(FRACUNIT, scaler);
 
     for (i = 0; i < NUMPSPRITES; i++)
     {
@@ -1265,7 +1623,7 @@ void RP_DrawPlayerSprites(player_t *player)
 	state = psprite->state;
 	if (!state) continue;
 
-	sprite = GetSpritePicture( sprites[state->sprite].spriteframes[state->frame & FF_FRAMEMASK].lump[0] );
+	sprite = RP_GetSpritePicture( sprites[state->sprite].spriteframes[state->frame & FF_FRAMEMASK].lump[0] );
 
 	x_begin_f = psprite->sx - (sprite->left_offset<<FRACBITS);
 	x_begin_f = FixedMul( FixedMul(x_begin_f, scaler), g_inv_y_scaler ) + dx / 2;
@@ -1274,38 +1632,25 @@ void RP_DrawPlayerSprites(player_t *player)
 	y_begin_f = FixedMul(y_begin_f, scaler);
 	y_begin_f -= 32 * menuscale * FRACUNIT / 2; // TODO - remove this magic
 
-	x_begin = FixedRoundToInt(x_begin_f);
-	if (x_begin < 0 ) x_begin = 0;
-	y_begin = FixedRoundToInt(y_begin_f);
+	dsprite.x_begin = FixedRoundToInt(x_begin_f);
+	if (dsprite.x_begin < 0 ) dsprite.x_begin = 0;
+	dsprite.y_begin = FixedRoundToInt(y_begin_f);
 
-	u_begin = x_begin_f - (x_begin<<FRACBITS) + FRACUNIT/2;
-	v_begin = y_begin_f - (y_begin<<FRACBITS) + FRACUNIT/2;
+	dsprite.u_begin = x_begin_f - (dsprite.x_begin<<FRACBITS) + FRACUNIT/2;
+	dsprite.v_begin = y_begin_f - (dsprite.y_begin<<FRACBITS) + FRACUNIT/2;
 
-	sprite_width  = sprite->width  << FRACBITS;
-	sprite_height = sprite->height << FRACBITS;
-
-	u_end = u_begin + (SCREENWIDTH  - x_begin) * u_step;
-	if (u_end > sprite_width ) u_end = sprite_width;
-	v_end = v_begin + (SCREENHEIGHT - y_begin) * v_step;
-	if (v_end > sprite_height) v_end = sprite_height;
-
-	SetLightLevel(255 * 15/16, FRACUNIT); // make darker just a bit
-
-	g_spr_u_step = u_step;
-	g_spr_u_end = u_end;
-	spr_func = (player->mo->flags&MF_SHADOW) ? SpriteRowFuncSpectre : SpriteRowFunc;
-
-	for( y = y_begin, v = v_begin; v < v_end; v += v_step, y++ )
-	{
-	    g_spr_u = u_begin;
-	    g_spr_dst = framebuffer + x_begin + y * SCREENWIDTH;
-	    g_spr_src = sprite->mip[0] + (v>>FRACBITS) * sprite->width;
-	    spr_func();
-	}
+	dsprite.x_end = SCREENWIDTH;
+	dsprite.z = FRACUNIT;
+	dsprite.light_level = 255 * 15/16;
+	dsprite.sprite = sprite;
+	dsprite.pixel_range = NULL;
+	dsprite.is_spectre = player->mo->flags&MF_SHADOW;
+	dsprite.is_flipped = false;
+	DrawSprite(&dsprite);
     }
 }
 
-void RP_Postprocess(int colormap_num)
+static void Postprocess(int colormap_num)
 {
     pixel_t	pixel;
     pixel_t*	fb = VP_GetFramebuffer();
@@ -1369,9 +1714,9 @@ void RP_Postprocess(int colormap_num)
     */
 }
 
-void R_32b_RenderPlayerView (player_t *player)
+static void R_32b_RenderPlayerView(player_t* player)
 {
-    int y, x;
+   /* int y, x;
     pixel_t conrast_colors[2];
     pixel_t* framebuffer = VP_GetFramebuffer();
 
@@ -1380,17 +1725,31 @@ void R_32b_RenderPlayerView (player_t *player)
 
     for( y = 0; y < SCREENHEIGHT; y++ )
 	for( x = 0; x < SCREENWIDTH; x++, framebuffer++ )
-	    *framebuffer = conrast_colors[ ((x>>1) ^ (y>>1)) & 1 ];
+	    *framebuffer = conrast_colors[ ((x>>1) ^ (y>>1)) & 1 ];*/
 
-    RP_SetupView(player);
-    RP_BuildClipPlanes(player);
-    RP_PrepareSky(player);
+    {
+	int i;
+	for( i = 0; i < SCREENWIDTH; i++ )
+	{
+	    g_occlusion_buffer[i].minmax[0] = 0;
+	    g_occlusion_buffer[i].minmax[1] = SCREENHEIGHT;
+	}
 
-    RP_RenderBSPNode(numnodes-1);
+	g_draw_sprites.count = 0;
+	g_draw_sprites.next_pixel_range_index = 0;
+    }
 
-    RP_DrawPlayerSprites(player);
+    SetupView(player);
+    BuildClipPlanes(player);
+    PrepareSky(player);
 
-    RP_Postprocess(player->fixedcolormap);
+    RenderBSPNode(numnodes-1, false);
+    RenderBSPNode(numnodes-1, true);
+
+    DrawSprites();
+    DrawPlayerSprites(player);
+
+    Postprocess(player->fixedcolormap);
 }
 
 // PANZER - STUBS
@@ -1401,6 +1760,7 @@ void R_32b_InitSprites (char** namelist)
     R_8b_InitSprites(namelist);
 }
 
+//TODO - implement this
 void R_32b_ClearSprites(void){}
 
 void R_32b_InitInterface()
@@ -1424,10 +1784,28 @@ void R_32b_InitInterface()
     R_CheckTextureNumForName = R_32b_CheckTextureNumForName;
 }
 
+static void InitStaticData()
+{
+    g_cur_screen_polygon.x = Z_Malloc(SCREENWIDTH * sizeof(pixel_range_t), PU_STATIC, NULL);
+    g_x_to_sky_u_table = Z_Malloc(SCREENWIDTH * sizeof(int), PU_STATIC, NULL);
+    g_occlusion_buffer = Z_Malloc(SCREENWIDTH * sizeof(pixel_range_t), PU_STATIC, NULL);
+
+    g_draw_sprites.capacity = 512;
+    g_draw_sprites.sprites = Z_Malloc(g_draw_sprites.capacity * sizeof(draw_sprite_t), PU_STATIC, NULL);
+
+    g_draw_sprites.sort_sprites[0] = Z_Malloc(g_draw_sprites.capacity * sizeof(draw_sprite_t*), PU_STATIC, NULL);
+    g_draw_sprites.sort_sprites[1] = Z_Malloc(g_draw_sprites.capacity * sizeof(draw_sprite_t*), PU_STATIC, NULL);
+
+    g_draw_sprites.pixel_ranges_capacity = SCREENWIDTH * 12;
+    g_draw_sprites.pixel_ranges = Z_Malloc(g_draw_sprites.pixel_ranges_capacity * sizeof(pixel_range_t), PU_STATIC, NULL);
+}
+
 void RP_Init()
 {
     void R_32b_InitData(void);
 
     R_32b_InitInterface();
     R_32b_InitData();
+
+    InitStaticData();
 }

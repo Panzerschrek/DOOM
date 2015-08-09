@@ -85,7 +85,7 @@ static void AddSubsector(int subsector_num)
 }
 
 // returns new vertex count
-int R_32b_ClipPolygon(vertex_t* vertices, int vertex_count, clip_plane_t* plane)
+int RP_ClipPolygon(vertex_t* vertices, int vertex_count, clip_plane_t* plane)
 {
     int			i, next_i, j;
     static fixed_t	dot[ RP_MAX_SUBSECTOR_VERTICES ];
@@ -197,7 +197,7 @@ static void BuildSubsector(int subsector_num)
     for( i = 0; i < g_cur_subsector_parent_nodes_count; i++ )
     {
 	g_cur_subsector_vertex_count =
-	    R_32b_ClipPolygon(
+	    RP_ClipPolygon(
 		g_cur_subsector_vertices,
 		g_cur_subsector_vertex_count,
 		&g_nodes_clip_planes[i]);
@@ -210,7 +210,7 @@ static void BuildSubsector(int subsector_num)
 	seg_clip_plane.dist = - (FixedMul(seg->v1->x, seg_clip_plane.n[0]) + FixedMul(seg->v1->y, seg_clip_plane.n[1]));
 
 	g_cur_subsector_vertex_count =
-	    R_32b_ClipPolygon(
+	    RP_ClipPolygon(
 		g_cur_subsector_vertices,
 		g_cur_subsector_vertex_count,
 		&seg_clip_plane);
@@ -249,19 +249,19 @@ static void Node_r(int node_num)
     }
 }
 
-void R_32b_BuildFullSubsectors()
+void RP_BuildFullSubsectors()
 {
     PrepareOutBuffer();
     g_cur_subsector_parent_nodes_count = 0;
     Node_r(numnodes-1);
 }
 
-vertex_t* R_32b_GetFullSubsectorsVertices()
+vertex_t* RP_GetFullSubsectorsVertices()
 {
     return g_out_subsectors_vertices;
 }
 
-full_subsector_t* R_32b_GetFullSubsectors()
+full_subsector_t* RP_GetFullSubsectors()
 {
     return g_out_subsectors;
 }

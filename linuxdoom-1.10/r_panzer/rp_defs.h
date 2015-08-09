@@ -47,6 +47,7 @@ typedef struct full_subsector_s
 #define RP_FLAT_TEXTURE_SIZE		64
 #define RP_FLAT_TEXTURE_SIZE_MINUS_1	(RP_FLAT_TEXTURE_SIZE-1)
 
+
 typedef struct wall_texture_s
 {
     char	name[8];
@@ -60,8 +61,12 @@ typedef struct wall_texture_s
     pixel_t*	mip[ RP_MAX_WALL_MIPS ];
     int		max_mip;
 
+     // average pixels count of all mips
+    int		pixel_count;
+
     boolean used;
 } wall_texture_t;
+
 
 typedef struct flat_texture_s
 {
@@ -71,6 +76,7 @@ typedef struct flat_texture_s
 
     boolean used;
 } flat_texture_t;
+
 
 typedef struct sky_texture_s
 {
@@ -95,6 +101,9 @@ typedef struct sprite_picture_s
     // pointers to pixels of mip in allocated memory. mip[0] = raw_data
     pixel_t*	mip[ RP_MAX_WALL_MIPS ];
     int		max_mip;
+
+    // average pixels count of all mips
+    int		pixel_count;
 
 } sprite_picture_t;
 
