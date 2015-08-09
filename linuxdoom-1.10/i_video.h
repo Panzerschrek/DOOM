@@ -44,8 +44,8 @@ void I_InitGraphics (void);
 
 void I_ShutdownGraphics(void);
 
-// Takes full 8 bit values.
-void I_SetPalette (byte* palette);
+// Takes number of palette in PLAYPAL lump.
+void I_SetPalette (int palette_num);
 
 void I_UpdateNoBlit (void);
 void I_FinishUpdate (void);

@@ -80,7 +80,8 @@ static side_t*		g_cur_side;
 static wall_texture_t*	g_cur_wall_texture;
 static boolean		g_cur_wall_texture_transparent;
 static int		g_cur_column_light; // in range [0; 65536]
-static			boolean g_fullbright;
+static boolean		g_fullbright;
+static int		g_playpal_num = 0;
 
 static struct
 {
@@ -1584,7 +1585,7 @@ static void RenderBSPNode(int bspnum, boolean for_sprites)
     if (bspnum & NF_SUBSECTOR)
     {
 	subsector_num = bspnum == -1 ? 0 : bspnum&(~NF_SUBSECTOR);
-	
+
 	if (for_sprites)
 	    GenSubsectorSilhouette(subsector_num);
 	else
@@ -1657,9 +1658,9 @@ static void Postprocess(int colormap_num)
     pixel_t*	fb_end = fb + SCREENWIDTH * SCREENHEIGHT;
     fixed_t	one_third = FRACUNIT / 3 + 1;
 
-    if (colormap_num == 0 || colormap_num == 1) // no colormap or fullbright
-        return;
-    else if (colormap_num == 32) // invulnerability
+    //if ((colormap_num == 0 || colormap_num == 1) && g_playpal_num == 0) // no colormap or fullbright
+    //    return;
+    if (colormap_num == 32 && g_playpal_num == 0) // invulnerability
     {
 	for( ; fb < fb_end; fb++ )
 	{
@@ -1669,27 +1670,25 @@ static void Postprocess(int colormap_num)
 	    fb->p = ~pixel.p;
 	}
     }
-    // UNUSED. TODO - invent how to draw this
-    /*
-    else
+    else if (g_playpal_num != 0)
     {
 	pixel_t	blend_color;
 	int	color_premultiplied[4];
 	int	i;
 
-	if (colormap_num <= 8) // red - blood
+	if (g_playpal_num <= 8) // red - blood
 	{
 	    blend_color.components[0] = 0;
 	    blend_color.components[1] = 0;
 	    blend_color.components[2] = 255;
-	    blend_color.components[3] = (colormap_num - 1 + 1) * 255 * 11 / 100;
+	    blend_color.components[3] = (g_playpal_num - 1 + 1) * 255 * 11 / 100;
 	}
-	else if (colormap_num <= 12) // yellow - pickup
+	else if (g_playpal_num <= 12) // yellow - pickup
 	{
 	    blend_color.components[0] = 0;
 	    blend_color.components[1] = 255;
 	    blend_color.components[2] = 255;
-	    blend_color.components[3] = (colormap_num - 8 + 1) * 255 * 125 / 1000;
+	    blend_color.components[3] = (g_playpal_num - 10 + 1) * 255 * 125 / 1000;
 	}
 	else // green - hazard suit
 	{
@@ -1702,6 +1701,19 @@ static void Postprocess(int colormap_num)
 	for(i = 0; i < 3; i++)
 	    color_premultiplied[i] = blend_color.components[i] * (255-blend_color.components[3]);
 
+	if (colormap_num == 32) // invulnerability + color blend
+	    for( ; fb < fb_end; fb++ )
+	    {
+		pixel = *fb;
+		pixel.components[0] =
+		    ((pixel.components[0] + pixel.components[1] + pixel.components[2]) * one_third) >> FRACBITS;
+		pixel.components[0] = ~pixel.components[0];
+		pixel.components[2] = (color_premultiplied[2] + pixel.components[0] * blend_color.components[3]) >> 8;
+		pixel.components[1] = (color_premultiplied[1] + pixel.components[0] * blend_color.components[3]) >> 8;
+		pixel.components[0] = (color_premultiplied[0] + pixel.components[0] * blend_color.components[3]) >> 8;
+		*fb = pixel;
+	    }
+	else // only color blend
 	    for( ; fb < fb_end; fb++ )
 	    {
 		pixel = *fb;
@@ -1711,7 +1723,6 @@ static void Postprocess(int colormap_num)
 		*fb = pixel;
 	    }
     }
-    */
 }
 
 static void R_32b_RenderPlayerView(player_t* player)
@@ -1808,4 +1819,9 @@ void RP_Init()
     R_32b_InitData();
 
     InitStaticData();
+}
+
+void RP_SetPlaypalNum(int num)
+{
+    g_playpal_num = num;
 }

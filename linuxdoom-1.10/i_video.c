@@ -34,10 +34,13 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 #include "v_video.h"
 #include "m_argv.h"
 #include "d_main.h"
+#include "w_wad.h"
+#include "z_zone.h"
 
 #include "doomdef.h"
 
 #include "r_panzer/rp_defs.h"
+#include "r_panzer/rp_main.h"
 #include "r_panzer/rp_video.h"
 
 #define MOUSE_MOTION_SCALE 3
@@ -85,6 +88,8 @@ struct
     int mouse_delta_x;
     int mouse_delta_y;
 } sdl;
+
+static int g_palette_lump_num;
 
 void I_ShutdownGraphics(void)
 {
@@ -352,18 +357,28 @@ void I_ReadScreen (byte* scr)
 //
 // I_SetPalette
 //
-void I_SetPalette (byte* palette)
+void I_SetPalette (int palette_num)
 {
     // Input format - RGB
-    int i;
+    byte*	palette;
+    int		i;
     pixel_t* pal = VP_GetPaletteStorage();
 
-    for( i = 0; i < 256; i++ )
+    if (!v_32bit || palette_num == -1)
     {
-	pal[i].components[ sdl.pixel_format.component_index[COMPONENT_R] ] = palette[i*3];
-	pal[i].components[ sdl.pixel_format.component_index[COMPONENT_G] ] = palette[i*3+1];
-	pal[i].components[ sdl.pixel_format.component_index[COMPONENT_B] ] = palette[i*3+2];
+	if (palette_num == -1) palette_num = 0;
+	palette = W_CacheLumpNum(g_palette_lump_num, PU_STATIC) + 768 * palette_num;
+
+	for( i = 0; i < 256; i++ )
+	{
+	    pal[i].components[ sdl.pixel_format.component_index[COMPONENT_R] ] = palette[i*3  ];
+	    pal[i].components[ sdl.pixel_format.component_index[COMPONENT_G] ] = palette[i*3+1];
+	    pal[i].components[ sdl.pixel_format.component_index[COMPONENT_B] ] = palette[i*3+2];
+	    pal[i].components[3] = 255;
+	}
     }
+    else
+	RP_SetPlaypalNum(palette_num);
 }
 
 void I_PrepareGraphics (void)
@@ -483,4 +498,7 @@ void I_InitGraphics(void)
 
     sdl.is_focus = true;
     I_GrabMouse();
+
+    g_palette_lump_num = W_GetNumForName("PLAYPAL");
+    I_SetPalette(-1);
 }

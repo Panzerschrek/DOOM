@@ -279,9 +279,6 @@ static boolean		st_firsttime;
 // used to execute ST_Init() only once
 static int		veryfirsttime = 1;
 
-// lump number for PLAYPAL
-static int		lu_palette;
-
 // used for timing
 static unsigned int	st_clock;
 
@@ -1004,9 +1001,7 @@ static int st_palette = 0;
 
 void ST_doPaletteStuff(void)
 {
-
     int		palette;
-    byte*	pal;
     int		cnt;
     int		bzc;
 
@@ -1050,8 +1045,7 @@ void ST_doPaletteStuff(void)
     if (palette != st_palette)
     {
 	st_palette = palette;
-	pal = (byte *) W_CacheLumpNum (lu_palette, PU_CACHE)+palette*768;
-	I_SetPalette (pal);
+	I_SetPalette (palette);
     }
 
 }
@@ -1187,7 +1181,6 @@ void ST_loadGraphics(void)
 
 void ST_loadData(void)
 {
-    lu_palette = W_GetNumForName ("PLAYPAL");
     ST_loadGraphics();
 }
 
@@ -1444,8 +1437,6 @@ void ST_Stop (void)
 {
     if (st_stopped)
 	return;
-
-    I_SetPalette (W_CacheLumpNum (lu_palette, PU_CACHE));
 
     st_stopped = true;
 }

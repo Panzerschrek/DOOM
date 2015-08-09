@@ -310,10 +310,6 @@ void D_Display (void)
     if (gamestate == GS_LEVEL && gametic)
 	HU_Drawer ();
 
-    // clean up border stuff
-    if (gamestate != oldgamestate && gamestate != GS_LEVEL)
-	I_SetPalette (W_CacheLumpName ("PLAYPAL",PU_CACHE));
-
     inhelpscreensstate = inhelpscreens;
     oldgamestate = wipegamestate = gamestate;
 

@@ -12,6 +12,7 @@
 #include "rp_data.h"
 #include "rp_defs.h"
 #include "rp_plane.h"
+#include "rp_video.h"
 
 typedef struct wall_texture_patch_s
 {
@@ -46,7 +47,7 @@ static int			g_lighting_gamma_table[256];
 
 static sky_texture_t	g_sky_texture;
 
-static pixel_t		g_textures_palette[256];
+static pixel_t*		g_textures_palette;
 
 // counters for debugging
 static int		g_walls_textures_pixels_count = 0;
@@ -137,21 +138,7 @@ static void BuildSkyTextue(wall_texture_t* src_wall_texture)
 
 static void InitPalette()
 {
-    int		i;
-    int		j;
-    byte*	playpal;
-
-    playpal = W_CacheLumpName ("PLAYPAL",PU_CACHE);
-
-    //TODO - get platform pixel order
-    for( i = 0, j = 0; i < 256; i++, j+=3 )
-    {
-	g_textures_palette[i].components[0] = playpal[j+2];
-	g_textures_palette[i].components[1] = playpal[j+1];
-	g_textures_palette[i].components[2] = playpal[j+0];
-	g_textures_palette[i].components[3] = 255;
-    }
-
+    g_textures_palette = VP_GetPaletteStorage();
 }
 
 static void InitWallsTextures()
