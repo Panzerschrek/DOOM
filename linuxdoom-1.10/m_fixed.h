@@ -48,7 +48,8 @@ fixed_t	FloatToFixed	(float f);
 int	FixedRoundToInt	(fixed_t f);
 int	FixedMulFloorToInt(fixed_t a, fixed_t b);
 
-
+// let this stuff be here
+int	IntLog2Floor(int x);
 
 #endif
 //-----------------------------------------------------------------------------

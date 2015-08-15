@@ -127,6 +127,12 @@ static void BuildSkyTextue(wall_texture_t* src_wall_texture)
     if (!g_sky_texture.data)
 	free(g_sky_texture.data);
 
+    g_sky_texture.original_width  = src_wall_texture->width ;
+    g_sky_texture.original_height = src_wall_texture->height;
+    g_sky_texture.height_log2 = IntLog2Floor(src_wall_texture->height);
+    g_sky_texture.height_mask = (1 << g_sky_texture.height_log2) - 1;
+    g_sky_texture.begin_y = ID_SCREENHEIGHT/2 - src_wall_texture->height;
+
     g_sky_texture.width  = src_wall_texture->width ;
     g_sky_texture.height = src_wall_texture->height;
     g_sky_texture.data = malloc(sizeof(pixel_t) * g_sky_texture.width * g_sky_texture.height);

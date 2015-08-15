@@ -105,3 +105,14 @@ int FixedMulFloorToInt(fixed_t a, fixed_t b)
 {
      return ((long long) a * (long long) b) >> (FRACBITS*2);
 }
+
+int IntLog2Floor(int x)
+{
+    int i = -1;
+    while( x > 0)
+    {
+	x>>= 1;
+	i++;
+    }
+    return i >= 0 ? i : 0;
+}
