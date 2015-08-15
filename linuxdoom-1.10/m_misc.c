@@ -121,6 +121,7 @@ M_ReadFile
 //
 int		usemouse;
 int		usejoystick;
+int		freelook;
 
 extern int	key_right;
 extern int	key_left;
@@ -205,6 +206,7 @@ default_t	defaults[] =
 #endif
 
     {"use_mouse",&usemouse, 1},
+    { "freelook", &freelook, 0},
     {"mouseb_fire",&mousebfire,0},
     {"mouseb_strafe",&mousebstrafe,1},
     {"mouseb_forward",&mousebforward,2},

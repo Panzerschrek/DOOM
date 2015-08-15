@@ -87,6 +87,7 @@ static float		g_view_matrix[16];
 static fixed_t		g_view_pos[3];
 static int		g_view_angle; // angle number in sin/cos/tan tables
 static fixed_t		g_half_fov_tan;
+static fixed_t		g_view_y_shift; // fake look up and down
 
 static fixed_t		g_y_scaler; // aspect ratio correction
 static fixed_t		g_inv_y_scaler;
@@ -474,7 +475,7 @@ static void DrawSkyPolygon()
 
 	dst = framebuffer + x_begin + y * SCREENWIDTH;
 
-	v = FixedMulFloorToInt(((y<<FRACBITS) / SCREENHEIGHT) * ID_SCREENHEIGHT, g_inv_y_scaler);
+	v = FixedMulFloorToInt((((y<<FRACBITS) - g_view_y_shift) / SCREENHEIGHT) * ID_SCREENHEIGHT, g_inv_y_scaler) + texture->height * 8;
 	src = texture->data + (v % texture->height) * texture->width;
 
 	for (x = x_begin; x < x_end; x++, dst++)
@@ -521,6 +522,9 @@ static void SetupView(player_t* player)
     float		tmp_mat[2][16];
     int			angle_num;
 
+
+    extern int x_angle;
+    g_view_y_shift = SCREENHEIGHT * finesine[(x_angle >> ANGLETOFINESHIFT) & FINEMASK] / 2;
 
     // infrared view or invulnerability
     g_fullbright = player->fixedcolormap == 1 || player->fixedcolormap == 32;
@@ -626,7 +630,7 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
     {
 	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
 	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[i>>1]);
-	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
+	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f ) + g_view_y_shift;
     }
 
     // wall is not wisible on screen
@@ -782,7 +786,7 @@ static void DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_m
     {
 	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
 	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[i>>1]);
-	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
+	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f ) + g_view_y_shift;
     }
 
     if (draw_as_sky)
@@ -974,7 +978,7 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	proj[1] /= proj[2];
 
 	vertices_proj[i].x = FloatToFixed((proj[0] + 1.0f ) * ((float)SCREENWIDTH ) * 0.5f );
-	vertices_proj[i].y = FloatToFixed((proj[1] + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
+	vertices_proj[i].y = FloatToFixed((proj[1] + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f ) + g_view_y_shift;
 	vertices_proj[i].z = FloatToFixed(proj[2]);
     }
 
@@ -1431,7 +1435,7 @@ static void AddSubsectorSprites(subsector_t* sub)
 
 	z = FloatToFixed(proj[2]);
 	sx = FloatToFixed((proj[0] + 1.0f ) * ((float) SCREENWIDTH ) * 0.5f );
-	sy = FloatToFixed((proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f );
+	sy = FloatToFixed((proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f ) + g_view_y_shift;
 
 	dsprite = g_draw_sprites.sprites + g_draw_sprites.count;
 
@@ -1552,7 +1556,7 @@ static void GenWallPartSilouette(fixed_t z_min, fixed_t z_max, int left_vertex_i
     {
 	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
 	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[(i>>1)]);
-	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f );
+	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f ) + g_view_y_shift;
     }
 
     dx = g_cur_seg_projected.screen_x[right_vertex_index] - g_cur_seg_projected.screen_x[left_vertex_index];

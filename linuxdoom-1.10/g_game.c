@@ -214,7 +214,9 @@ int		bodyqueslot;
 
 void*		statcopy;				// for statistics driver
 
-
+// rotation of head up-down
+int		x_angle = 0;
+extern int	freelook;
 
 int G_CmdChecksum (ticcmd_t* cmd)
 {
@@ -402,7 +404,15 @@ void G_BuildTiccmd (ticcmd_t* cmd)
 	}
     }
 
-    forward += mousey;
+    // PANZER - hack for freelook. this must be in other place
+    if (freelook)
+    {
+	x_angle += mousey << 20;
+	if (x_angle >  ANG45) x_angle =  ANG45;
+	if (x_angle < -ANG45) x_angle = -ANG45;
+    }
+    else
+	forward += mousey;
     if (strafe)
 	side += mousex*2;
     else
