@@ -122,24 +122,99 @@ static void BuildWallMip(const pixel_t* in_texture, pixel_t* out_texture, int sr
 
 static void BuildSkyTextue(wall_texture_t* src_wall_texture)
 {
-    int x, y;
+    /*
+    sky texture is:
+    +--------------------------+
+    |           fog            |
+    +--------------------------+
+    | texture with fogget top  |
+    +--------------------------+
+    |texture with fogget bottom|
+    +--------------------------+
+    |           fog            |
+    +--------------------------+
+    */
+    const int	c_fog_bits = 5;
+    const int	c_fog_width = 1 << c_fog_bits;
+
+    int		x, y, i;
+    int		height_log2;
+    int		avg_color[4];
+    pixel_t	pixel, fog_color;
+    pixel_t*	tex_data;
 
     if (!g_sky_texture.data)
 	free(g_sky_texture.data);
 
-    g_sky_texture.original_width  = src_wall_texture->width ;
-    g_sky_texture.original_height = src_wall_texture->height;
-    g_sky_texture.height_log2 = IntLog2Floor(src_wall_texture->height);
-    g_sky_texture.height_mask = (1 << g_sky_texture.height_log2) - 1;
-    g_sky_texture.begin_y = ID_SCREENHEIGHT/2 - src_wall_texture->height;
-
+     // allocate buffers
     g_sky_texture.width  = src_wall_texture->width ;
-    g_sky_texture.height = src_wall_texture->height;
+    g_sky_texture.height = src_wall_texture->height * 4;
     g_sky_texture.data = malloc(sizeof(pixel_t) * g_sky_texture.width * g_sky_texture.height);
 
-    for (y = 0; y < g_sky_texture.height; y++)
+    height_log2 = IntLog2Floor(g_sky_texture.height);
+    g_sky_texture.height_mask = (1 << height_log2) - 1;
+    g_sky_texture.screen_center_v = ID_SCREENHEIGHT/2 + src_wall_texture->height;
+
+    // get fog color
+    avg_color[0] = avg_color[1] = avg_color[2] = 0;
+    for(x = 0; x < g_sky_texture.width; x++)
+    {
+	pixel = src_wall_texture->mip[0][ 0 + x * src_wall_texture->height ];
+	avg_color[0] += pixel.components[0];
+	avg_color[1] += pixel.components[1];
+	avg_color[2] += pixel.components[2];
+    }
+    fog_color.components[0] = avg_color[0] / g_sky_texture.width;
+    fog_color.components[1] = avg_color[1] / g_sky_texture.width;
+    fog_color.components[2] = avg_color[2] / g_sky_texture.width;
+
+    // fill fog
+    // upper
+    tex_data = g_sky_texture.data;
+    for( x = 0 ; x < src_wall_texture->height * g_sky_texture.width; x++, tex_data++ )
+	*tex_data = fog_color;
+    // lower
+    tex_data = g_sky_texture.data + src_wall_texture->height * 3 * g_sky_texture.width;
+    for( x = 0 ; x < src_wall_texture->height * g_sky_texture.width; x++, tex_data++ )
+	*tex_data = fog_color;
+
+    // fill texture data
+    // upper
+    for (y = 0; y < src_wall_texture->height; y++)
 	for(x = 0; x < g_sky_texture.width; x++)
-	    g_sky_texture.data[ x + y * g_sky_texture.width ] = src_wall_texture->mip[0][ y + x * g_sky_texture.height ];
+	    g_sky_texture.data[ x + (y + src_wall_texture->height) * g_sky_texture.width ] =
+		src_wall_texture->mip[0][ y + x * src_wall_texture->height ];
+    // lower
+    for (y = 0; y < src_wall_texture->height; y++)
+	for(x = 0; x < g_sky_texture.width; x++)
+	{
+	    //pixel.p= 0x7f007f00;
+	    g_sky_texture.data[ x + (y + 2*src_wall_texture->height) * g_sky_texture.width ] =
+		src_wall_texture->mip[0][ y + x * src_wall_texture->height ];
+	}
+
+    // blend upper fog
+    tex_data = g_sky_texture.data + src_wall_texture->height * g_sky_texture.width;
+    for (y = 0; y < c_fog_width; y++)
+	for(x = 0; x < g_sky_texture.width; x++, tex_data++)
+	{
+	    pixel = *tex_data;
+	    for( i = 0; i < 3; i++ )
+		pixel.components[i] = (pixel.components[i] * y + fog_color.components[i] * (c_fog_width - y)) >> c_fog_bits;
+	    *tex_data = pixel;
+	}
+
+    // blend lower fog
+    tex_data = g_sky_texture.data + (2 * src_wall_texture->height + src_wall_texture->height - c_fog_width) * g_sky_texture.width;
+    for (y = 0; y < c_fog_width; y++)
+	for(x = 0; x < g_sky_texture.width; x++, tex_data++)
+	{
+	    pixel = *tex_data;
+	    for( i = 0; i < 3; i++ )
+		pixel.components[i] = (fog_color.components[i] * y + pixel.components[i] * (c_fog_width - y)) >> c_fog_bits;
+	    *tex_data = pixel;
+	}
+
 }
 
 static void InitPalette()

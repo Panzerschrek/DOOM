@@ -439,9 +439,9 @@ static void PrepareSky(player_t* player)
 
 	g_x_to_sky_u_table[x] = pixel_num;
 
-	g_sky_column_scale_table[x] = (ID_SCREENWIDTH<<FRACBITS) / SCREENWIDTH;
+	g_sky_column_scale_table[x] = tan_scaler * ID_SCREENWIDTH / SCREENWIDTH;
 	g_sky_column_scale_table[x] = FixedMul( g_sky_column_scale_table[x], abs(finecosine[angle_num & FINEMASK]) );
-	g_sky_column_scale_table[x] = FixedMul( g_sky_column_scale_table[x], SCREENHEIGHT * g_y_scaler / SCREENWIDTH );
+	g_sky_column_scale_table[x] = FixedMul( g_sky_column_scale_table[x], g_inv_y_scaler);
     }
 }
 
@@ -449,17 +449,17 @@ static void DrawSkyPolygon()
 {
     int			y;
     int			x, x_begin, x_end;
+    int			v;
     sky_texture_t*	texture;
     pixel_t*		framebuffer;
     pixel_t*		dst;
     pixel_t*		src;
-    fixed_t		v;
+    fixed_t		y_shift, dy;
 
     texture = RP_GetSkyTexture();
     framebuffer = VP_GetFramebuffer();
     src = texture->data;
-
-    // TODO - adopt for fov and aspect ratio
+    y_shift = (SCREENHEIGHT << (FRACBITS-1)) + g_view_y_shift;
 
     for (y = g_cur_screen_polygon.y_min; y < g_cur_screen_polygon.y_max; y++)
     {
@@ -470,14 +470,12 @@ static void DrawSkyPolygon()
 	if (x_end > SCREENWIDTH) x_end = SCREENWIDTH;
 
 	dst = framebuffer + x_begin + y * SCREENWIDTH;
+	dy = (y<<FRACBITS) - y_shift;
 
 	for (x = x_begin; x < x_end; x++, dst++)
 	{
-	    fixed_t dy = (y - SCREENHEIGHT/2) * FRACUNIT - g_view_y_shift;
-	    v = FixedMul(dy, g_sky_column_scale_table[x]);
-	    v>>= FRACBITS;
-	    v = (v + texture->begin_y) & texture->height_mask;
-	    *dst = texture->data[ g_x_to_sky_u_table[x] + v * texture->width];
+	    v = ( FixedMulFloorToInt(dy, g_sky_column_scale_table[x]) + texture->screen_center_v ) & texture->height_mask;
+	    *dst = src[ g_x_to_sky_u_table[x] + v * texture->width];
 	}
     }
 }
