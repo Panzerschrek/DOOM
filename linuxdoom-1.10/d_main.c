@@ -736,7 +736,7 @@ void IdentifyVersion (void)
     {
 	if (p+1 < myargc)
 	{
-	    char* iwad = malloc( strlen(doomwaddir) + + strlen("/") + strlen(myargv[p+1] + 1));
+	    char* iwad = malloc( strlen(doomwaddir) + strlen("/") + strlen(myargv[p+1]) + 1);
 	    sprintf(iwad, "%s/%s", doomwaddir, myargv[p+1]);
 
 	    // if -iwad without -game
