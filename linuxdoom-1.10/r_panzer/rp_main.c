@@ -205,7 +205,7 @@ static fixed_t GetSegLength(seg_t* seg)
 {
     // TODO - remove sqrt and type convertions
     float d[2] = { FixedToFloat(seg->v1->x - seg->v2->x), FixedToFloat(seg->v1->y - seg->v2->y) };
-    return FloatToFixed( sqrt( d[0] * d[0] + d[1] * d[1] ) );
+    return FloatToFixed( sqrtf( d[0] * d[0] + d[1] * d[1] ) );
 }
 
 static void ProjectCurSeg()
@@ -1416,7 +1416,7 @@ static void AddSubsectorSprites(subsector_t* sub)
 
 	    dot   = FixedMul(dir_to_mob[0], mob_dir[0]) + FixedMul(dir_to_mob[1], mob_dir[1]);
 	    cross = FixedMul(dir_to_mob[1], mob_dir[0]) - FixedMul(dir_to_mob[0], mob_dir[1]);
-	    angle = atan2(FixedToFloat(cross), FixedToFloat(dot)) + pi*3.0f;
+	    angle = atan2f(FixedToFloat(cross), FixedToFloat(dot)) + pi*3.0f;
 	    angle_num = ((int)((8.0f*(angle + pi/8.0f)) / (2.0f * pi))) & 7;
 	    sprite = RP_GetSpritePicture(frame->lump[angle_num]);
 	}
@@ -1630,7 +1630,6 @@ static void GenSegSilouette(boolean back)
 
 	    if (g_transparent_walls_count == g_transparent_walls_capacity) goto mid_texture_no_draw;
 	    mid_wall = g_transparent_walls + g_transparent_walls_count;
-	    g_transparent_walls_count++;
 
 	    g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_seg->sidedef->midtexture]);
 
@@ -1665,20 +1664,21 @@ static void GenSegSilouette(boolean back)
 	    mid_wall->world_z[1] = h[1];
 
 	    x_begin = FixedRoundToInt(mid_wall->screen_x[0]);
+	    if (x_begin < 0) x_begin = 0;
 	    x_end   = FixedRoundToInt(mid_wall->screen_x[1]);
+	    if (x_end > SCREENWIDTH) x_end = SCREENWIDTH;
 	    dx = x_end - x_begin;
+	    if (dx <= 0) goto mid_texture_no_draw;
 
 	    if (dx + g_draw_sprites.next_pixel_range_index > g_draw_sprites.pixel_ranges_capacity)
-	    {
-	    	// no space for pixel ranges
-	    	g_transparent_walls_count--;
-	    	goto mid_texture_no_draw;
-	    }
+		goto mid_texture_no_draw; // no space for pixel ranges
+	    
 	    pixel_range = g_draw_sprites.pixel_ranges + g_draw_sprites.next_pixel_range_index;
 	    memcpy( pixel_range, g_occlusion_buffer + x_begin, dx * sizeof(pixel_range_t) );
 	    mid_wall->pixel_range_on_x0 = pixel_range - x_begin;
 
 	    g_draw_sprites.next_pixel_range_index += dx;
+	    g_transparent_walls_count++;
 	}
 	mid_texture_no_draw:;
     }

@@ -358,7 +358,7 @@ static void InitLightingGammaTable()
 
     for( i = 0; i < 256; i++ )
     {
-	float k = pow(((float)(i+1)) / 256.0f, gamma) * 65536.0f;
+	float k = powf(((float)(i+1)) / 256.0f, gamma) * 65536.0f;
 	if (k > 65536.0f) k = 65536.0f;
 
 	g_lighting_gamma_table[i] = (int)k;
