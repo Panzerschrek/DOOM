@@ -1174,9 +1174,10 @@ static void DrawSprite(draw_sprite_t* dsprite)
 {
     sprite_picture_t*	sprite;
     fixed_t		v, u_end, v_end;
-    fixed_t		sprite_width, sprite_height;
+    fixed_t		mip_width, mip_height;
     int			cur_mip_width;
     int			y, mip;
+    fixed_t		mip_scaler[2];
     void		(*spr_func_test)();
     void		(*spr_func_no_test)();
     pixel_t*		fb;
@@ -1189,23 +1190,25 @@ static void DrawSprite(draw_sprite_t* dsprite)
     spr_func_no_test = g_sprites_funcs[0][dsprite->is_spectre ? 1 : 0][dsprite->is_flipped ? 1 : 0];
     if (!dsprite->pixel_range) spr_func_test = spr_func_no_test;
 
-    sprite_width  = sprite->width  << FRACBITS;
-    sprite_height = sprite->height << FRACBITS;
-
     mip = IntLog2Floor(dsprite->v_step >> FRACBITS);
     if (mip > sprite->max_mip) mip = sprite->max_mip;
 
-    u_end = dsprite->u_begin + (dsprite->x_end - dsprite->x_begin) * dsprite->u_step;
-    if (u_end > sprite_width ) u_end = sprite_width;
-    v_end = dsprite->v_begin + (SCREENHEIGHT - dsprite->y_begin) * dsprite->v_step;
-    if (v_end > sprite_height) v_end = sprite_height;
+    mip_width  = (sprite->width >>mip) << FRACBITS;
+    mip_height = (sprite->height>>mip) << FRACBITS;
 
-    dsprite->u_begin >>= mip;
-    dsprite->v_begin >>= mip;
-    dsprite->u_step >>= mip;
-    dsprite->v_step >>= mip;
-    u_end  >>= mip;
-    v_end  >>= mip;
+    // rescaling for sprites with not power of two size
+    mip_scaler[0] = mip_width  / sprite->width ;
+    mip_scaler[1] = mip_height / sprite->height;
+
+    dsprite->u_begin = FixedMul(dsprite->u_begin, mip_scaler[0]);
+    dsprite->v_begin = FixedMul(dsprite->v_begin, mip_scaler[1]);
+    dsprite->u_step = FixedMul(dsprite->u_step, mip_scaler[0]);
+    dsprite->v_step = FixedMul(dsprite->v_step, mip_scaler[1]);
+
+    u_end = dsprite->u_begin + (dsprite->x_end - dsprite->x_begin) * dsprite->u_step;
+    if (u_end > mip_width ) u_end = mip_width;
+    v_end = dsprite->v_begin + (SCREENHEIGHT - dsprite->y_begin) * dsprite->v_step;
+    if (v_end > mip_height) v_end = mip_height;
 
     fb = VP_GetFramebuffer() + dsprite->x_begin;
     cur_mip_width = sprite->width >> mip;
