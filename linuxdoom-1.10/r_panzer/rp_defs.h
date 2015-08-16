@@ -83,6 +83,9 @@ typedef struct sky_texture_s
     int		width;
     int		height;
 
+    int		height_mask;
+    int		screen_center_v;
+
     pixel_t*	data;
 } sky_texture_t;
 

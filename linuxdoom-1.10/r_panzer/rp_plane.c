@@ -39,7 +39,7 @@ static void NormalizeVec(fixed_t x, fixed_t y, fixed_t* out)
 {
     float xy[2]= { FixedToFloat(x), FixedToFloat(y) };
 
-    float inv_len = 1.0f / sqrt(xy[0] * xy[0] + xy[1] * xy[1]);
+    float inv_len = 1.0f / sqrtf(xy[0] * xy[0] + xy[1] * xy[1]);
     out[0] = FloatToFixed(xy[0] * inv_len);
     out[1] = FloatToFixed(xy[1] * inv_len);
 }

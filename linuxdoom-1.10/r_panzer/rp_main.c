@@ -121,7 +121,7 @@ static struct
 
 static struct
 {
-    // array with size SCREENWIDTH
+    // array with size SCREENHEIGHT
     pixel_range_t	*x;
     int			y_min;
     int			y_max;
@@ -132,6 +132,7 @@ static struct
 
 // array with size SCREENWIDTH
 static int*		g_x_to_sky_u_table;
+static fixed_t*		g_sky_column_scale_table; // dv/dy
 
 // array with size SCREENWIDTH
 static pixel_range_t*	g_occlusion_buffer;
@@ -193,17 +194,6 @@ static pixel_t BlendPixels(pixel_t p0, pixel_t p1)
     return p0;
 }
 
-static int IntLog2Floor(int x)
-{
-    int i = -1;
-    while( x > 0)
-    {
-	x>>= 1;
-	i++;
-    }
-    return i >= 0 ? i : 0;
-}
-
 static int PositiveMod( int x, int y )
 {
 	int div= x/y;
@@ -215,7 +205,7 @@ static fixed_t GetSegLength(seg_t* seg)
 {
     // TODO - remove sqrt and type convertions
     float d[2] = { FixedToFloat(seg->v1->x - seg->v2->x), FixedToFloat(seg->v1->y - seg->v2->y) };
-    return FloatToFixed( sqrt( d[0] * d[0] + d[1] * d[1] ) );
+    return FloatToFixed( sqrtf( d[0] * d[0] + d[1] * d[1] ) );
 }
 
 static void ProjectCurSeg()
@@ -407,14 +397,16 @@ static void PreparePolygon(screen_vertex_t* vertices, int vertex_count, boolean 
 
 static void PrepareSky(player_t* player)
 {
-    int		x;
-    fixed_t 	sign, cur_x_tan;
-    fixed_t	tan_scaler;
-    int		tan_num, angle_num, final_angle_num;
-    int		pixel_num;
-    int		sky_tex_pixels;
+    int			x;
+    fixed_t 		sign, cur_x_tan;
+    fixed_t		tan_scaler;
+    int			tan_num, angle_num, final_angle_num;
+    int			pixel_num;
+    int			sky_tex_pixels;
+    sky_texture_t*	tex;
 
-    sky_tex_pixels = ID_SKY_TEXTURE_REPEATS * RP_GetSkyTexture()->width;
+    tex = RP_GetSkyTexture();
+    sky_tex_pixels = ID_SKY_TEXTURE_REPEATS * tex->width;
 
     tan_scaler = -FixedDiv(FRACUNIT, finetangent[RP_HALF_FOV_X >> ANGLETOFINESHIFT]);
 
@@ -433,19 +425,23 @@ static void PrepareSky(player_t* player)
 
 	if (cur_x_tan <= FRACUNIT)
 	{
-	    tan_num = cur_x_tan >> (FRACBITS - SLOPEBITS);
+	    tan_num = cur_x_tan >> DBITS;
 	    angle_num = sign * (tantoangle[tan_num]>>ANGLETOFINESHIFT);
 	}
 	else
 	{
-	    tan_num = FixedDiv(FRACUNIT, cur_x_tan) >> (FRACBITS - SLOPEBITS);
-	    angle_num = sign * ( ANG45 - (tantoangle[tan_num]>>ANGLETOFINESHIFT));
+	    tan_num = FixedDiv(FRACUNIT, cur_x_tan) >> DBITS; // ctg(x)
+	    angle_num = -sign * ((tantoangle[tan_num] + ANG90) >> ANGLETOFINESHIFT);
 	}
 
 	final_angle_num = ((player->mo->angle>>ANGLETOFINESHIFT) - angle_num) & FINEMASK;
-	pixel_num = (final_angle_num * sky_tex_pixels / FINEANGLES) % RP_GetSkyTexture()->width;
+	pixel_num = (final_angle_num * sky_tex_pixels / FINEANGLES) % tex->width;
 
 	g_x_to_sky_u_table[x] = pixel_num;
+
+	g_sky_column_scale_table[x] = tan_scaler * ID_SCREENWIDTH / SCREENWIDTH;
+	g_sky_column_scale_table[x] = FixedMul( g_sky_column_scale_table[x], abs(finecosine[angle_num & FINEMASK]) );
+	g_sky_column_scale_table[x] = FixedMul( g_sky_column_scale_table[x], g_inv_y_scaler);
     }
 }
 
@@ -453,17 +449,17 @@ static void DrawSkyPolygon()
 {
     int			y;
     int			x, x_begin, x_end;
+    int			v;
     sky_texture_t*	texture;
     pixel_t*		framebuffer;
     pixel_t*		dst;
     pixel_t*		src;
-    int		v;
+    fixed_t		y_shift, dy;
 
     texture = RP_GetSkyTexture();
     framebuffer = VP_GetFramebuffer();
     src = texture->data;
-
-    // TODO - adopt for fov and aspect ratio
+    y_shift = (SCREENHEIGHT << (FRACBITS-1)) + g_view_y_shift;
 
     for (y = g_cur_screen_polygon.y_min; y < g_cur_screen_polygon.y_max; y++)
     {
@@ -474,12 +470,13 @@ static void DrawSkyPolygon()
 	if (x_end > SCREENWIDTH) x_end = SCREENWIDTH;
 
 	dst = framebuffer + x_begin + y * SCREENWIDTH;
-
-	v = FixedMulFloorToInt((((y<<FRACBITS) - g_view_y_shift) / SCREENHEIGHT) * ID_SCREENHEIGHT, g_inv_y_scaler) + texture->height * 8;
-	src = texture->data + (v % texture->height) * texture->width;
+	dy = (y<<FRACBITS) - y_shift;
 
 	for (x = x_begin; x < x_end; x++, dst++)
-	    *dst = src[ g_x_to_sky_u_table[x] ];
+	{
+	    v = ( FixedMulFloorToInt(dy, g_sky_column_scale_table[x]) + texture->screen_center_v ) & texture->height_mask;
+	    *dst = src[ g_x_to_sky_u_table[x] + v * texture->width];
+	}
     }
 }
 
@@ -1419,7 +1416,7 @@ static void AddSubsectorSprites(subsector_t* sub)
 
 	    dot   = FixedMul(dir_to_mob[0], mob_dir[0]) + FixedMul(dir_to_mob[1], mob_dir[1]);
 	    cross = FixedMul(dir_to_mob[1], mob_dir[0]) - FixedMul(dir_to_mob[0], mob_dir[1]);
-	    angle = atan2(FixedToFloat(cross), FixedToFloat(dot)) + pi*3.0f;
+	    angle = atan2f(FixedToFloat(cross), FixedToFloat(dot)) + pi*3.0f;
 	    angle_num = ((int)((8.0f*(angle + pi/8.0f)) / (2.0f * pi))) & 7;
 	    sprite = RP_GetSpritePicture(frame->lump[angle_num]);
 	}
@@ -1633,7 +1630,6 @@ static void GenSegSilouette(boolean back)
 
 	    if (g_transparent_walls_count == g_transparent_walls_capacity) goto mid_texture_no_draw;
 	    mid_wall = g_transparent_walls + g_transparent_walls_count;
-	    g_transparent_walls_count++;
 
 	    g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_seg->sidedef->midtexture]);
 
@@ -1668,20 +1664,21 @@ static void GenSegSilouette(boolean back)
 	    mid_wall->world_z[1] = h[1];
 
 	    x_begin = FixedRoundToInt(mid_wall->screen_x[0]);
+	    if (x_begin < 0) x_begin = 0;
 	    x_end   = FixedRoundToInt(mid_wall->screen_x[1]);
+	    if (x_end > SCREENWIDTH) x_end = SCREENWIDTH;
 	    dx = x_end - x_begin;
+	    if (dx <= 0) goto mid_texture_no_draw;
 
 	    if (dx + g_draw_sprites.next_pixel_range_index > g_draw_sprites.pixel_ranges_capacity)
-	    {
-	    	// no space for pixel ranges
-	    	g_transparent_walls_count--;
-	    	goto mid_texture_no_draw;
-	    }
+		goto mid_texture_no_draw; // no space for pixel ranges
+	    
 	    pixel_range = g_draw_sprites.pixel_ranges + g_draw_sprites.next_pixel_range_index;
 	    memcpy( pixel_range, g_occlusion_buffer + x_begin, dx * sizeof(pixel_range_t) );
 	    mid_wall->pixel_range_on_x0 = pixel_range - x_begin;
 
 	    g_draw_sprites.next_pixel_range_index += dx;
+	    g_transparent_walls_count++;
 	}
 	mid_texture_no_draw:;
     }
@@ -1943,8 +1940,9 @@ void R_32b_InitInterface()
 
 static void InitStaticData()
 {
-    g_cur_screen_polygon.x = Z_Malloc(SCREENWIDTH * sizeof(pixel_range_t), PU_STATIC, NULL);
+    g_cur_screen_polygon.x = Z_Malloc(SCREENHEIGHT * sizeof(pixel_range_t), PU_STATIC, NULL);
     g_x_to_sky_u_table = Z_Malloc(SCREENWIDTH * sizeof(int), PU_STATIC, NULL);
+    g_sky_column_scale_table = Z_Malloc(SCREENWIDTH * sizeof(fixed_t), PU_STATIC, NULL);
     g_occlusion_buffer = Z_Malloc(SCREENWIDTH * sizeof(pixel_range_t), PU_STATIC, NULL);
 
     g_draw_sprites.capacity = 512;
