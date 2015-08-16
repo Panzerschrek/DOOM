@@ -402,11 +402,9 @@ static void PrepareSky(player_t* player)
     fixed_t		tan_scaler;
     int			tan_num, angle_num, final_angle_num;
     int			pixel_num;
-    int			sky_tex_pixels;
     sky_texture_t*	tex;
 
     tex = RP_GetSkyTexture();
-    sky_tex_pixels = ID_SKY_TEXTURE_REPEATS * tex->width;
 
     tan_scaler = -FixedDiv(FRACUNIT, finetangent[RP_HALF_FOV_X >> ANGLETOFINESHIFT]);
 
@@ -435,7 +433,7 @@ static void PrepareSky(player_t* player)
 	}
 
 	final_angle_num = ((player->mo->angle>>ANGLETOFINESHIFT) - angle_num) & FINEMASK;
-	pixel_num = (final_angle_num * sky_tex_pixels / FINEANGLES) % tex->width;
+	pixel_num = (final_angle_num * ID_SKY_CYLINDER_COLUMNS / FINEANGLES) % tex->width;
 
 	g_x_to_sky_u_table[x] = pixel_num;
 

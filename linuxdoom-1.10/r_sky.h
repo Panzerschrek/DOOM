@@ -34,7 +34,7 @@
 // The sky map is 256*128*4 maps.
 #define ANGLETOSKYSHIFT		22
 
-#define ID_SKY_TEXTURE_REPEATS	4
+#define ID_SKY_CYLINDER_COLUMNS	1024
 
 extern  int		skytexture;
 extern int		skytexturemid;
