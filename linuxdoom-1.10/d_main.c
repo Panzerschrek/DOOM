@@ -253,7 +253,7 @@ void D_Display (void)
     if (gamestate != wipegamestate)
     {
 	wipe = true;
-	//wipe_StartScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
+	if (!v_32bit) wipe_StartScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
     }
     else
 	wipe = false;
@@ -341,25 +341,24 @@ void D_Display (void)
     }
 
     // wipe update
-    //wipe_EndScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
+    if (!v_32bit) wipe_EndScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
 
     wipestart = I_GetTime () - 1;
-#if 0
-    do
-    {
+    if (!v_32bit)
 	do
 	{
-	    nowtime = I_GetTime ();
-	    tics = nowtime - wipestart;
-	} while (!tics);
-	wipestart = nowtime;
-	done = wipe_ScreenWipe(wipe_Melt
-			       , 0, 0, SCREENWIDTH, SCREENHEIGHT, tics * SCREENHEIGHT / ID_SCREENHEIGHT);
-	I_UpdateNoBlit ();
-	M_Drawer ();                            // menu is drawn even on top of wipes
-	I_FinishUpdate ();                      // page flip or blit buffer
-    } while (!done);
-#endif
+	    do
+	    {
+		nowtime = I_GetTime ();
+		tics = nowtime - wipestart;
+	    } while (!tics);
+	    wipestart = nowtime;
+	    done = wipe_ScreenWipe(wipe_Melt
+				   , 0, 0, SCREENWIDTH, SCREENHEIGHT, tics * SCREENHEIGHT / ID_SCREENHEIGHT);
+	    I_UpdateNoBlit ();
+	    M_Drawer ();                            // menu is drawn even on top of wipes
+	    I_FinishUpdate ();                      // page flip or blit buffer
+	} while (!done);
 }
 
 
