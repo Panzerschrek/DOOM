@@ -71,7 +71,6 @@ rcsid[] = "$Id: g_game.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 #include "g_game.h"
 
 
-#define SAVEGAMESIZE	0x2c000
 #define SAVESTRINGSIZE	24
 
 
@@ -1293,6 +1292,7 @@ void G_DoSaveGame (void)
     char	name2[VERSIONSIZE];
     char*	description;
     int		length;
+    int		actual_length;
     int		i;
 
     if (M_CheckParm("-cdrom"))
@@ -1301,7 +1301,9 @@ void G_DoSaveGame (void)
 	sprintf (name,SAVEGAMENAME"%d.dsg",savegameslot);
     description = savedescription;
 
-    save_p = savebuffer = screens[1]+0x4000;
+    length = P_SaveBytesForPlayers() + P_SaveBytesForWorld() + P_SaveBytesForThinkers() + P_SaveBytesForSpecials();
+
+    save_p = savebuffer = Z_Malloc(length, PU_STATIC, NULL);
 
     memcpy (save_p, description, SAVESTRINGSIZE);
     save_p += SAVESTRINGSIZE;
@@ -1326,17 +1328,17 @@ void G_DoSaveGame (void)
 
     *save_p++ = 0x1d;		// consistancy marker
 
-    length = save_p - savebuffer;
-    if (length > SAVEGAMESIZE)
+    actual_length = save_p - savebuffer;
+
+    if (actual_length > length)
 	I_Error ("Savegame buffer overrun");
-    M_WriteFile (name, savebuffer, length);
+    M_WriteFile (name, savebuffer, actual_length);
     gameaction = ga_nothing;
     savedescription[0] = 0;
 
     players[consoleplayer].message = GGSAVED;
 
-    // draw the pattern into the back screen
-    R_FillBackScreen ();
+    Z_Free(savebuffer);
 }
 
 

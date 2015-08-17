@@ -41,6 +41,7 @@ byte*		save_p;
 //  so that the load/save works on SGI&Gecko.
 #define PADSAVEP()	save_p += (4 - ((int) save_p & 3)) & 3
 
+#define MAX_PAD_BYTES 8
 
 
 //
@@ -71,6 +72,11 @@ void P_ArchivePlayers (void)
 	    }
 	}
     }
+}
+
+int P_SaveBytesForPlayers(void)
+{
+    return (sizeof(player_t) + MAX_PAD_BYTES) * MAXPLAYERS + MAX_PAD_BYTES;
 }
 
 
@@ -159,6 +165,14 @@ void P_ArchiveWorld (void)
     }
 
     save_p = (byte *)put;
+}
+
+int P_SaveBytesForWorld()
+{
+    return
+	numsectors * 7 * sizeof(short) +
+	numlines * (3 + 2 * 5) * sizeof(short) +
+	MAX_PAD_BYTES;
 }
 
 
@@ -258,6 +272,22 @@ void P_ArchiveThinkers (void)
 
     // add a terminating marker
     *save_p++ = tc_end;
+}
+
+int P_SaveBytesForThinkers(void)
+{
+    thinker_t*		th;
+    int			bytes = 0;
+
+    for (th = thinkercap.next ; th != &thinkercap ; th=th->next)
+    {
+	if (th->function.acp1 == (actionf_p1)P_MobjThinker)
+	{
+	    bytes += sizeof(byte) + sizeof(mobj_t) + MAX_PAD_BYTES;
+	}
+    }
+
+    return bytes + sizeof(byte) + MAX_PAD_BYTES;
 }
 
 
@@ -468,6 +498,69 @@ void P_ArchiveSpecials (void)
     // add a terminating marker
     *save_p++ = tc_endspecials;
 
+}
+
+int P_SaveBytesForSpecials(void)
+{
+    thinker_t*		th;
+    int			i;
+    int			bytes = 0;
+
+    for (th = thinkercap.next ; th != &thinkercap ; th=th->next)
+    {
+	if (th->function.acv == (actionf_v)NULL)
+	{
+	    for (i = 0; i < MAXCEILINGS;i++)
+		if (activeceilings[i] == (ceiling_t *)th) break;
+
+	    if (i<MAXCEILINGS)
+		bytes += MAX_PAD_BYTES + sizeof(ceiling_t) + sizeof(byte);
+	    continue;
+	}
+
+	if (th->function.acp1 == (actionf_p1)T_MoveCeiling)
+	{
+	    bytes += MAX_PAD_BYTES + sizeof(ceiling_t) + sizeof(byte);
+	    continue;
+	}
+
+	if (th->function.acp1 == (actionf_p1)T_VerticalDoor)
+	{
+	    bytes += MAX_PAD_BYTES + sizeof(vldoor_t) + sizeof(byte);
+	    continue;
+	}
+
+	if (th->function.acp1 == (actionf_p1)T_MoveFloor)
+	{
+	    bytes += MAX_PAD_BYTES + sizeof(floormove_t) + sizeof(byte);
+	    continue;
+	}
+
+	if (th->function.acp1 == (actionf_p1)T_PlatRaise)
+	{
+	    bytes += MAX_PAD_BYTES + sizeof(plat_t) + sizeof(byte);
+	    continue;
+	}
+
+	if (th->function.acp1 == (actionf_p1)T_LightFlash)
+	{
+	    bytes += MAX_PAD_BYTES + sizeof(lightflash_t) + sizeof(byte);
+	    continue;
+	}
+
+	if (th->function.acp1 == (actionf_p1)T_StrobeFlash)
+	{
+	    bytes += MAX_PAD_BYTES + sizeof(strobe_t) + sizeof(byte);
+	    continue;
+	}
+
+	if (th->function.acp1 == (actionf_p1)T_Glow)
+	{
+	    bytes += MAX_PAD_BYTES + sizeof(glow_t) + sizeof(byte);
+	    continue;
+	}
+    }
+    return bytes + MAX_PAD_BYTES;
 }
 
 
