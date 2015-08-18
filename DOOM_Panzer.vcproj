@@ -59,7 +59,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalOptions="SDL2.lib SDL2main.lib"
+				AdditionalOptions="SDL2.lib SDL2main.lib WS2_32.lib"
 				OutputFile="DOOM_Panzer_msvc_d.exe"
 				AdditionalLibraryDirectories="&quot;C:\lnk\SDL2-2.0.3\lib\x86&quot;"
 				GenerateDebugInformation="true"
@@ -140,7 +140,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalOptions="SDL2.lib SDL2main.lib"
+				AdditionalOptions="SDL2.lib SDL2main.lib WS2_32.lib"
 				OutputFile="DOOM_Panzer_msvc.exe"
 				AdditionalLibraryDirectories="&quot;C:\lnk\SDL2-2.0.3\lib\x86&quot;"
 				GenerateDebugInformation="true"
@@ -232,6 +232,14 @@
 				>
 			</File>
 			<File
+				RelativePath=".\linuxdoom-1.10\i_net.c"
+				>
+			</File>
+			<File
+				RelativePath=".\linuxdoom-1.10\i_net_impl.c"
+				>
+			</File>
+			<File
 				RelativePath=".\linuxdoom-1.10\i_sound.c"
 				>
 			</File>
@@ -281,10 +289,6 @@
 			</File>
 			<File
 				RelativePath=".\linuxdoom-1.10\m_swap.c"
-				>
-			</File>
-			<File
-				RelativePath=".\linuxdoom-1.10\net_stub.c"
 				>
 			</File>
 			<File
