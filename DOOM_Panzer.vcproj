@@ -41,7 +41,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="&quot;C:\lnk\SDL2-2.0.3\include&quot;"
-				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS"
+				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;PANZER_DOOM_WIDNOWS"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
@@ -118,7 +118,7 @@
 				FavorSizeOrSpeed="1"
 				OmitFramePointers="true"
 				AdditionalIncludeDirectories="&quot;C:\lnk\SDL2-2.0.3\include&quot;"
-				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS"
+				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;PANZER_DOOM_WIDNOWS"
 				StringPooling="true"
 				ExceptionHandling="0"
 				RuntimeLibrary="2"
@@ -551,6 +551,10 @@
 			</File>
 			<File
 				RelativePath=".\linuxdoom-1.10\i_net.h"
+				>
+			</File>
+			<File
+				RelativePath=".\linuxdoom-1.10\i_net_impl.h"
 				>
 			</File>
 			<File
