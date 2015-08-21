@@ -38,11 +38,13 @@
 		</Build>
 		<Compiler>
 			<Add option="-Wall" />
+			<Add option="-DPANZER_DOOM_WIDNOWS" />
 			<Add directory="..\SDL2-2.0.3\include" />
 		</Compiler>
 		<Linker>
 			<Add library="..\SDL2-2.0.3\lib\x86\SDL2main.lib" />
 			<Add library="..\SDL2-2.0.3\lib\x86\SDL2.lib" />
+			<Add library="C:\Program Files\Microsoft SDKs\Windows\v6.0A\Lib\WS2_32.lib" />
 			<Add directory="..\SDL2-2.0.3\lib\x86" />
 		</Linker>
 		<Unit filename="linuxdoom-1.10\am_map.c">
@@ -107,9 +109,12 @@
 		</Unit>
 		<Unit filename="linuxdoom-1.10\i_net.c">
 			<Option compilerVar="CC" />
-			<Option target="&lt;{~None~}&gt;" />
 		</Unit>
 		<Unit filename="linuxdoom-1.10\i_net.h" />
+		<Unit filename="linuxdoom-1.10\i_net_impl.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="linuxdoom-1.10\i_net_impl.h" />
 		<Unit filename="linuxdoom-1.10\i_sound.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -162,9 +167,6 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="linuxdoom-1.10\m_swap.h" />
-		<Unit filename="linuxdoom-1.10\net_stub.c">
-			<Option compilerVar="CC" />
-		</Unit>
 		<Unit filename="linuxdoom-1.10\p_ceilng.c">
 			<Option compilerVar="CC" />
 		</Unit>

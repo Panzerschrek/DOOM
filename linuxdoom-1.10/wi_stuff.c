@@ -1012,38 +1012,63 @@ void WI_drawDeathmatchStats(void)
     WI_drawLF();
 
     // draw stat titles (top line)
-    V_DrawPatch(DM_TOTALSX-SHORT(total->width)/2,
-		DM_MATRIXY-WI_SPACINGY+10,
-		total);
+    V_DrawPatchScaled(
+	(DM_TOTALSX-SHORT(total->width)/2) * menuscale,
+	(DM_MATRIXY-WI_SPACINGY+10) * menuscale,
+	total->width  * menuscale,
+	total->height * menuscale,
+	total);
 
-    V_DrawPatch(DM_KILLERSX, DM_KILLERSY, killers);
-    V_DrawPatch(DM_VICTIMSX, DM_VICTIMSY, victims);
+    V_DrawPatchScaled(
+	DM_KILLERSX * menuscale,
+	DM_KILLERSY * menuscale,
+	killers->width  * menuscale,
+	killers->height * menuscale,
+	killers);
+    V_DrawPatchScaled(
+	DM_VICTIMSX * menuscale,
+	DM_VICTIMSY * menuscale,
+	victims->width  * menuscale,
+	victims->height * menuscale,
+	victims);
 
     // draw P?
-    x = DM_MATRIXX + DM_SPACINGX;
-    y = DM_MATRIXY;
+    x = (DM_MATRIXX + DM_SPACINGX) * menuscale;
+    y = DM_MATRIXY * menuscale;
 
     for (i=0 ; i<MAXPLAYERS ; i++)
     {
 	if (playeringame[i])
 	{
-	    V_DrawPatch(x-SHORT(p[i]->width)/2,
-			DM_MATRIXY - WI_SPACINGY,
-			p[i]);
+	    V_DrawPatchScaled(
+		x - SHORT(p[i]->width)/2 * menuscale,
+		(DM_MATRIXY - WI_SPACINGY) * menuscale,
+		p[i]->width  * menuscale,
+		p[i]->height * menuscale,
+		p[i]);
 
-	    V_DrawPatch(DM_MATRIXX-SHORT(p[i]->width)/2,
-			y,
-			p[i]);
+	    V_DrawPatchScaled(
+		(DM_MATRIXX-SHORT(p[i]->width)/2) * menuscale,
+		y,
+		p[i]->width  * menuscale,
+		p[i]->height * menuscale,
+		p[i]);
 
 	    if (i == me)
 	    {
-		V_DrawPatch(x-SHORT(p[i]->width)/2,
-			    DM_MATRIXY - WI_SPACINGY,
-			    bstar);
+		V_DrawPatchScaled(
+		    x - SHORT(p[i]->width)/2 * menuscale,
+		    (DM_MATRIXY - WI_SPACINGY) * menuscale,
+		    bstar->width  * menuscale,
+		    bstar->height * menuscale,
+		    bstar);
 
-		V_DrawPatch(DM_MATRIXX-SHORT(p[i]->width)/2,
-			    y,
-			    star);
+		V_DrawPatchScaled(
+		    (DM_MATRIXX-SHORT(p[i]->width)/2) * menuscale,
+		    y,
+		    star->width  * menuscale,
+		    star->height * menuscale,
+		    star);
 	    }
 	}
 	else
@@ -1053,17 +1078,17 @@ void WI_drawDeathmatchStats(void)
 	    // V_DrawPatch(DM_MATRIXX-SHORT(bp[i]->width)/2,
 	    //   y, FB, bp[i]);
 	}
-	x += DM_SPACINGX;
-	y += WI_SPACINGY;
+	x += DM_SPACINGX * menuscale;
+	y += WI_SPACINGY * menuscale;
     }
 
     // draw stats
-    y = DM_MATRIXY+10;
-    w = SHORT(num[0]->width);
+    y = (DM_MATRIXY+10) * menuscale;
+    w = SHORT(num[0]->width) * menuscale;
 
     for (i=0 ; i<MAXPLAYERS ; i++)
     {
-	x = DM_MATRIXX + DM_SPACINGX;
+	x = (DM_MATRIXX + DM_SPACINGX) * menuscale;
 
 	if (playeringame[i])
 	{
@@ -1072,11 +1097,11 @@ void WI_drawDeathmatchStats(void)
 		if (playeringame[j])
 		    WI_drawNum(x+w, y, dm_frags[i][j], 2);
 
-		x += DM_SPACINGX;
+		x += DM_SPACINGX * menuscale;
 	    }
-	    WI_drawNum(DM_TOTALSX+w, y, dm_totals[i], 2);
+	    WI_drawNum((DM_TOTALSX+w) * menuscale, y, dm_totals[i], 2);
 	}
-	y += WI_SPACINGY;
+	y += WI_SPACINGY * menuscale;
     }
 }
 
@@ -1280,42 +1305,73 @@ void WI_drawNetgameStats(void)
     WI_drawLF();
 
     // draw stat titles (top line)
-    V_DrawPatch(NG_STATSX+NG_SPACINGX-SHORT(kills->width),
-		NG_STATSY, kills);
+    V_DrawPatchScaled(
+	(NG_STATSX+NG_SPACINGX-SHORT(kills->width)) * menuscale,
+	NG_STATSY * menuscale,
+	kills->width  * menuscale,
+	kills->height * menuscale,
+	kills);
 
-    V_DrawPatch(NG_STATSX+2*NG_SPACINGX-SHORT(items->width),
-		NG_STATSY, items);
+    V_DrawPatchScaled(
+	(NG_STATSX+2*NG_SPACINGX-SHORT(items->width)) * menuscale,
+	NG_STATSY * menuscale,
+	items->width  * menuscale,
+	items->height * menuscale,
+	items);
 
-    V_DrawPatch(NG_STATSX+3*NG_SPACINGX-SHORT(secret->width),
-		NG_STATSY, secret);
+    V_DrawPatchScaled(
+	(NG_STATSX+3*NG_SPACINGX-SHORT(secret->width)) * menuscale,
+	NG_STATSY * menuscale,
+	secret->width  * menuscale,
+	secret->height * menuscale,
+	secret);
 
     if (dofrags)
-	V_DrawPatch(NG_STATSX+4*NG_SPACINGX-SHORT(frags->width),
-		    NG_STATSY, frags);
+	V_DrawPatchScaled(
+	    (NG_STATSX+4*NG_SPACINGX-SHORT(frags->width)) * menuscale,
+	    NG_STATSY * menuscale,
+	    frags->width  * menuscale,
+	    frags->height * menuscale,
+	    frags);
 
     // draw stats
-    y = NG_STATSY + SHORT(kills->height);
+    y = (NG_STATSY + SHORT(kills->height)) * menuscale;
 
     for (i=0 ; i<MAXPLAYERS ; i++)
     {
 	if (!playeringame[i])
 	    continue;
 
-	x = NG_STATSX;
-	V_DrawPatch(x-SHORT(p[i]->width), y, p[i]);
+	x = NG_STATSX * menuscale;
+	V_DrawPatchScaled(
+	    x-SHORT(p[i]->width) * menuscale, y,
+	    p[i]->width * menuscale, p[i]->height * menuscale,
+	    p[i]);
 
 	if (i == me)
-	    V_DrawPatch(x-SHORT(p[i]->width), y, star);
+	    V_DrawPatchScaled(
+		x-SHORT(p[i]->width) * menuscale,y,
+		star->width * menuscale, star->height * menuscale,
+		star);
 
-	x += NG_SPACINGX;
-	WI_drawPercent(x-pwidth, y+10, cnt_kills[i]);	x += NG_SPACINGX;
-	WI_drawPercent(x-pwidth, y+10, cnt_items[i]);	x += NG_SPACINGX;
-	WI_drawPercent(x-pwidth, y+10, cnt_secret[i]);	x += NG_SPACINGX;
+	x += NG_SPACINGX * menuscale;
+	WI_drawPercent(
+	    x-pwidth * menuscale, y+10 * menuscale,
+	    cnt_kills[i]);
+	x += NG_SPACINGX * menuscale;
+	WI_drawPercent(
+	    x-pwidth * menuscale, y+10 * menuscale,
+	    cnt_items[i]);
+	x += NG_SPACINGX * menuscale;
+	WI_drawPercent(
+	    x-pwidth * menuscale, y+10 * menuscale,
+	    cnt_secret[i]);
+	x += NG_SPACINGX * menuscale;
 
 	if (dofrags)
-	    WI_drawNum(x, y+10, cnt_frags[i], -1);
+	    WI_drawNum(x, y+10*menuscale, cnt_frags[i], -1);
 
-	y += WI_SPACINGY;
+	y += WI_SPACINGY * menuscale;
     }
 
 }
