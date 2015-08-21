@@ -62,12 +62,12 @@ BindToLocalPort
 	I_Error ("BindToPort: bind: %s", strerror(errno));
 }
 
-int id_sendto(int socket, const void* data, int length, int flags, int address_index)
+int SendTo(int socket, const void* data, int length, int flags, int address_index)
 {
     return sendto(socket, data, length, flags, (struct sockaddr*) &sendaddress[address_index], sizeof(struct sockaddr_in));
 }
 
-int id_recvfrom(int socket, void* data, int length, int flags, int* address_index)
+int RecvFrom(int socket, void* data, int length, int flags, int* address_index)
 {
     struct sockaddr_in	fromaddress;
     int			fromlen;
@@ -86,7 +86,7 @@ int id_recvfrom(int socket, void* data, int length, int flags, int* address_inde
     return c;
 }
 
-void id_ioctl(int socket)
+void SocketIoctl(int socket)
 {
     unsigned long	trueval = 1;
 

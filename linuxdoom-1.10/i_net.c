@@ -103,7 +103,7 @@ void PacketSend (void)
     }
 
     //printf ("sending %i\n",gametic);
-    c = id_sendto (sendsocket , &sw, doomcom->datalength
+    c = SendTo (sendsocket , &sw, doomcom->datalength
 		,0,doomcom->remotenode);
 
     //	if (c == -1)
@@ -121,7 +121,7 @@ void PacketGet (void)
     doomdata_t		sw;
 
     i = doomcom->numnodes;
-    c = id_recvfrom (insocket, &sw, sizeof(sw), 0, &i );
+    c = RecvFrom (insocket, &sw, sizeof(sw), 0, &i );
     if (c == -1 )
     {
 	//if (errno != EWOULDBLOCK)
@@ -240,7 +240,7 @@ void I_InitNetwork (void)
     // build message to receive
     insocket = UDPsocket ();
     BindToLocalPort (insocket,htons(DOOMPORT));
-    id_ioctl(insocket);
+    SocketIoctl(insocket);
 
     sendsocket = UDPsocket ();
 }
