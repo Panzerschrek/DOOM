@@ -1908,23 +1908,17 @@ static void Postprocess(int colormap_num)
 
 	if (g_playpal_num <= 8) // red - blood
 	{
-	    blend_color.components[0] = 0;
-	    blend_color.components[1] = 0;
-	    blend_color.components[2] = 255;
+	    blend_color = VP_GetPaletteStorage()[176];
 	    blend_color.components[3] = (g_playpal_num - 1 + 1) * 255 * 11 / 100;
 	}
 	else if (g_playpal_num <= 12) // yellow - pickup
 	{
-	    blend_color.components[0] = 0;
-	    blend_color.components[1] = 255;
-	    blend_color.components[2] = 255;
+	    blend_color = VP_GetPaletteStorage()[162];
 	    blend_color.components[3] = (g_playpal_num - 10 + 1) * 255 * 125 / 1000;
 	}
 	else // green - hazard suit
 	{
-	    blend_color.components[0] = 0;
-	    blend_color.components[1] = 255;
-	    blend_color.components[2] = 0;
+	    blend_color = VP_GetPaletteStorage()[120];
 	    blend_color.components[3] = 255 * 125 / 1000;
 	}
 	blend_color.components[3] = 255 - blend_color.components[3];

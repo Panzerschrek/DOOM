@@ -360,7 +360,7 @@ static void InitLightingGammaTable()
 {
     int i;
     // TODO - make 1, when fake contrast will added
-    const float gamma = 1.5f;
+    const float gamma = 1.1f;
 
     for( i = 0; i < 256; i++ )
     {
