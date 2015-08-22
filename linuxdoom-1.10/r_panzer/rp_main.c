@@ -1419,7 +1419,11 @@ static void AddSubsectorSprites(subsector_t* sub)
 	    cross = FixedMul(dir_to_mob[1], mob_dir[0]) - FixedMul(dir_to_mob[0], mob_dir[1]);
 	    angle = atan2f(FixedToFloat(cross), FixedToFloat(dot)) + pi*3.0f;
 	    angle_num = ((int)((8.0f*(angle + pi/8.0f)) / (2.0f * pi))) & 7;
-	    sprite = RP_GetSpritePicture(frame->lump[angle_num]);
+
+	    if (mob->flags & MF_TRANSLATION)
+		sprite = RP_GetSpritePictureTranslated(frame->lump[angle_num], mob->flags>>MF_TRANSSHIFT);
+	    else
+		sprite = RP_GetSpritePicture(frame->lump[angle_num]);
 	}
 
 	pos[0] = FixedToFloat(mob->x);
@@ -1446,16 +1450,9 @@ static void AddSubsectorSprites(subsector_t* sub)
 	dsprite->x_begin = FixedRoundToInt(x_begin_f);
 	dsprite->y_begin = FixedRoundToInt(y_begin_f);
 
-	if (dsprite->x_begin < 0)
-	{
-	    dsprite->u_begin += - dsprite->x_begin * dsprite->u_step;
-	    dsprite->x_begin = 0;
-	}
-	if (dsprite->y_begin < 0)
-	{
-	    dsprite->v_begin += - dsprite->y_begin * dsprite->v_step;
-	    dsprite->y_begin = 0;
-	}
+	if (dsprite->x_begin < 0) dsprite->x_begin = 0;
+	if (dsprite->y_begin < 0) dsprite->y_begin = 0;
+
 	dsprite->x_end = FixedRoundToInt(x_end_f);
 	if (dsprite->x_end > SCREENWIDTH) dsprite->x_end = SCREENWIDTH;
 

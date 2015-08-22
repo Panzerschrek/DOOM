@@ -69,6 +69,9 @@ extern int		skytexture;
 extern int		firstspritelump;
 extern int		numspritelumps;
 
+extern void R_InitTranslationTables (void);
+extern byte*	translationtables;
+
 
 static void BuildFlatMip(const pixel_t* in_texture, pixel_t* out_texture, int src_width, int src_height)
 {
@@ -347,7 +350,10 @@ static void InitSpritesPictures()
     g_sprites_pictures = Z_Malloc(g_sprites_pictures_count * sizeof(sprite_picture_t), PU_STATIC, 0);
 
     for (i = 0; i < g_sprites_pictures_count; i++)
+    {
         g_sprites_pictures[i].raw_data = NULL;
+	g_sprites_pictures[i].color_translated_forms = NULL;
+    }
 }
 
 static void InitLightingGammaTable()
@@ -505,21 +511,16 @@ static void FreeFlatTexture(int num)
     g_flats_textures_pixels_count -= RP_FLAT_TEXTURE_SIZE * RP_FLAT_TEXTURE_SIZE * 4 / 3;
 }
 
-static void LoadSpritePicture(int num)
+static void LoadSpritePicture(int num, sprite_picture_t* sprite, byte* translation_table)
 {
-    sprite_picture_t*	sprite;
     patch_t*		patch;
     column_t*		column;
     byte*		src;
     pixel_t*		dst;
     int			i, x, y, count, offset;
 
-    sprite = &g_sprites_pictures[num];
-
-    // TODO - select right tag for Z_Malloc
     patch = W_CacheLumpNum(num + firstspritelump, PU_CACHE);
 
-    // TODO - how about patch->->topoffset and patch->leftoffset ?
     sprite->width  = patch->width ;
     sprite->height = patch->height;
     sprite->left_offset = patch->leftoffset;
@@ -545,11 +546,18 @@ static void LoadSpritePicture(int num)
 	    dst = sprite->mip[0] + x + column->topdelta * sprite->width;
 	    count = column->length;
 
-	    while (count--)
-	    {
-		*dst = g_textures_palette[*src++];
-		dst += sprite->width;
-	    }
+	    if (translation_table)
+		while (count--)
+		{
+		    *dst = g_textures_palette[translation_table[*src++]];
+		    dst += sprite->width;
+		}
+	    else
+		while (count--)
+		{
+		    *dst = g_textures_palette[*src++];
+		    dst += sprite->width;
+		}
 	    column = (column_t *)( (byte *)column + column->length + 4 );
 	}
     }
@@ -631,6 +639,8 @@ void R_32b_InitData ()
     InitSpritesPictures();
 
     InitLightingGammaTable();
+
+    R_InitTranslationTables();
 }
 
 int R_32b_FlatNumForName(char* name)
@@ -700,7 +710,27 @@ sprite_picture_t* RP_GetSpritePicture(int num)
 {
     sprite_picture_t* s = &g_sprites_pictures[num];
     if (!s->raw_data)
-        LoadSpritePicture(num);
+        LoadSpritePicture(num, s, NULL);
+    return s;
+}
+
+sprite_picture_t* RP_GetSpritePictureTranslated(int num, int translation_num)
+{
+    sprite_picture_t*	s;
+    int			i;
+
+    s = &g_sprites_pictures[num];
+    if (!s->color_translated_forms)
+    {
+	s->color_translated_forms = malloc(sizeof(sprite_picture_t) * 3);
+	for (i = 0; i < 3; i++)
+	    s->color_translated_forms[i].raw_data = NULL;
+    }
+    s = &s->color_translated_forms[translation_num];
+
+    if (!s->raw_data)
+	LoadSpritePicture(num, s, translationtables + 256 * translation_num);
+
     return s;
 }
 

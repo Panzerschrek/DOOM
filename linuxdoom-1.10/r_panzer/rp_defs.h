@@ -108,6 +108,9 @@ typedef struct sprite_picture_s
     // average pixels count of all mips
     int		pixel_count;
 
+    // if not NULL, contains array of 3 color shift forms of this sprite
+    struct sprite_picture_s* color_translated_forms;
+
 } sprite_picture_t;
 
 #endif//__RP_DEFS__
