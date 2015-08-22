@@ -237,6 +237,27 @@ static void SetupWindowIcon()
     Z_Free(data);
 }
 
+static const char* GetWindowTitle()
+{
+    if (gamemode == shareware)
+	return "PanzerDoom - Doom Shareware";
+    if (gamemode == registered)
+	return "PanzerDoom - Doom";
+    if (gamemode == retail)
+	return "PanzerDoom - Ultimate Doom";
+    if (gamemode == commercial)
+    {
+	if (gamemission == doom2)
+	    return "PanzerDoom - Doom II Hell on Earth";
+	if (gamemission == pack_tnt)
+	    return "PanzerDoom - Final Doom TNT Evilution";
+	if (gamemission == pack_plut)
+	    return "PanzerDoom - Final Doom The Plutonia Experiment";
+    }
+
+    return "PanzerDoom";
+}
+
 void I_GrabMouse (void)
 {
     if (usemouse) SDL_SetRelativeMouseMode(true);
@@ -498,7 +519,7 @@ void I_InitGraphics(void)
     }
 
     sdl.window = SDL_CreateWindow(
-	"PanzerDoom",
+	GetWindowTitle(),
 	SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 	v_system_window_width, v_system_window_height,
 	    SDL_WINDOW_SHOWN | (sdl.fullscreen ? SDL_WINDOW_FULLSCREEN : 0) );
