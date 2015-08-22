@@ -25,9 +25,10 @@
 
 #define PR_FLAT_PART_BITS 14
 
+
+// z_near / cos(fov/2) < player_radius
 #define RP_Z_NEAR_FIXED (8 * 65536)
 #define RP_Z_NEAR_FLOAT 8.0f
-
 #define RP_HALF_FOV_X ANG45
 
 
@@ -730,17 +731,14 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 		if (v >= cur_mip_tex_heigth) v %= cur_mip_tex_heigth;
 		pixel = src[ (v>>FRACBITS) ];
 		if( pixel.components[3] >= 128 ) *dst = LightPixel(pixel);
-		dst += SCREENWIDTH;
-		v += v_step;
+		dst += SCREENWIDTH; v += v_step;
 	    }
 	else
 	    while (dst < dst_end) // draw solid
 	    {
 		if (v >= cur_mip_tex_heigth) v %= cur_mip_tex_heigth;
 		*dst = LightPixel(src[ (v>>FRACBITS) ]);
-		//dst->components[0] = dst->components[1] = dst->components[2] = 32 * mip + 32;
-		dst += SCREENWIDTH;
-		v += v_step;
+		dst += SCREENWIDTH; v += v_step;
 	    }
 
 	x_loop_end:
@@ -981,6 +979,8 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
     fixed_t		uv_line_step_on_z1;
     int			y;
 
+    pixel_t*		framebuffer = VP_GetFramebuffer();
+
     subsector = &subsectors[subsector_num];
 
     height = is_floor ? subsector->sector->floorheight : subsector->sector->ceilingheight;
@@ -1038,11 +1038,11 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
     uv_line_step_on_z1 = FixedDiv((2 << FRACBITS) / SCREENWIDTH, g_half_fov_tan);
     for( y = g_cur_screen_polygon.y_min; y < g_cur_screen_polygon.y_max; y++, part+= part_step )
     {
-	int	x, x_begin, x_end;
+	int	x_begin, x_end;
 	int	y_mip, x_mip, mip;
 	int	texel_fetch_shift, texel_fetch_mask;
 	fixed_t	line_duv_scaler, u, v, du_dx, dv_dx, center_offset;
-	pixel_t	*src, *dst, pixel;
+	pixel_t	*src, *dst, *dst_end, pixel;
 
 	fixed_t inv_z_scaled = // (1<<PR_FLAT_PART_BITS) / z
 	    FixedDiv(part, bottom_vertex->z) +
@@ -1058,8 +1058,7 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	if (x_begin < 0 ) x_begin = 0;
 	x_end = g_cur_screen_polygon.x[y].minmax[1];
 	if( x_end > SCREENWIDTH) x_end = SCREENWIDTH;
-	dst = VP_GetFramebuffer() + x_begin + y * SCREENWIDTH;
-
+	
 	line_duv_scaler = FixedMul(uv_line_step_on_z1, z);
 	u = FixedMul(z, uv_dir[0]) + uv_start[0];
 	v = FixedMul(z, uv_dir[1]) + uv_start[1];
@@ -1084,7 +1083,9 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	du_dx>>=mip; dv_dx>>=mip;
 
 	src = texture->mip[mip];
-	for( x = x_begin; x < x_end; x++, dst++, u += du_dx, v += dv_dx )
+	dst     = framebuffer + x_begin + y * SCREENWIDTH;
+	dst_end = framebuffer + x_end   + y * SCREENWIDTH;
+	for( ; dst < dst_end; dst++, u += du_dx, v += dv_dx )
 	{
 	    pixel = src[ ((u>>FRACBITS)&texel_fetch_mask) + (((v>>FRACBITS)&texel_fetch_mask) << texel_fetch_shift) ];
 	    *dst = LightPixel(pixel);
@@ -1103,20 +1104,32 @@ static int		g_spr_mip_width_minus_one;
 static pixel_range_t*	g_spr_pixel_range;
 static int		g_spr_y;
 
+//template
+// SpriteRawFunc[{Test}/{}][{Spectre}/{Blend}/{}][{Flip}]
+
 /*
 WITHOUT OCCLUSION TEST
 */
 
-static void SpriteRowFunc()
+static void SpriteRowFunc() // alpha-tested
 {
+    pixel_t	pixel;
     for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
-	*g_spr_dst = BlendPixels( LightPixel( g_spr_src[g_spr_u>>FRACBITS] ), *g_spr_dst );
+    {
+	pixel = g_spr_src[g_spr_u>>FRACBITS];
+	if (pixel.components[3] >= 128) *g_spr_dst = LightPixel(pixel);
+    }
 }
 
-static void SpriteRowFuncFlip()
+static void SpriteRowFuncFlip() // alpha-tested
 {
+    pixel_t	pixel;
+
     for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
-	*g_spr_dst = BlendPixels( LightPixel( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u>>FRACBITS) ] ), *g_spr_dst );
+    {
+	pixel = g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u>>FRACBITS) ];
+	if (pixel.components[3] >= 128) *g_spr_dst = LightPixel(pixel);
+    }
 }
 
 static void SpriteRowFuncSpectre()
@@ -1135,28 +1148,48 @@ static void SpriteRowFuncSpectreFlip()
 	    g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
 }
 
+static void SpriteRowFuncBlend()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
+	*g_spr_dst = BlendPixels( LightPixel( g_spr_src[g_spr_u>>FRACBITS] ), *g_spr_dst );
+}
+
+static void SpriteRowFuncBlendFlip()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++ )
+	*g_spr_dst = BlendPixels( LightPixel( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u>>FRACBITS) ] ), *g_spr_dst );
+}
+
 /*
 WITH OCCLUSION TEST
 */
 
-static void SpriteRowFuncTest()
+static void SpriteRowFuncTest() // alpha-tested
 {
+    pixel_t	pixel;
+
     for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++, g_spr_pixel_range++ )
 	if (g_spr_y >= g_spr_pixel_range->minmax[0] && g_spr_y < g_spr_pixel_range->minmax[1])
-	    *g_spr_dst = BlendPixels( LightPixel( g_spr_src[g_spr_u>>FRACBITS] ), *g_spr_dst );
+	{
+	    pixel = g_spr_src[g_spr_u>>FRACBITS];
+	    if (pixel.components[3] >= 128) *g_spr_dst = LightPixel(pixel);
+	}
 }
 
-static void SpriteRowFuncTestFlip()
+static void SpriteRowFuncTestFlip() // alpha-tested
 {
+    pixel_t	pixel;
+
     for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++, g_spr_pixel_range++ )
 	if (g_spr_y >= g_spr_pixel_range->minmax[0] && g_spr_y < g_spr_pixel_range->minmax[1])
-	    *g_spr_dst = BlendPixels( LightPixel( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u>>FRACBITS) ] ), *g_spr_dst );
+	{
+	    pixel = g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u>>FRACBITS) ];
+	    if (pixel.components[3] >= 128) *g_spr_dst = LightPixel(pixel);
+	}
 }
 
 static void SpriteRowFuncTestSpectre()
 {
-    // avg func:   pixel.p = ( ((pixel.p ^ dst->p) & 0xFEFEFEFE) >> 1 ) + (pixel.p & dst->p);
-    // half brightness:   dst->p = (dst->p & 0xFEFEFEFE) >> 1
     for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++, g_spr_pixel_range++ )
 	if (g_spr_y >= g_spr_pixel_range->minmax[0] && g_spr_y < g_spr_pixel_range->minmax[1])
 	    if( g_spr_src[ (g_spr_u >> FRACBITS) ].components[3] >= 128 )
@@ -1171,9 +1204,22 @@ static void SpriteRowFuncTestSpectreFlip()
 		g_spr_dst->p = (g_spr_dst->p & 0xFEFEFEFE) >> 1;
 }
 
+static void SpriteRowFuncTestBlend()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++, g_spr_pixel_range++ )
+	if (g_spr_y >= g_spr_pixel_range->minmax[0] && g_spr_y < g_spr_pixel_range->minmax[1])
+	    *g_spr_dst = BlendPixels( LightPixel( g_spr_src[g_spr_u>>FRACBITS] ), *g_spr_dst );
+}
 
-// Addressing: g_sprites_funcs[is_test][is_spectre][is_flip]
-static void (*g_sprites_funcs[2][2][2])() =
+static void SpriteRowFuncTestBlendFlip()
+{
+    for(; g_spr_u < g_spr_u_end; g_spr_u++, g_spr_u += g_spr_u_step, g_spr_dst++, g_spr_pixel_range++ )
+	if (g_spr_y >= g_spr_pixel_range->minmax[0] && g_spr_y < g_spr_pixel_range->minmax[1])
+	    *g_spr_dst = BlendPixels( LightPixel( g_spr_src[ g_spr_mip_width_minus_one - (g_spr_u>>FRACBITS) ] ), *g_spr_dst );
+}
+
+// Addressing: g_sprites_funcs[is_test][alpha-test : 0, alpha-blend : 1, spectre: 2][is_flip]
+static void (*g_sprites_funcs[2][3][2])() =
 {
     {
 	{
@@ -1181,14 +1227,22 @@ static void (*g_sprites_funcs[2][2][2])() =
 	    SpriteRowFuncFlip
 	},
 	{
+	    SpriteRowFuncBlend,
+	    SpriteRowFuncBlendFlip
+	},
+	{
 	    SpriteRowFuncSpectre,
 	    SpriteRowFuncSpectreFlip
-	}
+	},
     },
     {
 	{
 	    SpriteRowFuncTest,
 	    SpriteRowFuncTestFlip
+	},
+	{
+	    SpriteRowFuncTestBlend,
+	    SpriteRowFuncTestBlendFlip
 	},
 	{
 	    SpriteRowFuncTestSpectre,
@@ -1213,12 +1267,18 @@ static void DrawSprite(draw_sprite_t* dsprite)
 
     SetLightLevel(dsprite->light_level, dsprite->z);
 
-    spr_func_test    = g_sprites_funcs[1][dsprite->is_spectre ? 1 : 0][dsprite->is_flipped ? 1 : 0];
-    spr_func_no_test = g_sprites_funcs[0][dsprite->is_spectre ? 1 : 0][dsprite->is_flipped ? 1 : 0];
-    if (!dsprite->pixel_range) spr_func_test = spr_func_no_test;
-
     mip = IntLog2Floor(dsprite->v_step >> FRACBITS);
     if (mip > sprite->max_mip) mip = sprite->max_mip;
+
+    {
+	int mid_func_num;
+	if (dsprite->is_spectre) mid_func_num = 2;
+	else mid_func_num = mip > 0 ? 1 : 0; // apply blending for distance sprites. for near sprites - alpha-test
+
+	spr_func_test    = g_sprites_funcs[1][mid_func_num][dsprite->is_flipped ? 1 : 0];
+	spr_func_no_test = g_sprites_funcs[0][mid_func_num][dsprite->is_flipped ? 1 : 0];
+	if (!dsprite->pixel_range) spr_func_test = spr_func_no_test;
+    }
 
     mip_width  = (sprite->width >>mip) << FRACBITS;
     mip_height = (sprite->height>>mip) << FRACBITS;
