@@ -1258,6 +1258,7 @@ static void DrawSprite(draw_sprite_t* dsprite)
     fixed_t		mip_width, mip_height;
     int			cur_mip_width;
     int			y, mip;
+    int			i, max_top, min_bottom;
     fixed_t		mip_scaler[2];
     void		(*spr_func_test)();
     void		(*spr_func_no_test)();
@@ -1297,6 +1298,15 @@ static void DrawSprite(draw_sprite_t* dsprite)
     v_end = dsprite->v_begin + (SCREENHEIGHT - dsprite->y_begin) * dsprite->v_step;
     if (v_end > mip_height) v_end = mip_height;
 
+    max_top = 0;
+    min_bottom = SCREENHEIGHT;
+    if (dsprite->pixel_range)
+	for( i = 0; i < dsprite->x_end - dsprite->x_begin; i++ )
+	{
+	    if (dsprite->pixel_range[i].minmax[0] > max_top) max_top = dsprite->pixel_range[i].minmax[0];
+	    if (dsprite->pixel_range[i].minmax[1] < min_bottom) min_bottom = dsprite->pixel_range[i].minmax[1];
+	}
+
     fb = VP_GetFramebuffer() + dsprite->x_begin;
     cur_mip_width = sprite->width >> mip;
 
@@ -1311,8 +1321,10 @@ static void DrawSprite(draw_sprite_t* dsprite)
 	g_spr_dst = fb + y * SCREENWIDTH;
 	g_spr_pixel_range = dsprite->pixel_range;
 	g_spr_src = sprite->mip[mip] + (v>>FRACBITS) * cur_mip_width;
-	// TODO - add check for necessity of testing
-	spr_func_test();
+	if (y >= max_top && y < min_bottom)
+	    spr_func_no_test();
+	else
+	    spr_func_test();
     }
 }
 
