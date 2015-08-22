@@ -690,8 +690,10 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 
 	SetLightLevel(light_level, FixedDiv((FRACUNIT<<PR_SEG_PART_BITS), inv_z));
 
-	du_dx = FixedDiv(u_div_z_step - FixedMul(u, inv_z_step), inv_z >> PR_SEG_PART_BITS);
-	u_mip = IntLog2Floor((du_dx / PR_SEG_U_MIP_SCALER) >> FRACBITS);
+	// TOD - fix u mips
+	//du_dx = FixedDiv(u_div_z_step - FixedMul(u, inv_z_step), inv_z >> PR_SEG_PART_BITS);
+	//u_mip = IntLog2Floor((du_dx / PR_SEG_U_MIP_SCALER) >> FRACBITS);
+	u_mip = 0;
 
 	y_begin = FixedRoundToInt(top_y   );
 	if (y_begin < g_cur_seg_projected.pixel_range_on_x0[x].minmax[0] ) y_begin = g_cur_seg_projected.pixel_range_on_x0[x].minmax[0];
@@ -749,7 +751,39 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
     } // for x
 }
 
-static void DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max, boolean draw_as_sky)
+static void DrawWallPartAsSky(fixed_t z_min, fixed_t z_max)
+{
+    int			i;
+    fixed_t		screen_y[4];
+    float		vertex_z[4];
+    screen_vertex_t	sky_polygon_vertices[4];
+
+    vertex_z[0] = FixedToFloat(z_min);
+    vertex_z[1] = FixedToFloat(z_max);
+    vertex_z[2] = FixedToFloat(z_min);
+    vertex_z[3] = FixedToFloat(z_max);
+
+    for( i = 0; i < 4; i++ )
+    {
+	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
+	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[i>>1]);
+	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f ) + g_view_y_shift;
+    }
+
+    sky_polygon_vertices[0].x = g_cur_seg_projected.screen_x[0];
+    sky_polygon_vertices[0].y = screen_y[0];
+    sky_polygon_vertices[1].x = g_cur_seg_projected.screen_x[0];
+    sky_polygon_vertices[1].y = screen_y[1];
+    sky_polygon_vertices[2].x = g_cur_seg_projected.screen_x[1];
+    sky_polygon_vertices[2].y = screen_y[3];
+    sky_polygon_vertices[3].x = g_cur_seg_projected.screen_x[1];
+    sky_polygon_vertices[3].y = screen_y[2];
+
+    PreparePolygon(sky_polygon_vertices, 4, true);
+    DrawSkyPolygon();
+}
+
+static void DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 {
     /*
     Because we draw walls using column-based algorithm,
@@ -782,24 +816,6 @@ static void DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_m
 	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
 	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[i>>1]);
 	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f ) + g_view_y_shift;
-    }
-
-    if (draw_as_sky)
-    {
-	screen_vertex_t sky_polygon_vertices[4];
-
-	sky_polygon_vertices[0].x = g_cur_seg_projected.screen_x[0];
-	sky_polygon_vertices[0].y = screen_y[0];
-	sky_polygon_vertices[1].x = g_cur_seg_projected.screen_x[0];
-	sky_polygon_vertices[1].y = screen_y[1];
-	sky_polygon_vertices[2].x = g_cur_seg_projected.screen_x[1];
-	sky_polygon_vertices[2].y = screen_y[3];
-	sky_polygon_vertices[3].x = g_cur_seg_projected.screen_x[1];
-	sky_polygon_vertices[3].y = screen_y[2];
-
-	PreparePolygon(sky_polygon_vertices, 4, true);
-	DrawSkyPolygon();
-	return;
     }
 
     dy_left  = (screen_y[0] - screen_y[1]) >> FRACBITS;
@@ -842,12 +858,12 @@ static boolean IsBackSegment()
     return dot_product <= 0;
 }
 
-static void DrawWall()
+static void DrawWall(boolean as_sky)
 {
     int		v_offset;
     boolean	seg_projected = false;
 
-    if( ClipCurSeg() ) return;
+    if (ClipCurSeg()) return;
     if (IsBackSegment()) return;
 
     g_cur_seg_projected.pixel_range_on_x0 = g_occlusion_buffer;
@@ -865,55 +881,67 @@ static void DrawWall()
 	// bottom texture
 	if (g_cur_seg->backsector->floorheight > g_cur_seg->frontsector->floorheight)
 	{
-	    ProjectCurSeg(); seg_projected = true;
+	    if (as_sky && bottom_is_sky)
+	    {
+		ProjectCurSeg(); seg_projected = true;
 
-	    g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_side->bottomtexture]);
-	    g_cur_wall_texture_transparent = false;
+		DrawWallPartAsSky(g_cur_seg->frontsector->floorheight, g_cur_seg->backsector->floorheight);
+	    }
+	    else if (!as_sky && !bottom_is_sky)
+	    {
+		ProjectCurSeg(); seg_projected = true;
 
-	    if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
-		v_offset =
-		    PositiveMod(
-			g_cur_seg->frontsector->ceilingheight - g_cur_seg->backsector->floorheight,
-			g_cur_wall_texture->height << FRACBITS);
-	    else v_offset = 0;
+		g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_side->bottomtexture]);
+		g_cur_wall_texture_transparent = false;
 
-	    DrawSplitWallPart(
-		v_offset,
-		g_cur_seg->frontsector->floorheight,
-		g_cur_seg->backsector->floorheight,
-		bottom_is_sky);
+		if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
+		    v_offset =
+			PositiveMod(
+			    g_cur_seg->frontsector->ceilingheight - g_cur_seg->backsector->floorheight,
+			    g_cur_wall_texture->height << FRACBITS);
+		else v_offset = 0;
+
+		DrawSplitWallPart(
+		    v_offset,
+		    g_cur_seg->frontsector->floorheight,
+		    g_cur_seg->backsector->floorheight);
+	    }
 	}
 
 	// top texture
 	if (g_cur_seg->backsector->ceilingheight < g_cur_seg->frontsector->ceilingheight)
 	{
-	    if(!seg_projected) ProjectCurSeg();
-	    seg_projected = true;
+	    if (as_sky && top_is_sky)
+	    {
+		if(!seg_projected) ProjectCurSeg();
+		seg_projected = true;
 
-	    g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_side->toptexture]);
-	    g_cur_wall_texture_transparent = false;
+		DrawWallPartAsSky(g_cur_seg->backsector->ceilingheight, g_cur_seg->frontsector->ceilingheight);
+	    }
+	    else if (!as_sky && !top_is_sky)
+	    {
+		if(!seg_projected) ProjectCurSeg();
+		seg_projected = true;
 
-	    if (g_cur_seg->linedef->flags & ML_DONTPEGTOP)
-		v_offset = 0;
-	    else
-		v_offset =
-		    PositiveMod(
-			g_cur_seg->backsector->ceilingheight - g_cur_seg->frontsector->ceilingheight,
-			g_cur_wall_texture->height * FRACUNIT );
+		g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_side->toptexture]);
+		g_cur_wall_texture_transparent = false;
 
-	    DrawSplitWallPart(
-		v_offset,
-		g_cur_seg->backsector->ceilingheight,
-		g_cur_seg->frontsector->ceilingheight,
-		top_is_sky);
-	}
+		if (g_cur_seg->linedef->flags & ML_DONTPEGTOP)
+		    v_offset = 0;
+		else
+		    v_offset =
+			PositiveMod(
+			    g_cur_seg->backsector->ceilingheight - g_cur_seg->frontsector->ceilingheight,
+			    g_cur_wall_texture->height * FRACUNIT );
 
-	// middle texture
-	if( g_cur_seg->sidedef->midtexture)
-	{
+		DrawSplitWallPart(
+		    v_offset,
+		    g_cur_seg->backsector->ceilingheight,
+		    g_cur_seg->frontsector->ceilingheight);
+	    }
 	}
     }
-    else if (g_cur_seg->frontsector)
+    else if (g_cur_seg->frontsector && !as_sky)
     {
 	if(!seg_projected) ProjectCurSeg();
 	seg_projected = true;
@@ -931,8 +959,7 @@ static void DrawWall()
 	DrawSplitWallPart(
 	    v_offset,
 	    g_cur_seg->frontsector->floorheight,
-	    g_cur_seg->frontsector->ceilingheight,
-	    false);
+	    g_cur_seg->frontsector->ceilingheight);
     }
 }
 
@@ -1300,7 +1327,7 @@ static void DrawTransparentWalls()
 	g_cur_wall_texture = g_cur_seg_projected.texture;
 	g_cur_wall_texture_transparent = true;
 
-	DrawSplitWallPart(g_cur_seg_projected.v_begin, g_cur_seg_projected.world_z[0], g_cur_seg_projected.world_z[1], false);
+	DrawSplitWallPart(g_cur_seg_projected.v_begin, g_cur_seg_projected.world_z[0], g_cur_seg_projected.world_z[1]);
     }
 }
 
@@ -1369,7 +1396,7 @@ static void DrawSprites()
 		g_cur_seg_x_clip_range.minmax[0] = sprite->x_begin;
 		g_cur_seg_x_clip_range.minmax[1] = sprite->x_end;
 
-		DrawSplitWallPart(wall->v_begin, wall->world_z[0], wall->world_z[1], false );
+		DrawSplitWallPart(wall->v_begin, wall->world_z[0], wall->world_z[1]);
 	    }
 	}
     }
@@ -1500,7 +1527,7 @@ static void AddSubsectorSprites(subsector_t* sub)
     }
 }
 
-static void Subsector(int num)
+static void SubsectorBackToFront(int num)
 {
     subsector_t*	sub;
     int			line_seg;
@@ -1511,7 +1538,7 @@ static void Subsector(int num)
     for( line_seg = sub->firstline; line_seg < sub->numlines + sub->firstline; line_seg++ )
     {
     	g_cur_seg = &segs[ line_seg ];
-	DrawWall();
+	DrawWall(true);
     }
     subsector_clipped = false;
 
@@ -1530,27 +1557,23 @@ static void Subsector(int num)
     }
 }
 
-static void GenWallPartSilouette(fixed_t z_min, fixed_t z_max, int left_vertex_index, int silouette)
+static void GenLineSilouette(fixed_t world_z, int left_vertex_index, int silouette)
 {
-    float	vertex_z[4];
-    fixed_t	screen_y[4];
+    fixed_t	screen_y[2];
     int		i;
 
     int		right_vertex_index;
-    int		x, y, x_begin, x_end;
+    int		x, x_begin, x_end;
     fixed_t	dx, ddx;
-    fixed_t	top_dy, bottom_dy, top_y, bottom_y;
+    fixed_t	y, dy;
+    int		y_int;
 
     right_vertex_index = left_vertex_index ^ 1;
 
-    vertex_z[0] = FixedToFloat(z_min);
-    vertex_z[1] = FixedToFloat(z_max);
-    vertex_z[2] = FixedToFloat(z_min);
-    vertex_z[3] = FixedToFloat(z_max);
-    for( i = 0; i < 4; i++ )
+    for( i = 0; i < 2; i++ )
     {
-	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
-	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[(i>>1)]);
+	float screen_space_y = g_view_matrix[9] * FixedToFloat(world_z) + g_view_matrix[13];
+	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[i]);
 	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f ) + g_view_y_shift;
     }
 
@@ -1564,11 +1587,8 @@ static void GenWallPartSilouette(fixed_t z_min, fixed_t z_max, int left_vertex_i
 
     ddx = (x_begin<<FRACBITS) + FRACUNIT/2 - g_cur_seg_projected.screen_x[left_vertex_index];
 
-    top_dy =    FixedDiv(screen_y[right_vertex_index*2+1] - screen_y[left_vertex_index*2+1], dx);
-    bottom_dy = FixedDiv(screen_y[right_vertex_index*2+0] - screen_y[left_vertex_index*2+0], dx);
-
-    top_y =    screen_y[left_vertex_index*2+1] + FixedMul(ddx, top_dy   );
-    bottom_y = screen_y[left_vertex_index*2+0] + FixedMul(ddx, bottom_dy);
+    dy = FixedDiv(screen_y[right_vertex_index] - screen_y[left_vertex_index], dx);
+    y = screen_y[left_vertex_index] + FixedMul(ddx, dy );
 
     x = x_begin;
     if (silouette == SIL_BOTH)
@@ -1580,22 +1600,21 @@ static void GenWallPartSilouette(fixed_t z_min, fixed_t z_max, int left_vertex_i
     else if (silouette == SIL_BOTTOM)
 	while(x < x_end)
 	{
-	    y = FixedRoundToInt(top_y);
-	    if (g_occlusion_buffer[x].minmax[1] > y) g_occlusion_buffer[x].minmax[1] = y;
+	    y_int = FixedRoundToInt(y);
+	    if (g_occlusion_buffer[x].minmax[1] > y_int) g_occlusion_buffer[x].minmax[1] = y_int;
 	    //if (y >= 0 && y < SCREENHEIGHT) V_DrawPixel(x, y, 160); // YELLOW
-	    top_y += top_dy; x++;
+	    y += dy; x++;
 	}
     else
 	while(x < x_end)
 	{
-	    y = FixedRoundToInt(bottom_y);
-	    if (g_occlusion_buffer[x].minmax[0] < y) g_occlusion_buffer[x].minmax[0] = y;
+	    y_int = FixedRoundToInt(y);
+	    if (g_occlusion_buffer[x].minmax[0] < y_int) g_occlusion_buffer[x].minmax[0] = y_int;
 	    //if (y >= 0 && y < SCREENHEIGHT) V_DrawPixel(x, y, 112); // GREEN
-	    bottom_y += bottom_dy; x++;
+	    y += dy; x++;
 	}
 }
 
-// TODO - here, use clipping, we can draw walls front to back
 static void GenSegSilouette(boolean back)
 {
     int left_vertex_index;
@@ -1610,10 +1629,10 @@ static void GenSegSilouette(boolean back)
     if (g_cur_seg->frontsector && g_cur_seg->backsector  && (g_cur_seg->linedef->flags & ML_TWOSIDED))
     {
 	if (g_cur_seg->frontsector->floorheight <= g_cur_seg->backsector->floorheight)
-	    GenWallPartSilouette(g_cur_seg->frontsector->floorheight, g_cur_seg->backsector->floorheight, left_vertex_index, SIL_BOTTOM);
+	    GenLineSilouette(g_cur_seg->backsector->floorheight, left_vertex_index, SIL_BOTTOM);
 
 	if (g_cur_seg->frontsector->ceilingheight >= g_cur_seg->backsector->ceilingheight)
-	    GenWallPartSilouette(g_cur_seg->backsector->ceilingheight, g_cur_seg->frontsector->ceilingheight, left_vertex_index, SIL_TOP);
+	    GenLineSilouette(g_cur_seg->backsector->ceilingheight, left_vertex_index, SIL_TOP);
 
 	if (!back && g_cur_seg->sidedef->midtexture)
 	{
@@ -1683,11 +1702,11 @@ static void GenSegSilouette(boolean back)
     else if (g_cur_seg->frontsector)
     {
 	// solid wall
-	GenWallPartSilouette(g_cur_seg->frontsector->floorheight, g_cur_seg->frontsector->ceilingheight, left_vertex_index, SIL_BOTH);
+	GenLineSilouette(0, left_vertex_index, SIL_BOTH);
     }
 }
 
-static void GenSubsectorSilhouette(int num)
+static void SubsectorFrontToBack(int num)
 {
     subsector_t*	sub;
     int			line_seg;
@@ -1705,6 +1724,7 @@ static void GenSubsectorSilhouette(int num)
     for( line_seg = sub->firstline; line_seg < sub->numlines + sub->firstline; line_seg++ )
     {
     	g_cur_seg = &segs[ line_seg ];
+	DrawWall(false);
 	GenSegSilouette(false);
     }
 }
@@ -1713,7 +1733,7 @@ static void GenSubsectorSilhouette(int num)
 // Renders all subsectors below a given node,
 //  traversing subtree recursively.
 // Just call with BSP root.
-static void RenderBSPNode(int bspnum, boolean for_sprites)
+static void RenderBSPNode(int bspnum, boolean front_to_back_pass)
 {
     node_t*	bsp;
     int		side;
@@ -1724,10 +1744,10 @@ static void RenderBSPNode(int bspnum, boolean for_sprites)
     {
 	subsector_num = bspnum == -1 ? 0 : bspnum&(~NF_SUBSECTOR);
 
-	if (for_sprites)
-	    GenSubsectorSilhouette(subsector_num);
+	if (front_to_back_pass)
+	    SubsectorFrontToBack(subsector_num);
 	else
-	    Subsector(subsector_num);
+	    SubsectorBackToFront(subsector_num);
 	return;
     }
 
@@ -1735,10 +1755,10 @@ static void RenderBSPNode(int bspnum, boolean for_sprites)
 
     // Decide which side the view point is on.
     side = 1 ^ R_PointOnSide (g_view_pos[0], g_view_pos[1], bsp);
-    if (for_sprites) side ^= 1;
+    if (front_to_back_pass) side ^= 1;
 
-    RenderBSPNode (bsp->children[side], for_sprites);
-    RenderBSPNode (bsp->children[side^1], for_sprites);
+    RenderBSPNode (bsp->children[side], front_to_back_pass);
+    RenderBSPNode (bsp->children[side^1], front_to_back_pass);
 }
 
 static void DrawPlayerSprites(player_t *player)
@@ -1894,7 +1914,9 @@ static void R_32b_RenderPlayerView(player_t* player)
     BuildClipPlanes(player);
     PrepareSky(player);
 
+    // draw back to front - floors and sky
     RenderBSPNode(numnodes-1, false);
+    // draw front to back - walls, add sprites and semi-transparent walls
     RenderBSPNode(numnodes-1, true);
 
     DrawTransparentWalls();
