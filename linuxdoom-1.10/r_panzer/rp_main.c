@@ -80,6 +80,7 @@ typedef struct draw_wall_s
 
     pixel_range_t*	pixel_range_on_x0;
     wall_texture_t*	texture;
+    seg_t*		seg;
 
     short		light_level;
 } draw_wall_t;
@@ -643,7 +644,25 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
     if (x_begin < g_cur_seg_x_clip_range.minmax[0] ) x_begin = g_cur_seg_x_clip_range.minmax[0];
     x_end   = FixedRoundToInt(g_cur_seg_projected.screen_x[1]);
     if (x_end > g_cur_seg_x_clip_range.minmax[1]) x_end = g_cur_seg_x_clip_range.minmax[1];
+
+    // first stage clipping - left and right border
+    while (x_begin < x_end)
+    {
+	if (g_cur_seg_projected.pixel_range_on_x0[x_begin].minmax[0] <
+	    g_cur_seg_projected.pixel_range_on_x0[x_begin].minmax[1]) break;
+	x_begin++;
+    }
+    while (x_begin < x_end)
+    {
+	if (g_cur_seg_projected.pixel_range_on_x0[x_end-1].minmax[0] <
+	    g_cur_seg_projected.pixel_range_on_x0[x_end-1].minmax[1]) break;
+	x_end--;
+    }
+    if (x_begin >= x_end) return;
     x = x_begin;
+
+    // here, we can see seg, maybe
+    g_cur_seg->linedef->flags |= ML_MAPPED;
 
     ddx = (x_begin<<FRACBITS) + FRACUNIT/2 - g_cur_seg_projected.screen_x[0];
 
@@ -1398,6 +1417,7 @@ static void DrawTransparentWalls()
 	g_cur_seg_projected = g_transparent_walls[i];
 	g_cur_wall_texture = g_cur_seg_projected.texture;
 	g_cur_wall_texture_transparent = true;
+	g_cur_seg = g_transparent_walls[i].seg;
 
 	DrawSplitWallPart(g_cur_seg_projected.v_begin, g_cur_seg_projected.world_z[0], g_cur_seg_projected.world_z[1]);
     }
@@ -1751,6 +1771,7 @@ static void GenSegSilouette(boolean back)
 
 	    mid_wall->world_z[0] = h[0];
 	    mid_wall->world_z[1] = h[1];
+	    mid_wall->seg = g_cur_seg;
 
 	    x_begin = FixedRoundToInt(mid_wall->screen_x[0]);
 	    if (x_begin < 0) x_begin = 0;
