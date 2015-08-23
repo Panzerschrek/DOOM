@@ -180,7 +180,7 @@ void Z_Free (void* ptr)
 // You can pass a NULL user if the tag is < PU_PURGELEVEL.
 //
 #define MINFRAGMENT		64
-
+#define MEMALIGNMENT (sizeof(void*))
 
 void*
 Z_Malloc
@@ -194,7 +194,7 @@ Z_Malloc
     memblock_t* newblock;
     memblock_t*	base;
 
-    size = (size + 3) & ~3;
+    size = (size + (MEMALIGNMENT-1)) & ~(MEMALIGNMENT-1);
 
     // scan through the block list,
     // looking for the first free block
