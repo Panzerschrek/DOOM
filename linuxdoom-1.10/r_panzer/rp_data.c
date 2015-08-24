@@ -57,6 +57,7 @@ static int		g_sprites_pictures_pixels_count = 0;
 // game uses this directly.
 extern int*		flattranslation;
 extern int*		texturetranslation;
+extern fixed_t*		textureheight;
 
 extern side_t*		sides;
 extern int		numsides;
@@ -280,6 +281,7 @@ static void InitWallsTextures()
     g_wall_textures_info = Z_Malloc( sizeof(wall_texture_info_t) * g_wall_textures_count, PU_STATIC, 0 );
     g_wall_textures_patches = Z_Malloc( textues_patches_count * sizeof(wall_texture_patch_t), PU_STATIC, 0 );
     texturetranslation = Z_Malloc( sizeof(int) * g_wall_textures_count, PU_STATIC, 0 );
+    textureheight = Z_Malloc( sizeof(fixed_t) * g_wall_textures_count, PU_STATIC, 0 );
 
     // get textures info
     tex = g_wall_textures;
@@ -295,6 +297,7 @@ static void InitWallsTextures()
 	    tex->width  = SHORT(maptex->width );
 	    tex->height = SHORT(maptex->height);
 	    tex->raw_data = NULL;
+	    textureheight[tex - g_wall_textures] = tex->height << FRACBITS;
 
 	    tex_info->patches = tex_patch;
 	    tex_info->patch_count = SHORT(maptex->patchcount);
