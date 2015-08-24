@@ -91,6 +91,11 @@ static int		g_view_angle; // angle number in sin/cos/tan tables
 static fixed_t		g_half_fov_tan;
 static fixed_t		g_view_y_shift; // fake look up and down
 
+static float		g_half_screenwidth;
+static float		g_half_screenheight;
+static fixed_t		g_screenheight_fixed;
+static fixed_t		g_screenwidth_fixed;
+
 static fixed_t		g_y_scaler; // aspect ratio correction
 static fixed_t		g_inv_y_scaler;
 
@@ -232,8 +237,8 @@ static void ProjectCurSeg()
     proj_x[0] /= proj_z[0];
     proj_x[1] /= proj_z[1];
 
-    g_cur_seg_projected.screen_x[0] = FloatToFixed((proj_x[0] + 1.0f ) * ((float) SCREENWIDTH) * 0.5f );
-    g_cur_seg_projected.screen_x[1] = FloatToFixed((proj_x[1] + 1.0f ) * ((float) SCREENWIDTH) * 0.5f );
+    g_cur_seg_projected.screen_x[0] = FloatToFixed((proj_x[0] + 1.0f ) * g_half_screenwidth);
+    g_cur_seg_projected.screen_x[1] = FloatToFixed((proj_x[1] + 1.0f ) * g_half_screenwidth);
     g_cur_seg_projected.screen_z[0] = FloatToFixed(proj_z[0]);
     g_cur_seg_projected.screen_z[1] = FloatToFixed(proj_z[1]);
 
@@ -412,7 +417,7 @@ static void PrepareSky(player_t* player)
 
     for (x = 0; x < SCREENWIDTH; x++)
     {
-	cur_x_tan = FixedDiv((x<<FRACBITS) - (SCREENWIDTH<<FRACBITS)/2, (SCREENWIDTH<<FRACBITS)/2);
+	cur_x_tan = FixedDiv((x<<FRACBITS) - g_screenwidth_fixed/2, g_screenwidth_fixed/2);
 	cur_x_tan = FixedMul(cur_x_tan, tan_scaler);
 
 	if (cur_x_tan > 0)
@@ -627,12 +632,12 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
     {
 	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
 	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[i>>1]);
-	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f ) + g_view_y_shift;
+	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * g_half_screenheight) + g_view_y_shift;
     }
 
     // wall is not wisible on screen
     if (screen_y[0] < 0 && screen_y[2] < 0 ) return;
-    if (screen_y[1] >= (SCREENHEIGHT<<FRACBITS) && screen_y[3] >= (SCREENHEIGHT<<FRACBITS) ) return;
+    if (screen_y[1] >= g_screenheight_fixed && screen_y[3] >= g_screenheight_fixed) return;
 
     framebuffer = VP_GetFramebuffer();
     light_level = g_cur_seg_projected.light_level;
@@ -784,7 +789,7 @@ static void DrawWallPartAsSky(fixed_t z_min, fixed_t z_max)
     {
 	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
 	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[i>>1]);
-	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f ) + g_view_y_shift;
+	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * g_half_screenheight) + g_view_y_shift;
     }
 
     sky_polygon_vertices[0].x = g_cur_seg_projected.screen_x[0];
@@ -832,7 +837,7 @@ static void DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_m
     {
 	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
 	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[i>>1]);
-	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f ) + g_view_y_shift;
+	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * g_half_screenheight) + g_view_y_shift;
     }
 
     dy_left  = (screen_y[0] - screen_y[1]) >> FRACBITS;
@@ -1018,8 +1023,8 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	proj[0] /= proj[2];
 	proj[1] /= proj[2];
 
-	vertices_proj[i].x = FloatToFixed((proj[0] + 1.0f ) * ((float)SCREENWIDTH ) * 0.5f );
-	vertices_proj[i].y = FloatToFixed((proj[1] + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f ) + g_view_y_shift;
+	vertices_proj[i].x = FloatToFixed((proj[0] + 1.0f ) * g_half_screenwidth );
+	vertices_proj[i].y = FloatToFixed((proj[1] + 1.0f ) * g_half_screenheight) + g_view_y_shift;
 	vertices_proj[i].z = FloatToFixed(proj[2]);
     }
 
@@ -1084,7 +1089,7 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	du_dx = FixedMul(uv_per_dir[0], line_duv_scaler);
 	dv_dx = FixedMul(uv_per_dir[1], line_duv_scaler);
 
-	center_offset = (x_begin<<FRACBITS) - (SCREENWIDTH<<FRACBITS)/2 + FRACUNIT/2;
+	center_offset = (x_begin<<FRACBITS) - g_screenwidth_fixed/2 + FRACUNIT/2;
 	u += FixedMul(center_offset, du_dx);
 	v += FixedMul(center_offset, dv_dx);
 
@@ -1555,8 +1560,8 @@ static void AddSubsectorSprites(subsector_t* sub)
 	proj[1] /= proj[2];
 
 	z = FloatToFixed(proj[2]);
-	sx = FloatToFixed((proj[0] + 1.0f ) * ((float) SCREENWIDTH ) * 0.5f );
-	sy = FloatToFixed((proj[1] + 1.0f ) * ((float) SCREENHEIGHT) * 0.5f ) + g_view_y_shift;
+	sx = FloatToFixed((proj[0] + 1.0f ) * g_half_screenwidth );
+	sy = FloatToFixed((proj[1] + 1.0f ) * g_half_screenheight) + g_view_y_shift;
 
 	dsprite = g_draw_sprites.sprites + g_draw_sprites.count;
 
@@ -1666,7 +1671,7 @@ static void GenLineSilouette(fixed_t world_z, int left_vertex_index, int silouet
     {
 	float screen_space_y = g_view_matrix[9] * FixedToFloat(world_z) + g_view_matrix[13];
 	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[i]);
-	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * ((float)SCREENHEIGHT) * 0.5f ) + g_view_y_shift;
+	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * g_half_screenheight) + g_view_y_shift;
     }
 
     dx = g_cur_seg_projected.screen_x[right_vertex_index] - g_cur_seg_projected.screen_x[left_vertex_index];
@@ -1865,7 +1870,7 @@ static void DrawPlayerSprites(player_t *player)
     draw_sprite_t	dsprite;
 
     scaler = FRACUNIT * SCREENHEIGHT / ID_SCREENHEIGHT;
-    dx = SCREENWIDTH * FRACUNIT - FixedMul(ID_SCREENWIDTH *scaler, g_inv_y_scaler);
+    dx = g_screenwidth_fixed - FixedMul(ID_SCREENWIDTH *scaler, g_inv_y_scaler);
     dsprite.u_step = FixedDiv(g_y_scaler, scaler);
     dsprite.v_step = FixedDiv(FRACUNIT, scaler);
 
@@ -2063,6 +2068,12 @@ static void InitStaticData()
 
     g_transparent_walls_capacity = 128;
     g_transparent_walls = Z_Malloc(g_transparent_walls_capacity * sizeof(draw_wall_t), PU_STATIC, NULL);
+
+    g_half_screenwidth  = ((float)SCREENWIDTH ) * 0.5f;
+    g_half_screenheight = ((float)SCREENHEIGHT) * 0.5f;
+
+    g_screenwidth_fixed  = SCREENWIDTH  << FRACBITS;
+    g_screenheight_fixed = SCREENHEIGHT << FRACBITS;
 }
 
 void RP_Init()
