@@ -17,13 +17,13 @@
 #include "../z_zone.h"
 
 // special value for inv_z and u/z interpolations
-#define PR_SEG_PART_BITS 4
+#define RP_SEG_PART_BITS 4
 
 // magic constanst for beautifulizing of texture mapping on slope walls and floors
-#define PR_SEG_U_MIP_SCALER 2
-#define PR_FLAT_MIP_SCALER 4
+#define RP_SEG_U_MIP_SCALER 2
+#define RP_FLAT_MIP_SCALER 4
 
-#define PR_FLAT_PART_BITS 14
+#define RP_FLAT_PART_BITS 14
 
 
 // z_near / cos(fov/2) < player_radius
@@ -696,7 +696,7 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 
     // interpolate value in range [0; 1 ^ PR_SEG_PART_BITS ]
     // becouse direct interpolation of u/z and 1/z can be inaccurate
-    part_step = FixedDiv(FRACUNIT << PR_SEG_PART_BITS, dx);
+    part_step = FixedDiv(FRACUNIT << RP_SEG_PART_BITS, dx);
     part = FixedMul(part_step, ddx);
 
     while (x < x_end)
@@ -708,12 +708,12 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 	fixed_t	cur_mip_tex_heigth;
 	pixel_t	pixel;
 
-	fixed_t one_minus_part = (FRACUNIT<<PR_SEG_PART_BITS) - part;
+	fixed_t one_minus_part = (FRACUNIT<<RP_SEG_PART_BITS) - part;
 	fixed_t cur_u_div_z = FixedMul(part, u_div_z[1]) + FixedMul(one_minus_part, u_div_z[0]);
 	fixed_t inv_z = FixedDiv(part, g_cur_seg_projected.screen_z[1]) + FixedDiv(one_minus_part, g_cur_seg_projected.screen_z[0]);
 	fixed_t u = FixedDiv(cur_u_div_z, inv_z);
 
-	SetLightLevel(light_level, FixedDiv((FRACUNIT<<PR_SEG_PART_BITS), inv_z));
+	SetLightLevel(light_level, FixedDiv((FRACUNIT<<RP_SEG_PART_BITS), inv_z));
 
 	// TOD - fix u mips
 	//du_dx = FixedDiv(u_div_z_step - FixedMul(u, inv_z_step), inv_z >> PR_SEG_PART_BITS);
@@ -1042,13 +1042,13 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
     texture = RP_GetFlatTexture(texture_num);
 
     dy = bottom_vertex->y - top_vertex->y;
-    part_step = FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, dy);
+    part_step = FixedDiv(FRACUNIT << RP_FLAT_PART_BITS, dy);
     ddy = (g_cur_screen_polygon.y_min<<FRACBITS) + FRACUNIT/2 - top_vertex->y;
     part = FixedMul(ddy, part_step);
 
     inv_z_scaled_step = FixedDiv( // value is negative
-        FixedDiv(FRACUNIT << PR_FLAT_PART_BITS,    top_vertex->z) -
-        FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, bottom_vertex->z), dy );
+        FixedDiv(FRACUNIT << RP_FLAT_PART_BITS,    top_vertex->z) -
+        FixedDiv(FRACUNIT << RP_FLAT_PART_BITS, bottom_vertex->z), dy );
     inv_z_scaled_step = abs(inv_z_scaled_step);
 
     uv_start[0] = g_view_pos[0];
@@ -1070,13 +1070,13 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
 
 	fixed_t inv_z_scaled = // (1<<PR_FLAT_PART_BITS) / z
 	    FixedDiv(part, bottom_vertex->z) +
-	    FixedDiv((FRACUNIT<<PR_FLAT_PART_BITS) - part, top_vertex->z);
-	fixed_t z = FixedDiv(FRACUNIT<<PR_FLAT_PART_BITS, inv_z_scaled);
+	    FixedDiv((FRACUNIT<<RP_FLAT_PART_BITS) - part, top_vertex->z);
+	fixed_t z = FixedDiv(FRACUNIT<<RP_FLAT_PART_BITS, inv_z_scaled);
 
 	SetLightLevel(subsector->sector->lightlevel, z);
 
 	y_mip =
-	    IntLog2Floor((FixedMul(FixedDiv(inv_z_scaled_step, inv_z_scaled), z) / PR_FLAT_MIP_SCALER) >> FRACBITS);
+	    IntLog2Floor((FixedMul(FixedDiv(inv_z_scaled_step, inv_z_scaled), z) / RP_FLAT_MIP_SCALER) >> FRACBITS);
 
 	x_begin = g_cur_screen_polygon.x[y].minmax[0];
 	if (x_begin < 0 ) x_begin = 0;
