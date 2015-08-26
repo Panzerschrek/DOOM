@@ -901,7 +901,7 @@ static boolean IsBackSegment()
 
 static void DrawWall(boolean as_sky)
 {
-    int		v_offset;
+    fixed_t	h, v_offset;
     boolean	seg_projected = false;
 
     if (ClipCurSeg()) return;
@@ -935,17 +935,27 @@ static void DrawWall(boolean as_sky)
 		g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_side->bottomtexture]);
 		g_cur_wall_texture_transparent = false;
 
+		if (g_cur_seg->backsector->floorheight < g_cur_seg->frontsector->ceilingheight)
+		{
+		    h = g_cur_seg->backsector->floorheight;
+		    v_offset = 0;
+		}
+		else
+		{
+		    h  = g_cur_seg->frontsector->ceilingheight;
+		    v_offset = g_cur_seg->backsector->floorheight - g_cur_seg->frontsector->ceilingheight;
+		}
+
 		if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
-		    v_offset =
+		    v_offset +=
 			PositiveMod(
 			    g_cur_seg->frontsector->ceilingheight - g_cur_seg->backsector->floorheight,
 			    g_cur_wall_texture->height << FRACBITS);
-		else v_offset = 0;
 
 		DrawSplitWallPart(
 		    v_offset,
 		    g_cur_seg->frontsector->floorheight,
-		    g_cur_seg->backsector->floorheight);
+		    h);
 	    }
 	}
 
@@ -977,7 +987,9 @@ static void DrawWall(boolean as_sky)
 
 		DrawSplitWallPart(
 		    v_offset,
-		    g_cur_seg->backsector->ceilingheight,
+		    g_cur_seg->backsector->ceilingheight > g_cur_seg->frontsector->floorheight
+			? g_cur_seg->backsector->ceilingheight
+			: g_cur_seg->frontsector->floorheight,
 		    g_cur_seg->frontsector->ceilingheight);
 	    }
 	}
@@ -1745,7 +1757,7 @@ static void GenSegSilouette(boolean back)
 
     left_vertex_index = back ? 1 : 0;
 
-    if (g_cur_seg->frontsector && g_cur_seg->backsector  && (g_cur_seg->linedef->flags & ML_TWOSIDED))
+    if (g_cur_seg->frontsector && g_cur_seg->backsector && (g_cur_seg->linedef->flags & ML_TWOSIDED))
     {
 	if (g_cur_seg->frontsector->floorheight <= g_cur_seg->backsector->floorheight)
 	    GenLineSilouette(g_cur_seg->backsector->floorheight, left_vertex_index, SIL_BOTTOM);
