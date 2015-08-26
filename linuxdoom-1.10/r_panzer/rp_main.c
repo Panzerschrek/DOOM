@@ -16,14 +16,21 @@
 #include "../v_video.h"
 #include "../z_zone.h"
 
+// lost of precision of fixed for manipulating of screen y coordinate,
+// otherwise happens overflow for tall walls and hight screen resolutions
+#define RP_SCREEN_Y_SHIFT	4
+#define RP_SCREEN_Y_BITS	(FRACBITS - RP_SCREEN_Y_SHIFT)
+#define RP_SCREEN_Y_UNIT	(1 << RP_SCREEN_Y_BITS)
+typedef fixed_t screen_y_t;
+
 // special value for inv_z and u/z interpolations
-#define PR_SEG_PART_BITS 4
+#define RP_SEG_PART_BITS 4
 
 // magic constanst for beautifulizing of texture mapping on slope walls and floors
-#define PR_SEG_U_MIP_SCALER 2
-#define PR_FLAT_MIP_SCALER 4
+#define RP_SEG_U_MIP_SCALER 2
+#define RP_FLAT_MIP_SCALER 4
 
-#define PR_FLAT_PART_BITS 14
+#define RP_FLAT_PART_BITS 14
 
 
 // z_near / cos(fov/2) < player_radius
@@ -35,7 +42,7 @@
 typedef struct screen_vertex_s
 {
     fixed_t	x;
-    fixed_t	y;
+    screen_y_t	y;
     fixed_t	z;
 } screen_vertex_t;
 
@@ -89,10 +96,11 @@ static float		g_view_matrix[16];
 static fixed_t		g_view_pos[3];
 static int		g_view_angle; // angle number in sin/cos/tan tables
 static fixed_t		g_half_fov_tan;
-static fixed_t		g_view_y_shift; // fake look up and down
+static screen_y_t	g_view_y_shift; // fake look up and down
 
 static float		g_half_screenwidth;
 static float		g_half_screenheight;
+static screen_y_t	g_screenheight_screen_y;
 static fixed_t		g_screenheight_fixed;
 static fixed_t		g_screenwidth_fixed;
 
@@ -199,6 +207,16 @@ static pixel_t BlendPixels(pixel_t p0, pixel_t p1)
     p0.components[1] = (p0.components[1] * p0.components[3] + inv_a * p1.components[1])>>8;
     p0.components[2] = (p0.components[2] * p0.components[3] + inv_a * p1.components[2])>>8;
     return p0;
+}
+
+static screen_y_t FloatToScreenY(float f)
+{
+    return (screen_y_t) (f * ((float)RP_SCREEN_Y_UNIT));
+}
+
+static int ScreenYRoundToInt(screen_y_t sy)
+{
+    return (sy + RP_SCREEN_Y_UNIT/2) >> RP_SCREEN_Y_BITS;
 }
 
 static int PositiveMod( int x, int y )
@@ -347,7 +365,7 @@ static void PreparePolygon(screen_vertex_t* vertices, int vertex_count, boolean 
     int		y_end;
     int		y;
     fixed_t	x, x_step;
-    fixed_t	dy;
+    screen_y_t	dy, ddy;
 
     g_cur_screen_polygon.y_min = INT_MAX;
     g_cur_screen_polygon.y_max = INT_MIN;
@@ -371,16 +389,17 @@ static void PreparePolygon(screen_vertex_t* vertices, int vertex_count, boolean 
 	}
 	else side_ind = direction ? 1 : 0;
 
-	x_step = FixedDiv(vertices[next_i].x - vertices[cur_i].x, dy);
+	x_step = FixedDiv((vertices[next_i].x - vertices[cur_i].x) >> RP_SCREEN_Y_SHIFT, dy);
 	x = vertices[cur_i].x;
 
-	y_begin = FixedRoundToInt(vertices[cur_i ].y);
+	y_begin = ScreenYRoundToInt(vertices[cur_i ].y);
 	if( y_begin < 0 ) y_begin = 0;
-	y_end   = FixedRoundToInt(vertices[next_i].y);
+	y_end   = ScreenYRoundToInt(vertices[next_i].y);
 	if( y_end > SCREENHEIGHT) y_end = SCREENHEIGHT;
 	y = y_begin;
 
-	x += FixedMul(x_step, FRACUNIT/2 + (y_begin << FRACBITS) - vertices[cur_i ].y);
+	ddy = RP_SCREEN_Y_UNIT/2 + (y_begin<<RP_SCREEN_Y_BITS) - vertices[cur_i ].y;
+	x += FixedMul(x_step, ddy) << RP_SCREEN_Y_SHIFT;
 
 	while (y < y_end)
 	{
@@ -464,7 +483,7 @@ static void DrawSkyPolygon()
     texture = RP_GetSkyTexture();
     framebuffer = VP_GetFramebuffer();
     src = texture->data;
-    y_shift = (SCREENHEIGHT << (FRACBITS-1)) + g_view_y_shift;
+    y_shift = (SCREENHEIGHT << (FRACBITS-1)) + (g_view_y_shift<<RP_SCREEN_Y_SHIFT);
 
     for (y = g_cur_screen_polygon.y_min; y < g_cur_screen_polygon.y_max; y++)
     {
@@ -526,7 +545,7 @@ static void SetupView(player_t* player)
 
 
     extern int x_angle;
-    g_view_y_shift = SCREENHEIGHT * finesine[(x_angle >> ANGLETOFINESHIFT) & FINEMASK] / 2;
+    g_view_y_shift = (SCREENHEIGHT * finesine[(x_angle >> ANGLETOFINESHIFT) & FINEMASK]) >> (1 + RP_SCREEN_Y_SHIFT);
 
     // infrared view or invulnerability
     g_fullbright = player->fixedcolormap == 1 || player->fixedcolormap == 32;
@@ -600,7 +619,7 @@ static void BuildClipPlanes(player_t *player)
 static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 {
     float	vertex_z[4];
-    fixed_t	screen_y[4];
+    screen_y_t	screen_y[4];
     int		i;
     pixel_t*	framebuffer;
     int		light_level;
@@ -608,7 +627,7 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
     fixed_t	dx;
     int		x, x_begin, x_end;
     fixed_t	ddx;
-    fixed_t	top_dy, bottom_dy, top_y, bottom_y;
+    screen_y_t	top_dy, bottom_dy, top_y, bottom_y;
 
     fixed_t	tex_width [RP_MAX_WALL_MIPS];
     fixed_t	tex_height[RP_MAX_WALL_MIPS];
@@ -632,12 +651,12 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
     {
 	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
 	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[i>>1]);
-	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * g_half_screenheight) + g_view_y_shift;
+	screen_y[i] = FloatToScreenY((screen_space_y + 1.0f ) * g_half_screenheight) + g_view_y_shift;
     }
 
     // wall is not wisible on screen
     if (screen_y[0] < 0 && screen_y[2] < 0 ) return;
-    if (screen_y[1] >= g_screenheight_fixed && screen_y[3] >= g_screenheight_fixed) return;
+    if (screen_y[1] >= g_screenheight_screen_y && screen_y[3] >= g_screenheight_screen_y) return;
 
     framebuffer = VP_GetFramebuffer();
     light_level = g_cur_seg_projected.light_level;
@@ -696,7 +715,7 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 
     // interpolate value in range [0; 1 ^ PR_SEG_PART_BITS ]
     // becouse direct interpolation of u/z and 1/z can be inaccurate
-    part_step = FixedDiv(FRACUNIT << PR_SEG_PART_BITS, dx);
+    part_step = FixedDiv(FRACUNIT << RP_SEG_PART_BITS, dx);
     part = FixedMul(part_step, ddx);
 
     while (x < x_end)
@@ -708,33 +727,33 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 	fixed_t	cur_mip_tex_heigth;
 	pixel_t	pixel;
 
-	fixed_t one_minus_part = (FRACUNIT<<PR_SEG_PART_BITS) - part;
+	fixed_t one_minus_part = (FRACUNIT<<RP_SEG_PART_BITS) - part;
 	fixed_t cur_u_div_z = FixedMul(part, u_div_z[1]) + FixedMul(one_minus_part, u_div_z[0]);
 	fixed_t inv_z = FixedDiv(part, g_cur_seg_projected.screen_z[1]) + FixedDiv(one_minus_part, g_cur_seg_projected.screen_z[0]);
 	fixed_t u = FixedDiv(cur_u_div_z, inv_z);
 
-	SetLightLevel(light_level, FixedDiv((FRACUNIT<<PR_SEG_PART_BITS), inv_z));
+	SetLightLevel(light_level, FixedDiv((FRACUNIT<<RP_SEG_PART_BITS), inv_z));
 
 	// TOD - fix u mips
 	//du_dx = FixedDiv(u_div_z_step - FixedMul(u, inv_z_step), inv_z >> PR_SEG_PART_BITS);
 	//u_mip = IntLog2Floor((du_dx / PR_SEG_U_MIP_SCALER) >> FRACBITS);
 	u_mip = 0;
 
-	y_begin = FixedRoundToInt(top_y   );
+	y_begin = ScreenYRoundToInt(top_y   );
 	if (y_begin < g_cur_seg_projected.pixel_range_on_x0[x].minmax[0] ) y_begin = g_cur_seg_projected.pixel_range_on_x0[x].minmax[0];
-	y_end   = FixedRoundToInt(bottom_y);
+	y_end   = ScreenYRoundToInt(bottom_y);
 	if (y_end > g_cur_seg_projected.pixel_range_on_x0[x].minmax[1] ) y_end = g_cur_seg_projected.pixel_range_on_x0[x].minmax[1];
 	if (y_end <= y_begin) goto x_loop_end; // can be, in some cases
 
 	y = y_begin;
 
-	ddy = (y_begin<<FRACBITS) + FRACUNIT/2 - top_y;
+	ddy = (y_begin<<RP_SCREEN_Y_BITS) + RP_SCREEN_Y_UNIT/2 - top_y;
 
 	dst = framebuffer + x + y * SCREENWIDTH;
 	dst_end = framebuffer + x + y_end * SCREENWIDTH;
 
-	v_step = FixedDiv(z_max - z_min, bottom_y - top_y);
-	v = top_tex_offset + g_cur_side->rowoffset + FixedMul(ddy, v_step);
+	v_step = FixedDiv((z_max - z_min) >> RP_SCREEN_Y_SHIFT, bottom_y - top_y);
+	v = top_tex_offset + g_cur_side->rowoffset + FixedMul(ddy, v_step << RP_SCREEN_Y_SHIFT);
 
 	v_mip = IntLog2Floor(v_step >> FRACBITS);
 
@@ -776,7 +795,7 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 static void DrawWallPartAsSky(fixed_t z_min, fixed_t z_max)
 {
     int			i;
-    fixed_t		screen_y[4];
+    screen_y_t		screen_y[4];
     float		vertex_z[4];
     screen_vertex_t	sky_polygon_vertices[4];
 
@@ -789,7 +808,7 @@ static void DrawWallPartAsSky(fixed_t z_min, fixed_t z_max)
     {
 	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
 	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[i>>1]);
-	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * g_half_screenheight) + g_view_y_shift;
+	screen_y[i] = FloatToScreenY((screen_space_y + 1.0f ) * g_half_screenheight) + g_view_y_shift;
     }
 
     sky_polygon_vertices[0].x = g_cur_seg_projected.screen_x[0];
@@ -818,7 +837,7 @@ static void DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_m
     const int c_min_allowed_dy = 64; // do not split to low on very wide screens
 
     float	vertex_z[4];
-    fixed_t	screen_y[4];
+    screen_y_t	screen_y[4];
     int		i;
     int		dy_left, dy_right, dy_max;
     int		allowed_dy;
@@ -837,11 +856,11 @@ static void DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_m
     {
 	float screen_space_y = g_view_matrix[9] * vertex_z[i] + g_view_matrix[13];
 	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[i>>1]);
-	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * g_half_screenheight) + g_view_y_shift;
+	screen_y[i] = FloatToScreenY((screen_space_y + 1.0f ) * g_half_screenheight) + g_view_y_shift;
     }
 
-    dy_left  = (screen_y[0] - screen_y[1]) >> FRACBITS;
-    dy_right = (screen_y[2] - screen_y[3]) >> FRACBITS;
+    dy_left  = (screen_y[0] - screen_y[1]) >> RP_SCREEN_Y_BITS;
+    dy_right = (screen_y[2] - screen_y[3]) >> RP_SCREEN_Y_BITS;
     dy_max = dy_left > dy_right ? dy_left : dy_right;
 
     if (dy_max <= allowed_dy)
@@ -882,7 +901,7 @@ static boolean IsBackSegment()
 
 static void DrawWall(boolean as_sky)
 {
-    int		v_offset;
+    fixed_t	h, v_offset;
     boolean	seg_projected = false;
 
     if (ClipCurSeg()) return;
@@ -916,17 +935,27 @@ static void DrawWall(boolean as_sky)
 		g_cur_wall_texture = RP_GetWallTexture(texturetranslation[g_cur_side->bottomtexture]);
 		g_cur_wall_texture_transparent = false;
 
+		if (g_cur_seg->backsector->floorheight < g_cur_seg->frontsector->ceilingheight)
+		{
+		    h = g_cur_seg->backsector->floorheight;
+		    v_offset = 0;
+		}
+		else
+		{
+		    h  = g_cur_seg->frontsector->ceilingheight;
+		    v_offset = g_cur_seg->backsector->floorheight - g_cur_seg->frontsector->ceilingheight;
+		}
+
 		if (g_cur_seg->linedef->flags & ML_DONTPEGBOTTOM)
-		    v_offset =
+		    v_offset +=
 			PositiveMod(
 			    g_cur_seg->frontsector->ceilingheight - g_cur_seg->backsector->floorheight,
 			    g_cur_wall_texture->height << FRACBITS);
-		else v_offset = 0;
 
 		DrawSplitWallPart(
 		    v_offset,
 		    g_cur_seg->frontsector->floorheight,
-		    g_cur_seg->backsector->floorheight);
+		    h);
 	    }
 	}
 
@@ -958,7 +987,9 @@ static void DrawWall(boolean as_sky)
 
 		DrawSplitWallPart(
 		    v_offset,
-		    g_cur_seg->backsector->ceilingheight,
+		    g_cur_seg->backsector->ceilingheight > g_cur_seg->frontsector->floorheight
+			? g_cur_seg->backsector->ceilingheight
+			: g_cur_seg->frontsector->floorheight,
 		    g_cur_seg->frontsector->ceilingheight);
 	    }
 	}
@@ -997,7 +1028,8 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
     screen_vertex_t*	top_vertex;
     screen_vertex_t*	bottom_vertex;
 
-    fixed_t		dy, ddy, part_step, part;
+    screen_y_t		dy, ddy;
+    fixed_t		part_step, part;
     fixed_t		inv_z_scaled_step;
     fixed_t		uv_start[2], uv_dir[2], uv_per_dir[2];
     fixed_t		uv_line_step_on_z1;
@@ -1024,7 +1056,7 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	proj[1] /= proj[2];
 
 	vertices_proj[i].x = FloatToFixed((proj[0] + 1.0f ) * g_half_screenwidth );
-	vertices_proj[i].y = FloatToFixed((proj[1] + 1.0f ) * g_half_screenheight) + g_view_y_shift;
+	vertices_proj[i].y = FloatToScreenY((proj[1] + 1.0f ) * g_half_screenheight) + g_view_y_shift;
 	vertices_proj[i].z = FloatToFixed(proj[2]);
     }
 
@@ -1042,13 +1074,13 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
     texture = RP_GetFlatTexture(texture_num);
 
     dy = bottom_vertex->y - top_vertex->y;
-    part_step = FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, dy);
-    ddy = (g_cur_screen_polygon.y_min<<FRACBITS) + FRACUNIT/2 - top_vertex->y;
-    part = FixedMul(ddy, part_step);
+    part_step = FixedDiv(FRACUNIT << (RP_FLAT_PART_BITS-RP_SCREEN_Y_SHIFT), dy);
+    ddy = (g_cur_screen_polygon.y_min<<RP_SCREEN_Y_BITS) + RP_SCREEN_Y_UNIT/2 - top_vertex->y;
+    part = FixedMul(ddy, part_step << RP_SCREEN_Y_SHIFT);
 
     inv_z_scaled_step = FixedDiv( // value is negative
-        FixedDiv(FRACUNIT << PR_FLAT_PART_BITS,    top_vertex->z) -
-        FixedDiv(FRACUNIT << PR_FLAT_PART_BITS, bottom_vertex->z), dy );
+        FixedDiv(FRACUNIT << (RP_FLAT_PART_BITS-RP_SCREEN_Y_SHIFT),    top_vertex->z) -
+        FixedDiv(FRACUNIT << (RP_FLAT_PART_BITS-RP_SCREEN_Y_SHIFT), bottom_vertex->z), dy );
     inv_z_scaled_step = abs(inv_z_scaled_step);
 
     uv_start[0] = g_view_pos[0];
@@ -1070,13 +1102,13 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
 
 	fixed_t inv_z_scaled = // (1<<PR_FLAT_PART_BITS) / z
 	    FixedDiv(part, bottom_vertex->z) +
-	    FixedDiv((FRACUNIT<<PR_FLAT_PART_BITS) - part, top_vertex->z);
-	fixed_t z = FixedDiv(FRACUNIT<<PR_FLAT_PART_BITS, inv_z_scaled);
+	    FixedDiv((FRACUNIT<<RP_FLAT_PART_BITS) - part, top_vertex->z);
+	fixed_t z = FixedDiv(FRACUNIT<<RP_FLAT_PART_BITS, inv_z_scaled);
 
 	SetLightLevel(subsector->sector->lightlevel, z);
 
 	y_mip =
-	    IntLog2Floor((FixedMul(FixedDiv(inv_z_scaled_step, inv_z_scaled), z) / PR_FLAT_MIP_SCALER) >> FRACBITS);
+	    IntLog2Floor((FixedMul(FixedDiv(inv_z_scaled_step, inv_z_scaled), z) / RP_FLAT_MIP_SCALER) >> FRACBITS);
 
 	x_begin = g_cur_screen_polygon.x[y].minmax[0];
 	if (x_begin < 0 ) x_begin = 0;
@@ -1515,10 +1547,12 @@ static void AddSubsectorSprites(subsector_t* sub)
 
     while(mob)
     {
-	float	pos[3];
-	float	proj[3];
-	fixed_t	z, sx, sy;
-	fixed_t	x_begin_f, x_end_f, y_begin_f;
+	float		pos[3];
+	float		proj[3];
+	fixed_t		z, sx;
+	screen_y_t	sy;
+	fixed_t		x_begin_f, x_end_f;
+	screen_y_t	y_begin_f;
 
 	if(mob->subsector != sub) goto next_mob;
 
@@ -1561,7 +1595,7 @@ static void AddSubsectorSprites(subsector_t* sub)
 
 	z = FloatToFixed(proj[2]);
 	sx = FloatToFixed((proj[0] + 1.0f ) * g_half_screenwidth );
-	sy = FloatToFixed((proj[1] + 1.0f ) * g_half_screenheight) + g_view_y_shift;
+	sy = FloatToScreenY((proj[1] + 1.0f ) * g_half_screenheight) + g_view_y_shift;
 
 	dsprite = g_draw_sprites.sprites + g_draw_sprites.count;
 
@@ -1572,7 +1606,7 @@ static void AddSubsectorSprites(subsector_t* sub)
 	x_end_f = x_begin_f + FixedDiv(sprite->width << FRACBITS, dsprite->u_step);
 	y_begin_f = sy;
 	dsprite->x_begin = FixedRoundToInt(x_begin_f);
-	dsprite->y_begin = FixedRoundToInt(y_begin_f);
+	dsprite->y_begin = ScreenYRoundToInt(y_begin_f);
 
 	if (dsprite->x_begin < 0) dsprite->x_begin = 0;
 	if (dsprite->y_begin < 0) dsprite->y_begin = 0;
@@ -1581,7 +1615,7 @@ static void AddSubsectorSprites(subsector_t* sub)
 	if (dsprite->x_end > SCREENWIDTH) dsprite->x_end = SCREENWIDTH;
 
 	dsprite->u_begin = FixedMul((dsprite->x_begin<<FRACBITS) - x_begin_f + FRACUNIT/2, dsprite->u_step);
-	dsprite->v_begin = FixedMul((dsprite->y_begin<<FRACBITS) - y_begin_f + FRACUNIT/2, dsprite->v_step);
+	dsprite->v_begin = FixedMul((dsprite->y_begin<<RP_SCREEN_Y_BITS) - y_begin_f + RP_SCREEN_Y_UNIT/2, dsprite->v_step << RP_SCREEN_Y_SHIFT);
 
 	while(dsprite->x_begin < dsprite->x_end)
 	{
@@ -1656,13 +1690,13 @@ static void SubsectorBackToFront(int num)
 
 static void GenLineSilouette(fixed_t world_z, int left_vertex_index, int silouette)
 {
-    fixed_t	screen_y[2];
+    screen_y_t	screen_y[2];
     int		i;
 
     int		right_vertex_index;
     int		x, x_begin, x_end;
     fixed_t	dx, ddx;
-    fixed_t	y, dy;
+    screen_y_t	y, dy;
     int		y_int;
 
     right_vertex_index = left_vertex_index ^ 1;
@@ -1671,7 +1705,7 @@ static void GenLineSilouette(fixed_t world_z, int left_vertex_index, int silouet
     {
 	float screen_space_y = g_view_matrix[9] * FixedToFloat(world_z) + g_view_matrix[13];
 	screen_space_y /= FixedToFloat(g_cur_seg_projected.screen_z[i]);
-	screen_y[i] = FloatToFixed((screen_space_y + 1.0f ) * g_half_screenheight) + g_view_y_shift;
+	screen_y[i] = FloatToScreenY((screen_space_y + 1.0f ) * g_half_screenheight) + g_view_y_shift;
     }
 
     dx = g_cur_seg_projected.screen_x[right_vertex_index] - g_cur_seg_projected.screen_x[left_vertex_index];
@@ -1685,7 +1719,7 @@ static void GenLineSilouette(fixed_t world_z, int left_vertex_index, int silouet
     ddx = (x_begin<<FRACBITS) + FRACUNIT/2 - g_cur_seg_projected.screen_x[left_vertex_index];
 
     dy = FixedDiv(screen_y[right_vertex_index] - screen_y[left_vertex_index], dx);
-    y = screen_y[left_vertex_index] + FixedMul(ddx, dy );
+    y = screen_y[left_vertex_index] + FixedMul(ddx, dy);
 
     x = x_begin;
     if (silouette == SIL_BOTH)
@@ -1697,17 +1731,17 @@ static void GenLineSilouette(fixed_t world_z, int left_vertex_index, int silouet
     else if (silouette == SIL_BOTTOM)
 	while(x < x_end)
 	{
-	    y_int = FixedRoundToInt(y);
+	    y_int = ScreenYRoundToInt(y);
 	    if (g_occlusion_buffer[x].minmax[1] > y_int) g_occlusion_buffer[x].minmax[1] = y_int;
-	    //if (y >= 0 && y < SCREENHEIGHT) V_DrawPixel(x, y, 160); // YELLOW
+	    //if (y_int >= 0 && y_int < SCREENHEIGHT) V_DrawPixel(x, y_int, 160); // YELLOW
 	    y += dy; x++;
 	}
     else
 	while(x < x_end)
 	{
-	    y_int = FixedRoundToInt(y);
+	    y_int = ScreenYRoundToInt(y);
 	    if (g_occlusion_buffer[x].minmax[0] < y_int) g_occlusion_buffer[x].minmax[0] = y_int;
-	    //if (y >= 0 && y < SCREENHEIGHT) V_DrawPixel(x, y, 112); // GREEN
+	    //if (y_int >= 0 && y_int < SCREENHEIGHT) V_DrawPixel(x, y_int, 112); // GREEN
 	    y += dy; x++;
 	}
 }
@@ -1723,7 +1757,7 @@ static void GenSegSilouette(boolean back)
 
     left_vertex_index = back ? 1 : 0;
 
-    if (g_cur_seg->frontsector && g_cur_seg->backsector  && (g_cur_seg->linedef->flags & ML_TWOSIDED))
+    if (g_cur_seg->frontsector && g_cur_seg->backsector && (g_cur_seg->linedef->flags & ML_TWOSIDED))
     {
 	if (g_cur_seg->frontsector->floorheight <= g_cur_seg->backsector->floorheight)
 	    GenLineSilouette(g_cur_seg->backsector->floorheight, left_vertex_index, SIL_BOTTOM);
@@ -2074,6 +2108,7 @@ static void InitStaticData()
 
     g_screenwidth_fixed  = SCREENWIDTH  << FRACBITS;
     g_screenheight_fixed = SCREENHEIGHT << FRACBITS;
+    g_screenheight_screen_y = SCREENHEIGHT << RP_SCREEN_Y_BITS;
 }
 
 void RP_Init()
