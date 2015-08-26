@@ -47,6 +47,7 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 
 // max scaler - for future ultra-hyper-über displays
 #define MAX_SCREEN_SCALER 32
+#define MAX_SCREEN_SIZE 10000
 
 // m_misc.c
 extern int	usemouse;
@@ -380,6 +381,13 @@ void I_FinishUpdate (void)
 
     if (must_lock) SDL_LockSurface( sdl.window_surface );
 
+    if (v_scaler > 1)
+    {
+	inv_scaler = FRACUNIT / v_scaler;
+	if( (((v_system_window_width-1) * (inv_scaler+1))>>FRACBITS) < SCREENWIDTH )
+	    inv_scaler++;
+    }
+
     if (!v_32bit)
     {
 	palette = VP_GetPaletteStorage();
@@ -392,10 +400,6 @@ void I_FinishUpdate (void)
 	else
 	{
 	    byte* src;
-	    inv_scaler = FRACUNIT / v_scaler;
-
-	    if( (((v_system_window_width-1) * (inv_scaler+1))>>FRACBITS) <= SCREENWIDTH )
-		inv_scaler++;
 
 	    p = sdl.window_surface->pixels;
 	    for( y = 0; y < v_system_window_height; y++ )
@@ -411,10 +415,6 @@ void I_FinishUpdate (void)
 	if (v_scaler > 1)
 	{
 	    pixel_t* src;
-	    inv_scaler = FRACUNIT / v_scaler;
-
-	    if( (((v_system_window_width-1) * (inv_scaler+1))>>FRACBITS) < SCREENWIDTH )
-		inv_scaler++;
 
 	    p = sdl.window_surface->pixels;
 	    for( y = 0; y < v_system_window_height; y++ )
@@ -468,19 +468,43 @@ void I_SetPalette (int palette_num)
 
 void I_PrepareGraphics (void)
 {
-     if(v_scaler < 1) v_scaler = 1;
-     else if (v_scaler > MAX_SCREEN_SCALER) v_scaler = MAX_SCREEN_SCALER;
+    int max_screen_size[2];
 
-     SCREENWIDTH  = v_system_window_width  / v_scaler;
-     SCREENHEIGHT = v_system_window_height / v_scaler;
+    if (v_32bit)
+    // we are not so limited
+	max_screen_size[0] = max_screen_size[1] = MAX_SCREEN_SIZE;
+    else
+    {
+	// limit screen size to extended vanila limits
+	max_screen_size[0] = MAX_SCREENWIDTH ;
+	max_screen_size[1] = MAX_SCREENHEIGHT;
+    }
 
-     // do not try scaling, if effective screen size less then in vanila
-     while (SCREENWIDTH < ID_SCREENWIDTH || SCREENHEIGHT < ID_SCREENHEIGHT)
-     {
+    if(v_scaler < 1) v_scaler = 1;
+    else if (v_scaler > MAX_SCREEN_SCALER) v_scaler = MAX_SCREEN_SCALER;
+
+    try_select_resolution:
+    SCREENWIDTH  = v_system_window_width  / v_scaler;
+    SCREENHEIGHT = v_system_window_height / v_scaler;
+
+    // do not try scaling, if effective screen size less then in vanila
+    while (SCREENWIDTH < ID_SCREENWIDTH || SCREENHEIGHT < ID_SCREENHEIGHT)
+    {
 	v_scaler--;
 	SCREENWIDTH  = v_system_window_width  / v_scaler;
 	SCREENHEIGHT = v_system_window_height / v_scaler;
-     }
+    }
+
+    if (SCREENWIDTH  > max_screen_size[0])
+    {
+	v_system_window_width  = max_screen_size[0] * v_scaler;
+	goto try_select_resolution;
+    }
+    if (SCREENHEIGHT > max_screen_size[1])
+    {
+	v_system_window_height = max_screen_size[1] * v_scaler;
+	goto try_select_resolution;
+    }
 }
 
 void I_InitGraphics(void)
