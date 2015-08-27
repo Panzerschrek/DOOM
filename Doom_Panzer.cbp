@@ -311,7 +311,6 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="linuxdoom-1.10\v_video.h" />
-		<Unit filename="linuxdoom-1.10\values.h" />
 		<Unit filename="linuxdoom-1.10\w_wad.c">
 			<Option compilerVar="CC" />
 		</Unit>
