@@ -12,4 +12,24 @@
   i myšj.
 * Netu setevoj igry.
 * Netu muzyki.
-* Netu sborki pod drugije pklatformy.
+* Netu sborki pod drugije platformy.
+
+------------------------0.7------------------------
+
+* 32bitnyj renderer, vklücajet v sebä:
+    ^ Otsutstvije nekotoryh ogranicenij.
+    ^ Cestnoje osvescenije (a ne tablicnoje).
+    ^ Mip-urovni dlä tekstur i sprajtov.
+    ^ Smešivanije pri risovanii dalökih sprajtov.
+    ^ Nebo s cestnoj proekçijej nebesnogo çylindra.
+    ^ Polnoekrannyje effekty s ulucšennym kacestvom
+      i ne zatragivajuscije elementy interfejsa. 
+    ^ Effekt neujazvimosti risujetsä na nebe.
+* Vozmožnostj sborki pod GNU/Linux.
+* Vosstanovlena vozmožnostj lokaljnoj setevoj igry.
+* Dobavlena myzyka, no plohogo kacestva.
+* Dobavlena vozmožnostj vybratj igru i IWAD k nej.
+* Dobavleno soobscenije pri vyhode iz igry.
+* Dobavlena ikonka v zagolovke okna.
+* Dobavleno nazvanije igry v zagolovok okna.
+* Ispravlenije smeny tekstur neba.
