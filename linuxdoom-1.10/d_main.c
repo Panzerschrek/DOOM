@@ -27,12 +27,10 @@
 
 static const char rcsid[] = "$Id: d_main.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 
-#define	BGCOLOR		7
-#define	FGCOLOR		8
-
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "doomdef.h"
 #include "doomstat.h"
@@ -83,6 +81,8 @@ extern int v_32bit;
 //PANZER - now, we can different resolutions
 int SCREENWIDTH = ID_SCREENWIDTH * 2;
 int SCREENHEIGHT = ID_SCREENHEIGHT * 2;
+
+int	drawfps;
 
 //
 // D-DoomLoop()
@@ -187,28 +187,27 @@ void D_ProcessEvents (void)
 
 void D_CalcFPS()
 {
-    int time_delta;
+    const int	sample_time = CLOCKS_PER_SEC * 3 / 2;
+    static int	prev_time = 0;
+    static int	frames = 0;
+    int		cur_time, dt;
 
-    static int prev_tick_time = 0;
-    static int ticks = 0;
-    const int ticks_for_scaling = TICRATE;
-
-    int current_time = I_GetTime();
-
-    if (!prev_tick_time)
+    if (!drawfps)
     {
-	HU_SetFPS(0);
-	prev_tick_time = current_time;
+	HU_SetFPS( -1);
+	return;
     }
 
-    ticks++;
-    time_delta = current_time - prev_tick_time;
-    if (time_delta > ticks_for_scaling)
+    frames++;
+    cur_time = clock();
+    dt = cur_time - prev_time;
+
+    if (dt > sample_time)
     {
-	fixed_t fps = time_delta ? ((ticks * TICRATE) << FRACBITS) / time_delta : 0;
+	fixed_t fps = ( ((frames * CLOCKS_PER_SEC) << (FRACBITS/2)) / dt) << (FRACBITS/2);
 	HU_SetFPS( fps );
-	ticks = 0;
-	prev_tick_time += ticks_for_scaling;
+	frames = 0;
+	prev_time += dt;
     }
 }
 

@@ -599,6 +599,8 @@ void HU_SetFPS(fixed_t fps)
 
     HUlib_clearTextLine( &fps_message );
 
+    if (fps < 0 ) return;
+
     sprintf( t, "fps: %d.%d\n", fps >> FRACBITS, ((fps * 100) >> FRACBITS) % 100 );
 
     while( *t )

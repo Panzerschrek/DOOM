@@ -163,6 +163,8 @@ extern	int	numChannels;
 
 extern char*	chat_macros[];
 
+extern int	drawfps;
+
 extern int	v_fullscreen;
 extern int	v_display;
 extern int	v_32bit;
@@ -226,6 +228,7 @@ default_t	defaults[] =
 
     {"usegamma",&usegamma, 0},
     // PANZER
+    { "drawfps", &drawfps, 0 },
     { "fullscreen", &v_fullscreen, 0 },
     { "display", &v_display, 0 },
     { "v_32bit", &v_32bit, 0 },
