@@ -1,9 +1,10 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
 //
 // Copyright (C) 1993-1996 by id Software, Inc.
+// Copyright (C) 2015 by Artöm "Panzerschrek" Kunç.
 //
 // This source is available for distribution and/or modification
 // only under the terms of the DOOM Source Code License as
@@ -66,7 +67,7 @@ typedef struct thinker_s
     struct thinker_s*	prev;
     struct thinker_s*	next;
     think_t		function;
-    
+
 } thinker_t;
 
 

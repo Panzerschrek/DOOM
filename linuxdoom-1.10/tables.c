@@ -1,9 +1,10 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
 //
 // Copyright (C) 1993-1996 by id Software, Inc.
+// Copyright (C) 2015 by Artöm "Panzerschrek" Kunç.
 //
 // This source is available for distribution and/or modification
 // only under the terms of the DOOM Source Code License as
@@ -19,7 +20,7 @@
 // DESCRIPTION:
 //	Lookup tables.
 //	Do not try to look them up :-).
-//	In the order of appearance: 
+//	In the order of appearance:
 //
 //	int finetangent[4096]	- Tangens LUT.
 //	 Should work with BAM fairly well (12 of 16bit,
@@ -27,12 +28,12 @@
 //
 //	int finesine[10240]		- Sine lookup.
 //	 Guess what, serves as cosine, too.
-//	 Remarkable thing is, how to use BAMs with this? 
+//	 Remarkable thing is, how to use BAMs with this?
 //
 //	int tantoangle[2049]	- ArcTan LUT,
 //	  maps tan(angle) to angle fast. Gotta search.
-//	
-//    
+//
+//
 //-----------------------------------------------------------------------------
 
 
@@ -52,7 +53,7 @@ SlopeDiv
   unsigned	den)
 {
     unsigned 	ans;
-    
+
     if (den < 512)
 	return SLOPERANGE;
 

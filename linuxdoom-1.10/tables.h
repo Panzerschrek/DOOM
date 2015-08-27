@@ -1,9 +1,10 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
 //
 // Copyright (C) 1993-1996 by id Software, Inc.
+// Copyright (C) 2015 by Artöm "Panzerschrek" Kunç.
 //
 // This source is available for distribution and/or modification
 // only under the terms of the DOOM Source Code License as
@@ -17,7 +18,7 @@
 // DESCRIPTION:
 //	Lookup tables.
 //	Do not try to look them up :-).
-//	In the order of appearance: 
+//	In the order of appearance:
 //
 //	int finetangent[4096]	- Tangens LUT.
 //	 Should work with BAM fairly well (12 of 16bit,
@@ -25,11 +26,11 @@
 //
 //	int finesine[10240]		- Sine lookup.
 //	 Guess what, serves as cosine, too.
-//	 Remarkable thing is, how to use BAMs with this? 
+//	 Remarkable thing is, how to use BAMs with this?
 //
 //	int tantoangle[2049]	- ArcTan LUT,
-//	  maps tan(angle) to angle fast. Gotta search.	
-//    
+//	  maps tan(angle) to angle fast. Gotta search.
+//
 //-----------------------------------------------------------------------------
 
 
@@ -46,13 +47,13 @@
 
 
 #include "m_fixed.h"
-	
+
 #define FINEANGLES		8192
 #define FINEMASK		(FINEANGLES-1)
 
 
 // 0x100000000 to 0x2000
-#define ANGLETOFINESHIFT	19		
+#define ANGLETOFINESHIFT	19
 
 // Effective size is 10240.
 extern  fixed_t		finesine[5*FINEANGLES/4];

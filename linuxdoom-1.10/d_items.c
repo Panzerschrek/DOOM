@@ -1,9 +1,10 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
 //
 // Copyright (C) 1993-1996 by id Software, Inc.
+// Copyright (C) 2015 by Artöm "Panzerschrek" Kunç.
 //
 // This source is available for distribution and/or modification
 // only under the terms of the DOOM Source Code License as
@@ -54,7 +55,7 @@ weaponinfo_t	weaponinfo[NUMWEAPONS] =
 	S_PUNCH,
 	S_PUNCH1,
 	S_NULL
-    },	
+    },
     {
 	// pistol
 	am_clip,
@@ -63,7 +64,7 @@ weaponinfo_t	weaponinfo[NUMWEAPONS] =
 	S_PISTOL,
 	S_PISTOL1,
 	S_PISTOLFLASH
-    },	
+    },
     {
 	// shotgun
 	am_shell,
@@ -126,7 +127,7 @@ weaponinfo_t	weaponinfo[NUMWEAPONS] =
 	S_DSGUN,
 	S_DSGUN1,
 	S_DSGUNFLASH1
-    },	
+    },
 };
 
 

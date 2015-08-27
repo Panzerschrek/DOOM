@@ -1,9 +1,10 @@
-// Emacs style mode select   -*- C++ -*- 
+// Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //
 // $Id:$
 //
 // Copyright (C) 1993-1996 by id Software, Inc.
+// Copyright (C) 2015 by Artöm "Panzerschrek" Kunç.
 //
 // This source is available for distribution and/or modification
 // only under the terms of the DOOM Source Code License as
@@ -524,7 +525,7 @@
 "BLAZE THROUGH THIS ONE!\n"
 
 
-// after map 06	
+// after map 06
 
 #define P1TEXT  \
 "You gloat over the steaming carcass of the\n"\

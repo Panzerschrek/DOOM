@@ -1,3 +1,15 @@
+// Copyright (C) 2015 by Artöm "Panzerschrek" Kunç.
+//
+// This source is available for distribution and/or modification
+// only under the terms of the DOOM Source Code License as
+// published by id Software. All rights reserved.
+//
+// The source is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// FITNESS FOR A PARTICULAR PURPOSE. See the DOOM Source Code License
+// for more details.
+
+
 #include <limits.h>
 #include <math.h>
 
@@ -1114,7 +1126,7 @@ static void DrawSubsectorFlat(int subsector_num, boolean is_floor)
 	if (x_begin < 0 ) x_begin = 0;
 	x_end = g_cur_screen_polygon.x[y].minmax[1];
 	if( x_end > SCREENWIDTH) x_end = SCREENWIDTH;
-	
+
 	line_duv_scaler = FixedMul(uv_line_step_on_z1, z);
 	u = FixedMul(z, uv_dir[0]) + uv_start[0];
 	v = FixedMul(z, uv_dir[1]) + uv_start[1];
@@ -1509,7 +1521,7 @@ static void DrawSprites()
 
 		if (part < 0 || part >= (1<<c_bits)) continue;
 
-		wall_z_on_mid_x = 
+		wall_z_on_mid_x =
 		    FixedDiv( 1<<c_bits,
 			FixedDiv( (1<<c_bits)- part, wall->screen_z[0] ) +
 			FixedDiv( part, wall->screen_z[1] ) );
@@ -1821,7 +1833,7 @@ static void GenSegSilouette(boolean back)
 
 	    if (dx + g_draw_sprites.next_pixel_range_index > g_draw_sprites.pixel_ranges_capacity)
 		goto mid_texture_no_draw; // no space for pixel ranges
-	    
+
 	    pixel_range = g_draw_sprites.pixel_ranges + g_draw_sprites.next_pixel_range_index;
 	    memcpy( pixel_range, g_occlusion_buffer + x_begin, dx * sizeof(pixel_range_t) );
 	    mid_wall->pixel_range_on_x0 = pixel_range - x_begin;
