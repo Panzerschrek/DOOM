@@ -203,11 +203,6 @@ default_t	defaults[] =
     {"key_strafe",&key_strafe, KEY_RALT},
     {"key_speed",&key_speed, KEY_RSHIFT},
 
-#ifdef LINUX
-    {"mousedev", (int*)&mousedev, (int)"/dev/ttyS0"},
-    {"mousetype", (int*)&mousetype, (int)"microsoft"},
-#endif
-
     {"use_mouse",&usemouse, 1},
     { "freelook", &freelook, 0},
     {"mouseb_fire",&mousebfire,0},
@@ -236,7 +231,7 @@ default_t	defaults[] =
     { "v_scaler", &v_scaler, 1 },
     { "screenwidth" , &v_system_window_width , ID_SCREENWIDTH },
     { "screenheight", &v_system_window_height, ID_SCREENHEIGHT },
-
+    /*
     {"chatmacro0", (int *) &chat_macros[0], (int) HUSTR_CHATMACRO0 },
     {"chatmacro1", (int *) &chat_macros[1], (int) HUSTR_CHATMACRO1 },
     {"chatmacro2", (int *) &chat_macros[2], (int) HUSTR_CHATMACRO2 },
@@ -247,6 +242,7 @@ default_t	defaults[] =
     {"chatmacro7", (int *) &chat_macros[7], (int) HUSTR_CHATMACRO7 },
     {"chatmacro8", (int *) &chat_macros[8], (int) HUSTR_CHATMACRO8 },
     {"chatmacro9", (int *) &chat_macros[9], (int) HUSTR_CHATMACRO9 }
+    */
 };
 
 int	numdefaults;
@@ -268,15 +264,15 @@ void M_SaveDefaults (void)
 
     for (i=0 ; i<numdefaults ; i++)
     {
-	if (defaults[i].defaultvalue > -0xfff
-	    && defaults[i].defaultvalue < 0xfff)
+	/*if (defaults[i].defaultvalue > -0xfff
+	    && defaults[i].defaultvalue < 0xfff)*/
 	{
 	    v = *defaults[i].location;
 	    fprintf (f,"%s\t\t%i\n",defaults[i].name,v);
-	} else {
+	}/* else {
 	    fprintf (f,"%s\t\t\"%s\"\n",defaults[i].name,
 		     * (char **) (defaults[i].location));
-	}
+	}*/
     }
 
     fclose (f);
@@ -291,13 +287,13 @@ extern byte	scantokey[128];
 void M_LoadDefaults (void)
 {
     int		i;
-    int		len;
+    //int		len;
     FILE*	f;
     char	def[80];
     char	strparm[100];
-    char*	newstring;
+    //char*	newstring;
     int		parm;
-    boolean	isstring;
+    //boolean	isstring;
 
     // set everything to base values
     numdefaults = sizeof(defaults)/sizeof(defaults[0]);
@@ -320,10 +316,10 @@ void M_LoadDefaults (void)
     {
 	while (!feof(f))
 	{
-	    isstring = false;
+	    //isstring = false;
 	    if (fscanf (f, "%79s %[^\n]\n", def, strparm) == 2)
 	    {
-		if (strparm[0] == '"')
+		/*if (strparm[0] == '"')
 		{
 		    // get a string default
 		    isstring = true;
@@ -332,18 +328,18 @@ void M_LoadDefaults (void)
 		    strparm[len-1] = 0;
 		    strcpy(newstring, strparm+1);
 		}
-		else if (strparm[0] == '0' && strparm[1] == 'x')
+		else*/ if (strparm[0] == '0' && strparm[1] == 'x')
 		    sscanf(strparm+2, "%x", &parm);
 		else
 		    sscanf(strparm, "%i", &parm);
 		for (i=0 ; i<numdefaults ; i++)
 		    if (!strcmp(def, defaults[i].name))
 		    {
-			if (!isstring)
+			//if (!isstring)
 			    *defaults[i].location = parm;
-			else
+			/*else
 			    *defaults[i].location =
-				(int) newstring;
+				(int) newstring;*/
 			break;
 		    }
 	    }
