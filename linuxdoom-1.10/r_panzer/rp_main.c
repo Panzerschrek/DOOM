@@ -121,6 +121,12 @@ static fixed_t		g_inv_y_scaler;
 
 static clip_plane_t	g_clip_planes[3]; // 0 - near, 1 - left, 2 - right
 
+
+static fixed_t		g_tex_width [RP_MAX_WALL_MIPS];
+static fixed_t		g_tex_height[RP_MAX_WALL_MIPS];
+static fixed_t		g_mip_tc_u_scaler[RP_MAX_WALL_MIPS];
+static fixed_t		g_mip_tc_v_scaler[RP_MAX_WALL_MIPS];
+
 static seg_t*		g_cur_seg;
 static side_t*		g_cur_side;
 static wall_texture_t*	g_cur_wall_texture;
@@ -641,11 +647,6 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
     fixed_t	ddx;
     screen_y_t	top_dy, bottom_dy, top_y, bottom_y;
 
-    fixed_t	tex_width [RP_MAX_WALL_MIPS];
-    fixed_t	tex_height[RP_MAX_WALL_MIPS];
-    fixed_t	mip_tc_u_scaler[RP_MAX_WALL_MIPS];
-    fixed_t	mip_tc_v_scaler[RP_MAX_WALL_MIPS];
-
     fixed_t	vert_u[2], u_div_z[2];
     fixed_t	u_div_z_step, inv_z_step;
     fixed_t	part_step, part;
@@ -708,15 +709,7 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
     top_y =    screen_y[1] + FixedMul(ddx, top_dy   );
     bottom_y = screen_y[0] + FixedMul(ddx, bottom_dy);
 
-    for( i = 0; i <= g_cur_wall_texture->max_mip; i++ )
-    {
-	tex_width [i] = (g_cur_wall_texture->width  >> i) << FRACBITS;
-	tex_height[i] = (g_cur_wall_texture->height >> i) << FRACBITS;
-	mip_tc_u_scaler[i] = FixedDiv(tex_width [i], tex_width [0]);
-	mip_tc_v_scaler[i] = FixedDiv(tex_height[i], tex_height[0]);
-    }
-
-    vert_u[0] = PositiveMod(g_cur_seg_projected.u_begin, tex_width[0]);
+    vert_u[0] = PositiveMod(g_cur_seg_projected.u_begin, g_tex_width[0]);
     vert_u[1] = vert_u[0] + g_cur_seg_projected.u_length;
     u_div_z[0] = FixedDiv(vert_u[0], g_cur_seg_projected.screen_z[0]);
     u_div_z[1] = FixedDiv(vert_u[1], g_cur_seg_projected.screen_z[1]);
@@ -772,11 +765,11 @@ static void DrawWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 	mip = u_mip > v_mip ? u_mip : v_mip;
 	if (mip > g_cur_wall_texture->max_mip) mip = g_cur_wall_texture->max_mip;
 
-	u = FixedMul(mip_tc_u_scaler[mip], u);
-	v = FixedMul(mip_tc_v_scaler[mip], v);
-	v_step = FixedMul(v_step, mip_tc_v_scaler[mip]);
-	if( u >= tex_width [mip]) u %= tex_width [mip];
-	cur_mip_tex_heigth = tex_height[mip];
+	u = FixedMul(g_mip_tc_u_scaler[mip], u);
+	v = FixedMul(g_mip_tc_v_scaler[mip], v);
+	v_step = FixedMul(v_step, g_mip_tc_v_scaler[mip]);
+	if( u >= g_tex_width [mip]) u %= g_tex_width [mip];
+	cur_mip_tex_heigth = g_tex_height[mip];
 
 	src = g_cur_wall_texture->mip[mip] + (u>>FRACBITS) * (g_cur_wall_texture->height >> mip);
 
@@ -836,6 +829,20 @@ static void DrawWallPartAsSky(fixed_t z_min, fixed_t z_max)
     DrawSkyPolygon();
 }
 
+
+static void PrepareWallTexture()
+{
+    int i;
+
+    for( i = 0; i <= g_cur_wall_texture->max_mip; i++ )
+    {
+	g_tex_width [i] = (g_cur_wall_texture->width  >> i) << FRACBITS;
+	g_tex_height[i] = (g_cur_wall_texture->height >> i) << FRACBITS;
+	g_mip_tc_u_scaler[i] = FixedDiv(g_tex_width [i], g_tex_width [0]);
+	g_mip_tc_v_scaler[i] = FixedDiv(g_tex_height[i], g_tex_height[0]);
+    }
+}
+
 static void DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_max)
 {
     /*
@@ -874,6 +881,8 @@ static void DrawSplitWallPart(fixed_t top_tex_offset, fixed_t z_min, fixed_t z_m
     dy_left  = (screen_y[0] - screen_y[1]) >> RP_SCREEN_Y_BITS;
     dy_right = (screen_y[2] - screen_y[3]) >> RP_SCREEN_Y_BITS;
     dy_max = dy_left > dy_right ? dy_left : dy_right;
+
+    PrepareWallTexture();
 
     if (dy_max <= allowed_dy)
 	DrawWallPart(top_tex_offset, z_min, z_max);
@@ -1467,6 +1476,7 @@ static void DrawTransparentWalls()
 	g_cur_wall_texture = g_cur_seg_projected.texture;
 	g_cur_wall_texture_transparent = true;
 	g_cur_seg = g_transparent_walls[i].seg;
+	g_cur_side = g_cur_seg->sidedef;
 
 	DrawSplitWallPart(g_cur_seg_projected.v_begin, g_cur_seg_projected.world_z[0], g_cur_seg_projected.world_z[1]);
     }
@@ -1536,6 +1546,8 @@ static void DrawSprites()
 		g_cur_wall_texture_transparent = true;
 		g_cur_seg_x_clip_range.minmax[0] = sprite->x_begin;
 		g_cur_seg_x_clip_range.minmax[1] = sprite->x_end;
+		g_cur_seg = wall->seg;
+		g_cur_side = g_cur_seg->sidedef;
 
 		DrawSplitWallPart(wall->v_begin, wall->world_z[0], wall->world_z[1]);
 	    }
@@ -1798,6 +1810,7 @@ static void GenSegSilouette(boolean back)
 		h[0] = g_cur_seg->frontsector->floorheight > g_cur_seg->backsector->floorheight
 		    ? g_cur_seg->frontsector->floorheight
 		    : g_cur_seg->backsector->floorheight;
+		h[0] += g_cur_side->rowoffset;
 		h[1] = h[0] + (g_cur_wall_texture->height << FRACBITS);
 	    }
 	    else
@@ -1805,6 +1818,7 @@ static void GenSegSilouette(boolean back)
 		h[1] = g_cur_seg->frontsector->ceilingheight < g_cur_seg->backsector->ceilingheight
 		    ? g_cur_seg->frontsector->ceilingheight
 		    : g_cur_seg->backsector->ceilingheight;
+		h[1] += g_cur_side->rowoffset;
 		h[0] = h[1] - (g_cur_wall_texture->height << FRACBITS);
 	    }
 
@@ -1812,13 +1826,14 @@ static void GenSegSilouette(boolean back)
 	    *mid_wall = g_cur_seg_projected;
 	    mid_wall->texture = g_cur_wall_texture;
 
+	    mid_wall->v_begin = -g_cur_side->rowoffset;
+
 	    if (h[0] < g_cur_seg->frontsector->floorheight) h[0] = g_cur_seg->frontsector->floorheight;
 	    if (h[1] > g_cur_seg->frontsector->ceilingheight)
 	    {
-		mid_wall->v_begin = h[1] - g_cur_seg->frontsector->ceilingheight;
+		mid_wall->v_begin += h[1] - g_cur_seg->frontsector->ceilingheight;
 		h[1] = g_cur_seg->frontsector->ceilingheight;
 	    }
-	    else mid_wall->v_begin = 0;
 
 	    mid_wall->world_z[0] = h[0];
 	    mid_wall->world_z[1] = h[1];
