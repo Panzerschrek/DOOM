@@ -504,6 +504,13 @@ W_CacheLumpName
     return W_CacheLumpNum (W_GetNumForName(name), tag);
 }
 
+// returns 0, if can not find num for name
+void* W_CacheLumpNameUnchecked (char* name, int tag)
+{
+    int i = W_CheckNumForName(name);
+    if ( i < 0 ) return NULL;
+    return W_CacheLumpNum(i, tag);
+}
 
 //
 // W_Profile

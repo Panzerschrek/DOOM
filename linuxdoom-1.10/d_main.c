@@ -444,8 +444,15 @@ void D_PageTicker (void)
 //
 void D_PageDrawer (void)
 {
-    // PANZER - here all drawing of fullscreen images. Draw it rescaled
-    V_DrawPatchScaled( 0, 0, SCREENWIDTH, SCREENHEIGHT, W_CacheLumpName(pagename, PU_CACHE) );
+    patch_t* patch = W_CacheLumpNameUnchecked(pagename, PU_CACHE);
+
+    // Hack for "Doom III Bfg Edition" wads
+    if (!patch)
+	patch = W_CacheLumpNameUnchecked("INTERPIC", PU_CACHE);
+    if (!patch)
+	return;
+
+    V_DrawPatchScaled( 0, 0, SCREENWIDTH, SCREENHEIGHT, patch );
 }
 
 
