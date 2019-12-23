@@ -134,6 +134,17 @@ const int TranslateKey(int key)
 	}
 }
 
+int TranslateMouseButton(int button)
+{
+	switch(button)
+	{
+	case Qt::LeftButton: return 0;
+	case Qt::RightButton: return 1;
+	case Qt::MiddleButton: return 2;
+	}
+	return 3;
+}
+
 class DoomWindow : public QWidget
 {
 public:
@@ -178,10 +189,56 @@ public:
 		D_PostEvent(&out_event);
 	}
 
-	virtual void mousePressEvent(QMouseEvent * event) override{}
-	virtual void mouseReleaseEvent(QMouseEvent * event) override{}
+	virtual void mousePressEvent(QMouseEvent * event) override
+	{
+		event->accept();
+
+		mouse_keys_state_ |= ( 1 << TranslateMouseButton(event->button()) );
+
+		event_t out_event;
+		out_event.type = ev_mouse;
+		out_event.data1 = mouse_keys_state_;
+		out_event.data2 = out_event.data3 = 0;
+		D_PostEvent(&out_event);
+	}
+
+	virtual void mouseReleaseEvent(QMouseEvent * event) override
+	{
+		event->accept();
+
+		mouse_keys_state_ &= ~( 1 << TranslateMouseButton(event->button()) );
+
+		event_t out_event;
+		out_event.type = ev_mouse;
+		out_event.data1 = mouse_keys_state_;
+		out_event.data2 = out_event.data3 = 0;
+		D_PostEvent(&out_event);
+	}
+
+	virtual void mouseMoveEvent(QMouseEvent * event) override
+	{
+		event->accept();
+
+		event_t out_event;
+		out_event.type = ev_mouse;
+		out_event.data1 = mouse_keys_state_;
+		out_event.data2 = prev_mouse_x_ - event->x();
+		out_event.data3 = prev_mouse_y_ - event->y();
+		D_PostEvent(&out_event);
+
+		prev_mouse_x_= event->x();
+		prev_mouse_y_= event->y();
+	}
+
+	virtual void closeEvent(QCloseEvent*) override
+	{
+		I_Quit();
+	}
 
 private:
+	int mouse_keys_state_= 0;
+	int prev_mouse_x_= 0;
+	int prev_mouse_y_= 0;
 };
 
 static DoomWindow* qt_window= nullptr;
