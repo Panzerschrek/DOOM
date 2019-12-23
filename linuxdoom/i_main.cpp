@@ -25,12 +25,17 @@
 static const char
 rcsid[] = "$Id: i_main.c,v 1.4 1997/02/03 22:45:10 b1 Exp $";
 
-
+extern "C"
+{
 
 #include "doomdef.h"
 
 #include "m_argv.h"
 #include "d_main.h"
+
+} // extern "C"
+
+#include <QApplication>
 
 int
 main
@@ -40,6 +45,7 @@ main
     myargc = argc;
     myargv = argv;
 
+	QApplication app( argc, argv );
     D_DoomMain ();
 
     return 0;

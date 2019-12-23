@@ -32,8 +32,6 @@ rcsid[] = "$Id: m_bbox.c,v 1.1 1997/02/03 22:45:10 b1 Exp $";
 #include <stdarg.h>
 #include <time.h>
 
-#include <SDL.h>
-
 #include "doomdef.h"
 #include "m_misc.h"
 #include "i_video.h"
@@ -100,7 +98,6 @@ int  I_GetTime (void)
 void I_Init (void)
 {
     I_InitSound();
-    SDL_Init(0);
 }
 
 //
@@ -114,14 +111,12 @@ void I_Quit (void)
     M_SaveDefaults ();
     I_ShutdownGraphics();
 
-    SDL_Quit();
     exit(0);
 }
 
 void I_WaitVBL(int count)
 {
      // UNUSED - we do not need sleep
-     SDL_Delay( 1000 * count / TICRATE );
      count = 0;
 }
 
@@ -170,6 +165,5 @@ void I_Error (char *error, ...)
     I_ShutdownSound();
     I_ShutdownMusic();
 
-    SDL_Quit();
     exit(-1);
 }

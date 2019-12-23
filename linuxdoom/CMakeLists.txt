@@ -2,14 +2,20 @@ cmake_minimum_required(VERSION 2.8)
 
 project( DOOM )
 
-find_package( SDL2 REQUIRED )
+find_package(Qt5 COMPONENTS Widgets REQUIRED)
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
-file( GLOB SOURCES "*.h" "*.c" "r_panzer/*" )
+if(WIN32)
+	add_definitions( -DPANZER_DOOM_WIDNOWS )
+endif()
+
+file( GLOB SOURCES "*.h" "*.c" "*.cpp" "r_panzer/*" )
 
 add_executable( DOOM ${SOURCES} )
-target_include_directories( DOOM PRIVATE ${SDL2_INCLUDE_DIRS} )
-target_link_libraries( DOOM PRIVATE ${SDL2_LIBRARIES} )
+target_link_libraries( DOOM Qt5::Widgets )
 
-if( UNIX )
-	target_link_libraries( DOOM PRIVATE m )
+if(WIN32)
+	target_link_libraries( DOOM WS2_32 )
 endif()
