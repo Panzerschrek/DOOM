@@ -51,6 +51,8 @@ extern "C"
 #include <QPainter>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QGuiApplication>
+#include <QScreen>
 
 #define MOUSE_MOTION_SCALE 3
 
@@ -73,15 +75,36 @@ int		v_system_window_height;
 
 }
 
-enum
+//
+// I_SetPalette
+//
+extern "C" void I_SetPalette (int palette_num)
 {
-    COMPONENT_R,
-    COMPONENT_G,
-    COMPONENT_B,
-    COMPONENT_A,
-};
+	// Input format - RGB
+	byte*	palette;
+	int		i;
+	pixel_t* pal = VP_GetPaletteStorage();
 
-static int g_palette_lump_num;
+	static int g_palette_lump_num = -1;
+	if( g_palette_lump_num == -1 )
+		g_palette_lump_num = W_GetNumForName("PLAYPAL");
+
+	if (!v_32bit || palette_num == -1)
+	{
+		if (palette_num == -1) palette_num = 0;
+		palette = ((byte*)W_CacheLumpNum(g_palette_lump_num, PU_STATIC)) + 768 * palette_num;
+
+		for( i = 0; i < 256; i++ )
+		{
+			pal[i].components[2] = palette[i*3  ];
+			pal[i].components[1] = palette[i*3+1];
+			pal[i].components[0] = palette[i*3+2];
+			pal[i].components[3] = 255;
+		}
+	}
+	else
+		RP_SetPlaypalNum(palette_num);
+}
 
 const int TranslateKey(int key)
 {
@@ -148,25 +171,68 @@ int TranslateMouseButton(int button)
 class DoomWindow : public QWidget
 {
 public:
+	DoomWindow()
+	{
+		I_SetPalette(-1);
 
-	QImage image_;
+		image_= QImage( SCREENWIDTH, SCREENHEIGHT, QImage::Format_RGB32 );
+		if (v_32bit)
+		{
+			VP_SetupFramebuffer(image_.bits());
+		}
+		QWidget::setFixedSize( v_system_window_width, v_system_window_height );
+
+		const QRect screen_geometry= QGuiApplication::screens()[v_display ]->geometry();
+		if( v_fullscreen && screen_geometry.width() == v_system_window_width && screen_geometry.height() == v_system_window_height )
+			QWidget::showFullScreen();
+
+		QWidget::setFocus();
+		QWidget::show();
+
+		QWidget::update(); // Run update.
+	}
 
 	virtual void paintEvent(QPaintEvent *event) override
 	{
-		int		i;
-		pixel_t*	p;
-		int		must_lock;
-		pixel_t*	palette;
-		int		x, y;
-		fixed_t	inv_scaler;
+		event->accept();
 
-		palette = VP_GetPaletteStorage();
-		p= reinterpret_cast<pixel_t*>(image_.bits());
-		for( i = 0; i < v_system_window_width * v_system_window_height; i++ )
-			p[i] = palette[ screens[0][i] ];
+		// convert 8bit -> 32 bit
+		if (!v_32bit)
+		{
+			const pixel_t* const palette = VP_GetPaletteStorage();
+			pixel_t* const p= reinterpret_cast<pixel_t*>(image_.bits());
+			for( int i = 0; i < SCREENWIDTH * SCREENHEIGHT; i++ )
+				p[i] = palette[ screens[0][i] ];
+		}
 
-		QPainter painter( this );
-		painter.drawImage( QPoint(0,0), image_ );
+		// Draw.
+		QPainter(this).drawImage(
+			QRect( 0, 0, v_system_window_width, v_system_window_height ),
+			image_,
+			QRect( 0, 0, image_.width(), image_.height() ) );
+
+		// Update cursor pos.
+		QCursor cursor;
+		if( usemouse )
+		{
+			const QPoint cur_mose_pos= QWidget::mapFromGlobal( cursor.pos() );
+			const QPoint screen_center( v_system_window_width / 2, v_system_window_height / 2 );
+
+			event_t out_event;
+			out_event.type = ev_mouse;
+			out_event.data1 = mouse_keys_state_;
+			out_event.data2 = cur_mose_pos.x() - screen_center.x();
+			out_event.data3 = screen_center.y() - cur_mose_pos.y();
+			D_PostEvent(&out_event);
+
+			cursor.setShape(Qt::BlankCursor);
+			cursor.setPos( QWidget::mapToGlobal( screen_center ) );
+		}
+		else
+		{
+			cursor.setShape(Qt::ArrowCursor);
+		}
+		QWidget::setCursor(cursor);
 
 		QWidget::update(); // Run in loop.
 	}
@@ -215,30 +281,14 @@ public:
 		D_PostEvent(&out_event);
 	}
 
-	virtual void mouseMoveEvent(QMouseEvent * event) override
-	{
-		event->accept();
-
-		event_t out_event;
-		out_event.type = ev_mouse;
-		out_event.data1 = mouse_keys_state_;
-		out_event.data2 = prev_mouse_x_ - event->x();
-		out_event.data3 = prev_mouse_y_ - event->y();
-		D_PostEvent(&out_event);
-
-		prev_mouse_x_= event->x();
-		prev_mouse_y_= event->y();
-	}
-
 	virtual void closeEvent(QCloseEvent*) override
 	{
 		I_Quit();
 	}
 
 private:
+	QImage image_;
 	int mouse_keys_state_= 0;
-	int prev_mouse_x_= 0;
-	int prev_mouse_y_= 0;
 };
 
 static DoomWindow* qt_window= nullptr;
@@ -303,50 +353,51 @@ extern "C" void I_FinishUpdate (void)
 //
 extern "C" void I_ReadScreen (byte* scr)
 {
-}
-
-//
-// I_SetPalette
-//
-extern "C" void I_SetPalette (int palette_num)
-{
-	// Input format - RGB
-	byte*	palette;
-	int		i;
-	pixel_t* pal = VP_GetPaletteStorage();
-
-	if (!v_32bit || palette_num == -1)
-	{
-		if (palette_num == -1) palette_num = 0;
-		palette = ((byte*)W_CacheLumpNum(g_palette_lump_num, PU_STATIC)) + 768 * palette_num;
-
-		for( i = 0; i < 256; i++ )
-		{
-			pal[i].components[2] = palette[i*3  ];
-			pal[i].components[1] = palette[i*3+1];
-			pal[i].components[0] = palette[i*3+2];
-			pal[i].components[3] = 255;
-		}
-	}
-	else
-		RP_SetPlaypalNum(palette_num);
+	memcpy (scr, screens[0], SCREENWIDTH*SCREENHEIGHT);
 }
 
 extern "C" void I_PrepareGraphics (void)
 {
-	SCREENWIDTH  = v_system_window_width ;
-	SCREENHEIGHT = v_system_window_height;
+	int max_screen_size[2];
+
+	if (v_32bit)
+	// we are not so limited
+		max_screen_size[0] = max_screen_size[1] = MAX_SCREEN_SIZE;
+	else
+	{
+		// limit screen size to extended vanila limits
+		max_screen_size[0] = MAX_SCREENWIDTH ;
+		max_screen_size[1] = MAX_SCREENHEIGHT;
+	}
+
+	if(v_scaler < 1) v_scaler = 1;
+	else if (v_scaler > MAX_SCREEN_SCALER) v_scaler = MAX_SCREEN_SCALER;
+
+	try_select_resolution:
+	SCREENWIDTH  = v_system_window_width  / v_scaler;
+	SCREENHEIGHT = v_system_window_height / v_scaler;
+
+	// do not try scaling, if effective screen size less then in vanila
+	while (SCREENWIDTH < ID_SCREENWIDTH || SCREENHEIGHT < ID_SCREENHEIGHT)
+	{
+		v_scaler--;
+		SCREENWIDTH  = v_system_window_width  / v_scaler;
+		SCREENHEIGHT = v_system_window_height / v_scaler;
+	}
+
+	if (SCREENWIDTH  > max_screen_size[0])
+	{
+		v_system_window_width  = max_screen_size[0] * v_scaler;
+		goto try_select_resolution;
+	}
+	if (SCREENHEIGHT > max_screen_size[1])
+	{
+		v_system_window_height = max_screen_size[1] * v_scaler;
+		goto try_select_resolution;
+	}
 }
 
 extern "C" void I_InitGraphics(void)
 {
-	g_palette_lump_num = W_GetNumForName("PLAYPAL");
-	I_SetPalette(-1);
-
 	qt_window= new DoomWindow();
-
-	qt_window->image_= QImage( v_system_window_width, v_system_window_height, QImage::Format_RGB32 );
-	qt_window->resize( v_system_window_width, v_system_window_height );
-	qt_window->show();
-
 }
