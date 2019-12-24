@@ -46,13 +46,12 @@ extern "C"
 
 } // extern "C"
 
-#include <QtWidgets/QWidget>
-#include <QApplication>
-#include <QPainter>
-#include <QKeyEvent>
-#include <QMouseEvent>
-#include <QGuiApplication>
-#include <QScreen>
+#include <QtGui/QGuiApplication>
+#include <QtGui/QKeyEvent>
+#include <QtGui/QMouseEvent>
+#include <QtGui/QPainter>
+#include <QtGui/QRasterWindow>
+#include <QtGui/QScreen>
 
 #define MOUSE_MOTION_SCALE 3
 
@@ -168,7 +167,7 @@ int TranslateMouseButton(int button)
 	return 3;
 }
 
-class DoomWindow : public QWidget
+class DoomWindow : public QRasterWindow
 {
 public:
 	DoomWindow()
@@ -180,16 +179,20 @@ public:
 		{
 			VP_SetupFramebuffer(image_.bits());
 		}
-		QWidget::setFixedSize( v_system_window_width, v_system_window_height );
+		QWindow::setWidth ( v_system_window_width  );
+		QWindow::setHeight( v_system_window_height );
+		QWindow::setMinimumWidth ( v_system_window_width  );
+		QWindow::setMinimumHeight( v_system_window_height );
+		QWindow::setMaximumWidth ( v_system_window_width  );
+		QWindow::setMaximumHeight( v_system_window_height );
 
 		const QRect screen_geometry= QGuiApplication::screens()[v_display ]->geometry();
 		if( v_fullscreen && screen_geometry.width() == v_system_window_width && screen_geometry.height() == v_system_window_height )
-			QWidget::showFullScreen();
+			QWindow::showFullScreen();
 
-		QWidget::setFocus();
-		QWidget::show();
+		QWindow::show();
 
-		QWidget::update(); // Run update.
+		QRasterWindow::update(); // Run update.
 	}
 
 	virtual void paintEvent(QPaintEvent *event) override
@@ -215,7 +218,7 @@ public:
 		QCursor cursor;
 		if( usemouse )
 		{
-			const QPoint cur_mose_pos= QWidget::mapFromGlobal( cursor.pos() );
+			const QPoint cur_mose_pos= QWindow::mapFromGlobal( cursor.pos() );
 			const QPoint screen_center( v_system_window_width / 2, v_system_window_height / 2 );
 
 			event_t out_event;
@@ -226,15 +229,15 @@ public:
 			D_PostEvent(&out_event);
 
 			cursor.setShape(Qt::BlankCursor);
-			cursor.setPos( QWidget::mapToGlobal( screen_center ) );
+			cursor.setPos( QWindow::mapToGlobal( screen_center ) );
 		}
 		else
 		{
 			cursor.setShape(Qt::ArrowCursor);
 		}
-		QWidget::setCursor(cursor);
+		QWindow::setCursor(cursor);
 
-		QWidget::update(); // Run in loop.
+		QRasterWindow::update(); // Run in loop.
 	}
 
 	virtual void keyPressEvent(QKeyEvent * event) override
@@ -281,9 +284,15 @@ public:
 		D_PostEvent(&out_event);
 	}
 
-	virtual void closeEvent(QCloseEvent*) override
+	virtual bool event(QEvent* event) override
 	{
-		I_Quit();
+		if( event->type() == QEvent::Close )
+		{
+			event->accept();
+			I_Quit();
+			return true;
+		}
+		return QRasterWindow::event(event);
 	}
 
 private:
@@ -322,7 +331,7 @@ extern "C" void I_UngrabMouse (void)
 
 extern "C" void I_GetEvent(void)
 {
-	QApplication::processEvents();
+	QCoreApplication::processEvents();
 }
 
 //

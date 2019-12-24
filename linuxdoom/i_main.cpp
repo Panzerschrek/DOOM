@@ -35,7 +35,7 @@ extern "C"
 
 } // extern "C"
 
-#include <QApplication>
+#include <QtGui/QGuiApplication>
 
 int
 main
@@ -45,7 +45,7 @@ main
     myargc = argc;
     myargv = argv;
 
-	QApplication app( argc, argv );
+	QGuiApplication  app( argc, argv );
     D_DoomMain ();
 
     return 0;
