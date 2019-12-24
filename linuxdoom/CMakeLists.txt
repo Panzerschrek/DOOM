@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 
 project( DOOM )
 
-find_package(Qt5 COMPONENTS Gui REQUIRED)
+find_package(Qt5 COMPONENTS Gui Multimedia REQUIRED)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -14,7 +14,7 @@ endif()
 file( GLOB SOURCES "*.h" "*.c" "*.cpp" "r_panzer/*" )
 
 add_executable( DOOM ${SOURCES} )
-target_link_libraries( DOOM Qt5::Gui )
+target_link_libraries( DOOM Qt5::Gui Qt5::Multimedia )
 
 if(WIN32)
 	target_link_libraries( DOOM WS2_32 )
