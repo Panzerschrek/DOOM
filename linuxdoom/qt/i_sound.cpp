@@ -247,130 +247,129 @@ extern "C" void I_MixMusic( int len )
 	i = 0;
 	do
 	{
-	float master_volume_f = (float)(current_music.master_volume * current_music.user_volume ) / 15.0f;
-	if (master_volume_f > 0.0f)
-		for( ; current_music.position < current_music.next_event_position && i < len; i++, current_music.position++ )
-		{
-		float pos_f = (float) current_music.position;
-		float val = 0;
+		float master_volume_f = (float)(current_music.master_volume * current_music.user_volume ) / 15.0f;
+		if (master_volume_f > 0.0f)
+			for( ; current_music.position < current_music.next_event_position && i < len; i++, current_music.position++ )
+			{
+				float pos_f = (float) current_music.position;
+				float val = 0;
 
-		mus_note_t* note = current_music.first_playing_note;
-		while( note )
+				mus_note_t* note = current_music.first_playing_note;
+				while( note )
+				{
+					val += ((float)note->volume) * sin( pos_f * notes_freq[ note->number ] );
+					note = note->next;
+				}
+				// channel volume [0; 127]
+				// note volume [0; 127]
+				// result volume - [0; 16129]
+				music_mix_buffer[i*2  ] += (int)(val * master_volume_f);
+				music_mix_buffer[i*2+1] += (int)(val * master_volume_f);
+			}
+		else // music volume iz zero - just skip samples
 		{
-			val += ((float)note->volume) * sin( pos_f * notes_freq[ note->number ] );
-			note = note->next;
+			int samples_read = current_music.next_event_position - current_music.position;
+			int samples_write = len - i;
+			int samples_left = samples_read < samples_write ? samples_read : samples_write;
+			current_music.position += samples_left;
+			i += samples_left;
 		}
-		// channel volume [0; 127]
-		// note volume [0; 127]
-		// result volume - [0; 16129]
-		music_mix_buffer[i*2  ] += (int)(val * master_volume_f);
-		music_mix_buffer[i*2+1] += (int)(val * master_volume_f);
-		}
-	else // music volume iz zero - just skip samples
-	{
-		int samples_read = current_music.next_event_position - current_music.position;
-		int samples_write = len - i;
-		int samples_left = samples_read < samples_write ? samples_read : samples_write;
-		current_music.position += samples_left;
-		i += samples_left;
-	}
 
-	if( current_music.position == current_music.next_event_position )
-	{
-		int ticks_to_next_event;
-		int event = *current_music.mus_position;
-		int event_type = (event & 0x70) >> 4;
-		int channel_num = event & 0x0F;
-		mus_channel_t* channel = & current_music.channels[channel_num];
-		current_music.mus_position++;
-
-		switch (event_type)
+		if( current_music.position == current_music.next_event_position )
 		{
-		case 0: // release note
-		{
-		int note_number = *current_music.mus_position & 127;
-		current_music.mus_position++;
-		if (channel_num != 15 ) StopNote( channel, note_number );
-		}
-		break;
-
-		case 1: // play note
-		{
-		int volume;
-		int note_number = *current_music.mus_position & 127;
-		int is_volume = *current_music.mus_position & 128;
-		current_music.mus_position++;
-		if(is_volume)
-		{
-			volume = *current_music.mus_position & 127;
+			int ticks_to_next_event;
+			int event = *current_music.mus_position;
+			int event_type = (event & 0x70) >> 4;
+			int channel_num = event & 0x0F;
+			mus_channel_t* channel = & current_music.channels[channel_num];
 			current_music.mus_position++;
-			channel->current_volume = volume;
-		}
-		else volume = channel->current_volume;
-		if (channel_num != 15 ) StartNote( channel, note_number, volume );
-		}
-		break;
 
-		case 2: // pitch wheel
-		current_music.mus_position++; // pitch wheel value
-		break;
+			switch (event_type)
+			{
+			case 0: // release note
+				{
+				int note_number = *current_music.mus_position & 127;
+				current_music.mus_position++;
+				if (channel_num != 15 ) StopNote( channel, note_number );
+				}
+				break;
 
-		case 3: // system event
-		current_music.mus_position++; // system event number
-		break;
+			case 1: // play note
+				{
+					int volume;
+					int note_number = *current_music.mus_position & 127;
+					int is_volume = *current_music.mus_position & 128;
+					current_music.mus_position++;
+					if(is_volume)
+					{
+						volume = *current_music.mus_position & 127;
+						current_music.mus_position++;
+						channel->current_volume = volume;
+					}
+					else volume = channel->current_volume;
+					if (channel_num != 15 ) StartNote( channel, note_number, volume );
+				}
+				break;
 
-		case 4: // change controller
-		{
-			int controller_number, controller_value;
-			controller_number = *current_music.mus_position;
-			current_music.mus_position++;
-			controller_value = *current_music.mus_position;
-			current_music.mus_position++;
-			if (controller_number == 3) // set volume. controller_value is volume
-			current_music.master_volume = controller_value & 127;
-			else if (controller_number == 4 ) // balance value
-			{}
-		}
-		break;
+			case 2: // pitch wheel
+				current_music.mus_position++; // pitch wheel value
+				break;
 
-		case 5: // unknown
-		break;
+			case 3: // system event
+				current_music.mus_position++; // system event number
+				break;
 
-		case 6: // score end
-		ResetMusic();
-		if (!current_music.looping)
-		{
-			current_music.is_playing = false;
-			return;
-		}
-		break;
+				case 4: // change controller
+				{
+					int controller_number, controller_value;
+					controller_number = *current_music.mus_position;
+					current_music.mus_position++;
+					controller_value = *current_music.mus_position;
+					current_music.mus_position++;
+					if (controller_number == 3) // set volume. controller_value is volume
+					current_music.master_volume = controller_value & 127;
+					else if (controller_number == 4 ) // balance value
+					{}
+				}
+				break;
 
-		case 7: // unknown
-		break;
+			case 5: // unknown
+				break;
 
-		default:
-		break;
-		};
+			case 6: // score end
+				ResetMusic();
+				if (!current_music.looping)
+				{
+					current_music.is_playing = false;
+					return;
+				}
+				break;
 
-		ticks_to_next_event = 0;
-		if (event & 128)
-		{
-		byte time_byte;
-		do
-		{
-			time_byte = *current_music.mus_position;
-			current_music.mus_position++;
-			ticks_to_next_event = ticks_to_next_event * 128 + (time_byte & 127);
-		}while( time_byte & 128);
-		}
+			case 7: // unknown
+				break;
 
-		current_music.current_event_tick += ticks_to_next_event;
-		current_music.next_event_position =
-		current_music.current_event_tick *
-		g_sample_rate /
-		MUS_TICKS_PER_SEC;
-	} // if new event
+				default:
+				break;
+			};
 
+			ticks_to_next_event = 0;
+			if (event & 128)
+			{
+				byte time_byte;
+				do
+				{
+					time_byte = *current_music.mus_position;
+					current_music.mus_position++;
+					ticks_to_next_event = ticks_to_next_event * 128 + (time_byte & 127);
+				}while( time_byte & 128);
+			}
+
+			current_music.current_event_tick += ticks_to_next_event;
+			current_music.next_event_position =
+			current_music.current_event_tick *
+			g_sample_rate /
+			MUS_TICKS_PER_SEC;
+		} // if new event
 	} while( i < len );
 }
 
@@ -457,8 +456,8 @@ extern "C" int I_StartSound
 	for( i = 0; i < MAX_CHANNELS; i++ )
 		if ( channels[i].id == 0 )
 		{
-		freeslot = i;
-		break;
+			freeslot = i;
+			break;
 		}
 
 	if( freeslot == -1 ) return 0;
