@@ -170,8 +170,6 @@ void ResetMusic()
 	current_music.first_playing_note = NULL;
 }
 
-static QAudioOutput* g_audio_output= nullptr;
-
 class SoundIODevice : public QIODevice
 {
 public:
@@ -230,10 +228,7 @@ public:
 		return readData(data, maxlen);
 	}
 	virtual qint64 writeData(const char *data, qint64 len){return 0;}
-private:
 };
-
-static SoundIODevice* g_io_device= nullptr;
 
 extern "C" void I_MixMusic( int len )
 {
@@ -389,6 +384,9 @@ void I_InitNoteTable()
 		notes_freq[i] *= (2.0f * 3.1415926535f) / ((float)g_sample_rate);
 	}
 }
+
+static QAudioOutput* g_audio_output= nullptr;
+static SoundIODevice* g_io_device= nullptr;
 
 extern "C" void I_InitSound()
 {

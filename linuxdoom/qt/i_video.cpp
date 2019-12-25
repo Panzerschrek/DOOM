@@ -395,16 +395,6 @@ extern "C" void I_StartFrame (void)
     // er?
 }
 
-extern "C" void I_GrabMouse (void)
-{
-
-}
-
-extern "C" void I_UngrabMouse (void)
-{
-
-}
-
 extern "C" void I_GetEvent(void)
 {
 	QCoreApplication::processEvents();
