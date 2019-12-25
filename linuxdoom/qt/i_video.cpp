@@ -167,6 +167,27 @@ int TranslateMouseButton(int button)
 	return 3;
 }
 
+static const char* GetWindowTitle()
+{
+	if (gamemode == shareware)
+	return "PanzerDoom - Doom Shareware";
+	if (gamemode == registered)
+	return "PanzerDoom - Doom";
+	if (gamemode == retail)
+	return "PanzerDoom - Ultimate Doom";
+	if (gamemode == commercial)
+	{
+	if (gamemission == doom2)
+		return "PanzerDoom - Doom II Hell on Earth";
+	if (gamemission == pack_tnt)
+		return "PanzerDoom - Final Doom TNT Evilution";
+	if (gamemission == pack_plut)
+		return "PanzerDoom - Final Doom The Plutonia Experiment";
+	}
+
+	return "PanzerDoom";
+}
+
 class DoomWindow : public QRasterWindow
 {
 public:
@@ -185,6 +206,9 @@ public:
 		QWindow::setMinimumHeight( v_system_window_height );
 		QWindow::setMaximumWidth ( v_system_window_width  );
 		QWindow::setMaximumHeight( v_system_window_height );
+
+		SetupWindowIcon();
+		QWindow::setTitle(GetWindowTitle());
 
 		const QRect screen_geometry= QGuiApplication::screens()[v_display ]->geometry();
 		if( v_fullscreen && screen_geometry.width() == v_system_window_width && screen_geometry.height() == v_system_window_height )
@@ -293,6 +317,58 @@ public:
 			return true;
 		}
 		return QRasterWindow::event(event);
+	}
+
+private:
+	void SetupWindowIcon()
+	{
+		patch_t*	patch;
+		pixel_t*	data;
+		pixel_t	*fb, *pal;
+		int		x, y, w, h;
+
+		patch = (patch_t*) W_CacheLumpName("M_SKULL1", PU_CACHE);
+
+		w = patch->width - patch->leftoffset;
+		h = patch->height - patch->topoffset;
+
+		QImage img( w, h, QImage::Format_ARGB32 );
+		data= (pixel_t*) img.bits();
+
+		if (v_32bit)
+		{
+			fb = VP_GetFramebuffer();
+
+			// mark as invisible
+			for( y = 0; y < h; y++ )
+				for( x = 0; x < w; x++ )
+				fb[x + y * SCREENWIDTH].p = 0;
+
+			V_DrawPatch(0, 0, patch);
+
+			for( y = 0; y < h; y++ )
+				for( x = 0; x < w; x++ )
+					data[x + y * w] = fb[ x + y * SCREENWIDTH ];
+		}
+		else
+		{
+			pal = VP_GetPaletteStorage();
+
+			// mark as invisible
+			for( y = 0; y < h; y++ )
+				for( x = 0; x < w; x++ )
+				screens[0][x + y * SCREENWIDTH] = 251;
+
+			V_DrawPatch(0, 0, patch);
+			for( y = 0; y < h; y++ )
+				for( x = 0; x < w; x++ )
+				{
+					byte ind = screens[0][ x + y * SCREENWIDTH ];
+					data[x + y * w].p = ind == 251 ? 0 : pal[ind].p;
+				}
+		}
+
+		QWindow::setIcon(QPixmap::fromImage(img));
 	}
 
 private:
