@@ -216,7 +216,7 @@ public:
 
 		// Update cursor pos.
 		QCursor cursor;
-		if( usemouse )
+		if( usemouse && QGuiApplication::focusWindow() == this )
 		{
 			const QPoint cur_mose_pos= QWindow::mapFromGlobal( cursor.pos() );
 			const QPoint screen_center( v_system_window_width / 2, v_system_window_height / 2 );
