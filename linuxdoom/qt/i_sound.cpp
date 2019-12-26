@@ -408,6 +408,11 @@ extern "C" void I_InitSound()
 	g_audio_output = new QAudioOutput(format);
 	g_io_device = new SoundIODevice();
 	g_io_device->open(QIODevice::ReadOnly);
+
+	const int c_delay_frames = 3;
+	g_audio_output->setBufferSize(
+		format.channelCount() * sizeof(sample_t) * format.sampleRate() *
+		c_delay_frames / TICRATE ); // Minimal buffer size to avoid freezes.
 	g_audio_output->start(g_io_device);
 }
 
