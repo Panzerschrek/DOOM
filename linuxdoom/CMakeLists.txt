@@ -4,7 +4,7 @@ project( DOOM )
 
 file( GLOB SOURCES "*.h" "*.c" "r_panzer/*" )
 add_library( DOOM_lib ${SOURCES} )
-target_include_directories( DOOM_lib PUBLIC ${CMAKE_SOURCE_DIR} )
+target_include_directories( DOOM_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} )
 
 if(WIN32)
 	target_compile_definitions( DOOM_lib PUBLIC -DPANZER_DOOM_WIDNOWS )
