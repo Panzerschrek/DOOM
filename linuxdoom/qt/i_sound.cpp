@@ -31,7 +31,6 @@ void I_MixMusic( int len );
 #include <QtMultimedia/QAudioOutput>
 
 #define MAX_CHANNELS 32
-#define ID_SAMPLE_RATE 11025
 #define MAX_VOLUME_LOG2 8
 
 #define MUS_MAX_CHANNELS 16
@@ -449,11 +448,12 @@ extern "C" int I_StartSound
   int		pitch,
   int		priority )
 {
-	const int	c_lump_bytes_cut = 8; // header or something else, but beginning butes need cut
 	int			i;
 	int			freeslot;
 	snd_channel_t*	channel;
 	sfxinfo_t*		info;
+	short			header[4]; // header[1] is frequency
+	void*			lump_data;
 
 	freeslot = -1;
 	for( i = 0; i < MAX_CHANNELS; i++ )
@@ -474,13 +474,16 @@ extern "C" int I_StartSound
 	genchannelvolume( channel, vol, sep );
 
 	info = &S_sfx[id];
-	if (!info->data) info->data = ((char*)W_CacheLumpNum(info->lumpnum, PU_SOUND)) + c_lump_bytes_cut;
+	lump_data= W_CacheLumpNum(info->lumpnum, PU_SOUND);
+	memcpy(header, lump_data, sizeof(header));
+
+	if (!info->data) info->data = ((char*)lump_data) + sizeof(header);
 	info->usefulness++;
 
 	channel->src_data = (byte*)info->data;
 	// Cut 1 byte, because we can linear interpolation of src sound
-	channel->length = (W_LumpLength(info->lumpnum) - c_lump_bytes_cut - 1) << 8;
-	channel->fetch_step = (ID_SAMPLE_RATE << 8) / g_sample_rate;
+	channel->length = (W_LumpLength(info->lumpnum) - sizeof(header) - 1) << 8;
+	channel->fetch_step = (header[1] << 8) / g_sample_rate;
 
 	return channel->id;
 }

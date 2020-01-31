@@ -26,7 +26,6 @@
 
 
 #define MAX_CHANNELS 32
-#define ID_SAMPLE_RATE 11025
 #define MAX_VOLUME_LOG2 8
 
 #define MUS_MAX_CHANNELS 16
@@ -462,11 +461,12 @@ int I_StartSound
   int		pitch,
   int		priority )
 {
-    const int	c_lump_bytes_cut = 8; // header or something else, but beginning butes need cut
     int			i;
     int			freeslot;
     snd_channel_t*	channel;
     sfxinfo_t*		info;
+	short			header[4]; // header[1] is frequency
+	void*			lump_data;
 
     SDL_LockMutex( sdl_audio.mutex );
 
@@ -488,14 +488,17 @@ int I_StartSound
     channel->pos = 0;
     genchannelvolume( channel, vol, sep );
 
-    info = &S_sfx[id];
-    if (!info->data) info->data = ((char*)W_CacheLumpNum(info->lumpnum, PU_SOUND)) + c_lump_bytes_cut;
+	info = &S_sfx[id];
+	lump_data= W_CacheLumpNum(info->lumpnum, PU_SOUND);
+	memcpy(header, lump_data, sizeof(header));
+
+	if (!info->data) info->data = ((char*)lump_data) + sizeof(header);
     info->usefulness++;
 
-    channel->src_data = info->data;
+	channel->src_data = info->data;
     // Cut 1 byte, because we can linear interpolation of src sound
-    channel->length = (W_LumpLength(info->lumpnum) - c_lump_bytes_cut - 1) << 8;
-    channel->fetch_step = (ID_SAMPLE_RATE << 8) / sdl_audio.format.freq;
+	channel->length = (W_LumpLength(info->lumpnum) - sizeof(header) - 1) << 8;
+	channel->fetch_step = (header[1] << 8) / sdl_audio.format.freq;
 
     SDL_UnlockMutex( sdl_audio.mutex );
     return channel->id;
